@@ -16,18 +16,47 @@ var ClientSchema = new Schema({
 *** Statics ***
 */
 
-// Get all clients
-ClientSchema.statics.getAll = () => {
-    return new Promise((resolve, reject) => {
-        var query = Client.find().populate('company', '-_id name');
-        query.select('email lastname firstname phone cell title');
-        query.exec()
-        .then((rows) => {
+// Get all clients (optionally filtered by user's assigned audits)
+ClientSchema.statics.getAll = (userId = null, isAdmin = false) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            let clientIds = [];
+
+            // If not admin and userId provided, filter by assigned audits
+            if (!isAdmin && userId) {
+                var Audit = mongoose.model('Audit');
+                var audits = await Audit.find({
+                    $or: [
+                        {creator: userId},
+                        {collaborators: userId},
+                        {reviewers: userId}
+                    ]
+                }).select('client').exec();
+
+                // Extract unique client IDs from audits
+                clientIds = [...new Set(audits.map(a => a.client).filter(c => c))];
+
+                // If no clients found in assigned audits, return empty array
+                if (clientIds.length === 0) {
+                    resolve([]);
+                    return;
+                }
+            }
+
+            // Build query
+            var query = Client.find();
+            if (!isAdmin && userId && clientIds.length > 0) {
+                query = query.where('_id').in(clientIds);
+            }
+
+            query.populate('company', '-_id name');
+            query.select('email lastname firstname phone cell title');
+
+            var rows = await query.exec();
             resolve(rows);
-        })
-        .catch((err) => {
+        } catch (err) {
             reject(err);
-        })
+        }
     });
 }
 

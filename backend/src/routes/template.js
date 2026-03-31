@@ -103,7 +103,7 @@ module.exports = function(app) {
     });
 
      // Download template file
-     app.get("/api/templates/download/:templateId", acl.hasPermission('templates:read'), function(req, res) {
+     app.get("/api/templates/download/:templateId", acl.hasPermission('templates:download'), function(req, res) {
         Template.getOne(req.params.templateId)
         .then(data => {
             var file = `${__basedir}/../report-templates/${data.name}.${data.ext || 'docx'}`

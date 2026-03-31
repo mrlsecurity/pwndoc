@@ -6,7 +6,11 @@ module.exports = function(app) {
 
     // Get companies list
     app.get("/api/companies", acl.hasPermission('companies:read'), function(req, res) {
-        Company.getAll()
+        var userId = req.decodedToken.id;
+        var userRole = req.decodedToken.role;
+        var isAdmin = acl.isAllowed(userRole, '*');
+
+        Company.getAll(userId, isAdmin)
         .then(msg => Response.Ok(res, msg))
         .catch(err => Response.Internal(res, err))
     });
