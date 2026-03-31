@@ -242,7 +242,13 @@ export default {
                 var creatorId = ""
                 if (this.audit.creator)
                     creatorId = this.audit.creator._id
-                this.reviewers = data.data.datas.filter(e => e._id !== creatorId)
+                
+                // Allow creator as reviewer if creatorCanReview is true
+                if (this.audit.creatorCanReview) {
+                    this.reviewers = data.data.datas
+                } else {
+                    this.reviewers = data.data.datas.filter(e => e._id !== creatorId)
+                }
             })
             .catch((err) => {
                 console.log(err)
