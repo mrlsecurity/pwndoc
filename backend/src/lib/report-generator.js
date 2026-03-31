@@ -18,6 +18,7 @@ var Image = require('mongoose').model('Image');
 var Settings = require('mongoose').model('Settings');
 const cvss = require('ae-cvss-calculator');
 var translate = require('../translate')
+var html2ooxml = require('./html2ooxml');
 var $t
 
 // Generate document with docxtemplater
@@ -31,7 +32,25 @@ async function generateDoc(audit) {
     $t = translate.translate
 
     var settings = await Settings.getAll();
+    
+    html2ooxml.clearUsedNumIds();
+    
     var preppedAudit = await prepAuditData(audit, settings)
+    
+    var usedNumIds = html2ooxml.getUsedNumIds();
+    if (usedNumIds.length > 0) {
+        var numberingXml = zip.file("word/numbering.xml").asText();
+        
+        var match = numberingXml.match(/<w:num[^>]*w:numId="2"[^>]*>[\s\S]*?<w:abstractNumId[^>]*w:val="(\d+)"/);
+        var targetAbstractNumId = match ? match[1] : "2";
+        
+        var newEntries = usedNumIds.map(function(numId) {
+            return '<w:num w:numId="' + numId + '"><w:abstractNumId w:val="' + targetAbstractNumId + '"/></w:num>';
+        }).join('');
+        
+        numberingXml = numberingXml.replace('</w:numbering>', newEntries + '</w:numbering>');
+        zip.file("word/numbering.xml", numberingXml);
+    }
 
     var opts = {};
     // opts.centered = true;

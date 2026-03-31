@@ -5,6 +5,9 @@ var domutils = require("domutils")
 const render = require('dom-serializer').default
 const hljs = require('highlight.js');
 
+var usedNumIds = [];
+var numIdCounter = 100;
+
 function html2ooxml(html, style = '') {
     if (html === '')
         return html
@@ -80,14 +83,21 @@ function html2ooxml(html, style = '') {
                 list_state.push('bullet')
             }
             else if (tag === "ol") {
-                list_state.push('number')
+                var newNumId = numIdCounter++;
+                list_state.push('number:' + newNumId);
+                if (!usedNumIds.includes(newNumId)) {
+                    usedNumIds.push(newNumId);
+                }
             }
             else if (tag === "li") {
                 var level = list_state.length - 1
                 if (level >= 0 && list_state[level] === 'bullet')
                     cParagraphProperties.bullet = {level: level}
-                else if (level >= 0 && list_state[level] === 'number')
-                    cParagraphProperties.numbering = {reference: 2, level: level}
+                else if (level >= 0 && list_state[level].startsWith('number:')) {
+                    var numRef = parseInt(list_state[level].split(':')[1]);
+                    cParagraphProperties.numbering = {reference: numRef, level: level}
+                    cParagraphProperties.style = "ListNumber"
+                }
                 else
                     cParagraphProperties.bullet = {level: 0}
             }
@@ -192,12 +202,21 @@ function html2ooxml(html, style = '') {
     var prepXml = doc.documentWrapper.document.body.prepForXml({ stack: [] })
     var filteredXml = prepXml["w:body"].filter(e => {return e && Object.keys(e)[0] === "w:p"})
     var dataXml = xml(filteredXml)
-    dataXml = dataXml.replace(/w:numId w:val="{2-0}"/g, 'w:numId w:val="2"') // Replace numbering to have correct value
+    dataXml = dataXml.replace(/w:numId w:val="\{(\d+)-0\}"/g, 'w:numId w:val="$1"') // Replace numbering to have correct value for all numIds
 
     return dataXml
         
 }
 module.exports = html2ooxml
+
+html2ooxml.getUsedNumIds = function() {
+    return usedNumIds;
+};
+
+html2ooxml.clearUsedNumIds = function() {
+    usedNumIds = [];
+    numIdCounter = 100;
+};
 
 function getHighlightColor(hexColor) {
 // <xsd:simpleType name="ST_HighlightColor">
