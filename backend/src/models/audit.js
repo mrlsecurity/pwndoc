@@ -86,7 +86,7 @@ var AuditSchema = new Schema({
     collaborators:      [{type: Schema.Types.ObjectId, ref: 'User'}],
     reviewers:          [{type: Schema.Types.ObjectId, ref: 'User'}],
     language:           {type: String, required: true},
-    scope:              [{_id: false, name: String, hosts: [Host]}],
+    scope:              [{_id: false, name: String, description: String, hosts: [Host]}],
     findings:           [Finding],
     template:           {type: Schema.Types.ObjectId, ref: 'Template'},
     creator:            {type: Schema.Types.ObjectId, ref: 'User'},
@@ -462,16 +462,13 @@ AuditSchema.statics.getGeneral = (isAdmin, auditId, userId) => {
         query.populate('collaborators', 'username firstname lastname jobTitle')
         query.populate('reviewers', 'username firstname lastname')
         query.populate('company')
-        query.select('name auditType date date_start date_end client collaborators language scope.name template customFields')
+        query.select('name auditType date date_start date_end client collaborators language scope template customFields')
         query.lean().exec()
         .then((row) => {
             if (!row)
                 throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'});
 
-            var formatScope = row.scope.map(item => {return item.name})
-            for (var i=0;i<formatScope.length;i++) {
-                row.scope[i] = formatScope[i]
-            }
+            row.scope = row.scope.map(item => ({name: item.name, description: item.description || ''}))
             resolve(row)
         })
         .catch((err) => {

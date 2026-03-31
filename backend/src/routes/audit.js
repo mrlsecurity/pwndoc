@@ -229,8 +229,23 @@ module.exports = function(app, io) {
         if (req.body.collaborators) update.collaborators = req.body.collaborators;
         if (req.body.reviewers) update.reviewers = req.body.reviewers;
         if (req.body.language && utils.validFilename(req.body.language)) update.language = req.body.language;
-        if (req.body.scope && typeof(req.body.scope === "array")) {
-            update.scope = req.body.scope.map(item => {return {name: item}});
+        if (req.body.scope && Array.isArray(req.body.scope)) {
+            update.scope = req.body.scope.map((item, index) => {
+                let name, description;
+                if (typeof item === 'string') {
+                    name = item;
+                    description = '';
+                } else {
+                    name = item.name || '';
+                    description = item.description || '';
+                }
+
+                // Preserve hosts from existing scope if it exists
+                const existingScopeItem = audit.scope && audit.scope[index];
+                const hosts = existingScopeItem ? existingScopeItem.hosts || [] : [];
+
+                return {name, description, hosts};
+            });
         }
         if (req.body.template) update.template = req.body.template;
         if (req.body.customFields) update.customFields = req.body.customFields;

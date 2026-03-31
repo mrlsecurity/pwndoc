@@ -12,6 +12,7 @@ import ReviewerService from '@/services/reviewer';
 import TemplateService from '@/services/template';
 import DataService from '@/services/data';
 import Utils from '@/services/utils';
+import { useUserStore } from '@/stores/user'
 
 import { $t } from '@/boot/i18n'
 
@@ -66,6 +67,12 @@ export default {
         'frontEndAuditState',
         'auditParent'
     ],
+
+    components: {
+        Breadcrumb,
+        TextareaArray,
+        CustomFields
+    },
 
     components: {
         Breadcrumb,
@@ -156,6 +163,7 @@ export default {
         // Save Audit
         updateAuditGeneral: function() {
             Utils.syncEditors(this.$refs)
+            this.$refs.scopeField.updateParent();
             this.$nextTick(() => {
                 var customFieldsEmpty = this.$refs.customfields && this.$refs.customfields.requiredFieldsEmpty()
                 var defaultFieldsEmpty = this.requiredFieldsEmpty()
