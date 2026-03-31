@@ -1,20 +1,12 @@
 var expressions = require('angular-expressions');
 
-// Apply all customs functions
-function apply(data) {
-
-}
-exports.apply = apply;
-
-// *** Custom modifications of audit data for usage in word template
-
-
 // *** Custome Angular expressions filters ***
 
-var filters = {};
+let defaultFilters = {}
+let subTemplatingFilters = {} // Used for sub-templating in UI
 
 // Convert input CVSS criteria into French: {input | criteriaFR}
-expressions.filters.criteriaFR = function(input) {
+defaultFilters.criteriaFR = function(input) {
     var result = "Non défini"
 
     if (input === "Network") result = "Réseau"
@@ -32,7 +24,7 @@ expressions.filters.criteriaFR = function(input) {
 }
 
 // Convert input date with parameter s (full,short): {input | convertDate: 's'}
-expressions.filters.convertDateFR = function(input, s) {
+defaultFilters.convertDateFR = function(input, s) {
     var date = new Date(input);
     if (date !== "Invalid Date") {
         var monthsFull = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -49,6 +41,15 @@ expressions.filters.convertDateFR = function(input, s) {
         }
     }
 }
-
+expressions.filters.toWord = function(input) {
+    const num = parseInt(input, 10);
+    if (isNaN(num)) return input;
+    const words = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+    return num < 10 ? words[num] : num.toString();
+};
+Object.assign(expressions.filters, defaultFilters, subTemplatingFilters)
 exports.expressions = expressions
+exports.subTemplatingFilters = {}
+
+
 
