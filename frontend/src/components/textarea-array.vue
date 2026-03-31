@@ -5,7 +5,6 @@
     stack-label
     v-model="dataString"
     type="textarea"
-    @update:model-value="updateParent"
     outlined
     :rules="rules"
     lazy-rules="ondemand"
@@ -24,6 +23,10 @@ export default {
     props: {
         label: String,
         modelValue: Array,
+        objectFields: {
+            type: Object,
+            default: null
+        },
         noEmptyLine: {
             type: Boolean,
             default: false
@@ -44,12 +47,12 @@ export default {
 
     mounted: function() {
         if (this.modelValue)
-            this.dataString = this.modelValue.join('\n')
+            this.dataString = this.arrayToString(this.modelValue)
     },
 
     watch: {
         modelValue (val) {
-            var str = (val)? val.join('\n'): ""
+            var str = (val)? this.arrayToString(val): ""
             if (str === this.dataString)
                 return
             this.dataString = str
@@ -57,11 +60,43 @@ export default {
     },
 
     methods: {
+        arrayToString: function(arr) {
+            if (this.objectFields) {
+                return arr.map(item => {
+                    const name = item[this.objectFields.name] || '';
+                    const desc = item[this.objectFields.description];
+                    return desc ? `${name} || ${desc}` : name;
+                }).join('\n');
+            } else {
+                return arr.join('\n');
+            }
+        },
+
+        stringToArray: function(str) {
+            if (this.objectFields) {
+                return str.split('\n').map(line => {
+                    const colonIndex = line.indexOf('||');
+                    if (colonIndex > -1) {
+                        const name = line.substring(0, colonIndex).trim();
+                        const description = line.substring(colonIndex + 2).trim();
+                        return {[this.objectFields.name]: name, [this.objectFields.description]: description};
+                    }
+                    return {[this.objectFields.name]: line.trim(), [this.objectFields.description]: ''};
+                });
+            } else {
+                return str.split('\n');
+            }
+        },
+
         updateParent: function() {
+            var array = this.stringToArray(this.dataString);
             if (this.noEmptyLine)
-                this.$emit('update:modelValue', this.dataString.split('\n').filter(e => e !== ''))
-            else
-                this.$emit('update:modelValue', this.dataString.split('\n'))
+                array = array.filter(e => {
+                    if (this.objectFields)
+                        return e[this.objectFields.name] !== '';
+                    return e !== '';
+                });
+            this.$emit('update:modelValue', array);
         },
 
         validate: function() {
