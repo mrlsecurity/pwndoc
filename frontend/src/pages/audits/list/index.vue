@@ -235,6 +235,10 @@
                 options-sanitize
                 outlined
                 />
+                <q-checkbox 
+                v-model="currentAudit.creatorCanReview" 
+                label="Allow creator to be reviewer?"
+                />
             </q-card-section>
 
             <q-separator />
