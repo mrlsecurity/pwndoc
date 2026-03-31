@@ -189,6 +189,24 @@ defaultFilters.linkTo = function(input, url) {
         + '</w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>';
 }
 
+defaultFilters.referenceToLink = function(input) {
+    if (!input) return '';
+    input = input.trim();
+    if (input === '') return '';
+    
+    var colonIndex = input.indexOf('||');
+    var text, url;
+    
+    if (colonIndex > -1) {
+        text = input.substring(0, colonIndex).trim();
+        url = input.substring(colonIndex + 2).trim();
+    } else {
+        text = input;
+        url = input;
+    }
+    
+    return defaultFilters.linkTo(text, url);
+}
 // Loop over the input object, providing acccess to its keys and values: {#findings | loopObject}{key}{value.title}{/findings | loopObject}
 // Source: https://stackoverflow.com/a/60887987
 defaultFilters.loopObject = function(input) {
