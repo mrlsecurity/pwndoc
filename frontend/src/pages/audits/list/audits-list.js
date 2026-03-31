@@ -60,7 +60,7 @@ export default {
             // Errors messages
             errors: {name: '', language: '', auditType: ''},
             // Selected or New Audit
-            currentAudit: {name: '', language: '', auditType: '', type: 'default'}
+            currentAudit: {name: '', language: '', auditType: '', type: 'default', creatorCanReview: true}
         }
     },
 
@@ -328,6 +328,7 @@ export default {
             } else {
                 this.currentAudit.language = '';
             }
+            this.currentAudit.creatorCanReview = true;
         },
 
         // Convert language locale of audit for table display
