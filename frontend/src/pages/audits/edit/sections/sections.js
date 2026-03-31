@@ -168,7 +168,20 @@ export default {
 
     computed: {
         canCreateComment: function() {
-            return userStore.isAllowed('audits:comments:create') 
+            return userStore.isAllowed('audits:comments:create')
+        },
+
+        unresolvedCommentsCount: function() {
+            let count = 0;
+            this.auditParent.comments.forEach(comment => {
+                if (!comment.resolved) {
+                    count++; // Count unresolved comment
+                    if (comment.replies && comment.replies.length > 0) {
+                        count += comment.replies.length; // Add replies as unresolved
+                    }
+                }
+            });
+            return count;
         }
     },
 

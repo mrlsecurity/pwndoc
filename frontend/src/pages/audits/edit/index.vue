@@ -261,11 +261,21 @@
 													<span>{{finding.title}}</span>
 												</q-item-section>
 												<q-item-section side>
-													<q-icon v-if="audit.type === 'default' && finding.status === 0" name="check" color="green" />
-													<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'ok'" name="check" color="green" />
-													<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'ko'" name="fas fa-xmark" color="red" />
-													<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'partial'" name="priority_high" color="orange" />
-													<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'unknown'" name="question_mark" color="brown" />
+													<!-- Show "needs work" badge when present -->
+													<template v-if="findingNeedsWork(finding)">
+														<q-badge color="orange" text-color="white" class="q-mr-sm">
+															needs work
+														</q-badge>
+														<q-icon name="warning" color="red" />
+													</template>
+													<!-- Otherwise show existing status icons -->
+													<template v-else>
+														<q-icon v-if="audit.type === 'default' && finding.status === 0" name="check" color="green" />
+														<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'ok'" name="check" color="green" />
+														<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'ko'" name="fas fa-xmark" color="red" />
+														<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'partial'" name="priority_high" color="orange" />
+														<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'unknown'" name="question_mark" color="brown" />
+													</template>
 												</q-item-section>
 											</q-item>
 											<div class="row">
@@ -507,6 +517,15 @@ export default {
 	},
 
 	methods: {
+		findingNeedsWork: function(finding) {
+			// Check if finding has any comments with needsWork: true and !resolved
+			return this.audit.comments.some(comment => 
+				comment.findingId === finding._id && 
+				comment.needsWork && 
+				!comment.resolved
+			)
+		},
+
 		getFindingColor: function(finding) {
 			let severity = this.getFindingSeverity(finding)
 
@@ -660,6 +679,7 @@ export default {
 			})
 			.then((data) => {
 				this.audit = data.data.datas;
+				auditR.value = this.audit;
 				this.getUIState()
 				this.getSections()
 				if (this.loading)

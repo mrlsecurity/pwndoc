@@ -8,18 +8,50 @@
         :path-name="(auditParent.type === 'retest') ? $t('originalAudit') : (auditParent.type === 'default') ? $t('multi') : ''"
     >
     <template v-slot:buttons>
+        <!-- Option 2: Text label before button when commentMode -->
+        <span
+        v-if="commentMode && unresolvedCommentsCount > 0"
+        class="unresolved-label text-warning q-mr-sm"
+        >
+        {{ unresolvedCommentsCount }} {{ $t('unresolvedComments') }}
+        </span>
+        <!-- Option 1: Badge on button when !commentMode -->
+        <template v-if="!commentMode && unresolvedCommentsCount > 0">
+        <q-badge
+        color="red"
+        floating
+        :label="unresolvedCommentsCount"
+        class="ios-notification-badge q-mr-sm"
+        >
         <q-btn
-        :flat="!commentMode" 
+        :flat="!commentMode"
         :outline="commentMode"
         :class="{'bg-grey-3': commentMode}"
         icon="o_mode_comment"
         :ripple="false"
-        @click="toggleCommentView()" 
-        class="q-mr-sm">
+        @click="toggleCommentView()"
+        >
             <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
                 {{(commentMode) ? $t('tooltip.hideComments') : $t('tooltip.showComments')}}
-            </q-tooltip> 
+            </q-tooltip>
         </q-btn>
+        </q-badge>
+        </template>
+        <template v-else>
+        <q-btn
+        :flat="!commentMode"
+        :outline="commentMode"
+        :class="{'bg-grey-3': commentMode}"
+        icon="o_mode_comment"
+        :ripple="false"
+        @click="toggleCommentView()"
+        class="q-mr-sm"
+        >
+            <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
+                {{(commentMode) ? $t('tooltip.hideComments') : $t('tooltip.showComments')}}
+            </q-tooltip>
+        </q-btn>
+        </template>
         <q-separator v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT" vertical inset class="q-mr-sm" />
         <q-btn v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT" color="positive" :label="$t('btn.save')+' (ctrl+s)'" no-caps @click="updateSection" />
     </template>
@@ -48,7 +80,7 @@
     </q-card>
     <q-card v-if="commentMode" class="col-3 bg-grey-11 sidebar-comments" style="margin-top:2px">
         <q-scroll-area class="scrollarea-comments">
-            <comments-list 
+            <comments-list
             height="calc(100vh - 166px)"
             :comments="auditParent.comments"
             v-model:editComment="editComment"
@@ -57,6 +89,7 @@
             :focusComment="focusComment"
             :updateComment="updateComment"
             :deleteComment="deleteComment"
+            :reviewers="auditParent.reviewers || []"
             >
             </comments-list>
         </q-scroll-area>
@@ -73,5 +106,18 @@
 
 .content {
     margin-top: 50px;
+}
+
+.ios-notification-badge {
+    position: relative;
+    .q-badge__content {
+        border-radius: 50%;
+        min-width: 18px;
+        height: 18px;
+        font-size: 12px;
+    }
+}
+.unresolved-label {
+    font-size: 12px;
 }
 </style>
