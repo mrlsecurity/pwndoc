@@ -8,19 +8,52 @@
         :path-name="(auditParent.type === 'retest') ? $t('originalAudit') : (auditParent.type === 'default') ? $t('multi') : ''"
     >
         <template v-slot:buttons>
+                <!-- Option 2: Text label before button when commentMode -->
+                <span
+                v-if="commentMode && unresolvedCommentsCount > 0"
+                class="unresolved-label text-warning q-mr-sm"
+                >
+                {{ unresolvedCommentsCount }} {{ $t('unresolvedComments') }}
+                </span>
+                <!-- Option 1: Badge on button when !commentMode -->
+                <template v-if="!commentMode && unresolvedCommentsCount > 0">
+                <q-badge
+                color="red"
+                floating
+                :label="unresolvedCommentsCount"
+                class="ios-notification-badge q-mr-sm"
+                >
                 <q-btn
-                color="primary" 
-                :flat="!commentMode" 
+                color="primary"
+                :flat="!commentMode"
                 :outline="commentMode"
                 :class="{'bg-grey-3': commentMode}"
                 icon="o_mode_comment"
                 :ripple="false"
-                @click="toggleCommentView()" 
-                class="q-mr-sm">
+                @click="toggleCommentView()"
+                >
                     <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
                         {{(commentMode) ? $t('tooltip.hideComments') : $t('tooltip.showComments')}}
-                    </q-tooltip> 
+                    </q-tooltip>
                 </q-btn>
+                </q-badge>
+                </template>
+                <template v-else>
+                <q-btn
+                color="primary"
+                :flat="!commentMode"
+                :outline="commentMode"
+                :class="{'bg-grey-3': commentMode}"
+                icon="o_mode_comment"
+                :ripple="false"
+                @click="toggleCommentView()"
+                class="q-mr-sm"
+                >
+                    <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
+                        {{(commentMode) ? $t('tooltip.hideComments') : $t('tooltip.showComments')}}
+                    </q-tooltip>
+                </q-btn>
+                </template>
                 <q-separator vertical inset class="q-mr-sm" />
             <q-btn
             v-if="auditParent.type === 'default'"
@@ -139,11 +172,12 @@
                                     :commentIdList="commentIdList"
                                     />
                                 </template>
-                                <template v-slot:label>
-                                    <div id="descriptionField">
-                                        {{$t('description')}} <span v-if="$settings.report.public.requiredFields.findingDescription" class="text-red">*</span>
-                                    </div>
-                                </template>
+                                 <template v-slot:label>
+                                     <div id="descriptionField">
+                                         {{$t('description')}} <span v-if="$settings.report.public.requiredFields.findingDescription" class="text-red">*</span>
+                                     </div>
+                                     
+                                 </template>
                             </q-field>
                             <q-field
                             ref="observationField"
@@ -174,23 +208,32 @@
                                     </div>
                                 </template>
                             </q-field>
-                            <q-field 
-                            class="col-12 q-pt-none" 
-                            bg-color="transparent" 
-                            borderless 
-                            :class="{'highlighted-border': fieldHighlighted == 'referencesField' && commentMode}"
+                            <q-field
+                            ref="remediationField"
+                            for="remediationField"
+                            class="col-md-12 basic-editor"
+                            :class="{'highlighted-border': fieldHighlighted == 'remediationField' && commentMode}"
+                            borderless
+                            label-slot
+                            stack-label
+                            :rules="($settings.report.public.requiredFields.findingRemediation) ? [val => !!finding.remediation || $t('fieldIsRequired')] : ['']"
+                            lazy-rules="ondemand"
                             >
-                                <textarea-array
-                                ref="referencesField"
-                                id="referencesField"
-                                class="col-12 q-pt-none"
-                                :label="$t('references')+' '+$t('one_per_line')"
-                                v-model="finding.references"
-                                :rules="($settings.report.public.requiredFields.findingReferences) ? [val => !!val || $t('fieldIsRequired')] : ['']"
-                                :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT" />
-                                <q-badge v-if="commentMode && canCreateComment" color="deep-purple" floating class="cursor-pointer" @click="createComment('referencesField')">
-                                    <q-icon name="add_comment" size="xs" />
-                                </q-badge>
+                                <template v-slot:control>
+                                    <basic-editor
+                                    ref="basiceditor_remediation"
+                                    noSync
+                                    v-model="finding.remediation"
+                                    :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                                    fieldName="remediationField"
+                                    :commentMode="commentMode && canCreateComment"
+                                    :focusedComment="focusedComment"
+                                    :commentIdList="commentIdList"
+                                    />
+                                </template>
+                                <template v-slot:label>
+                                    {{$t('remediation')}} <span v-if="$settings.report.public.requiredFields.findingRemediation" class="text-red">*</span>
+                                </template>
                             </q-field>
                         </q-card-section>
                         <q-expansion-item 
@@ -368,31 +411,24 @@
                             </q-card-section>
                             <q-card-section class="q-pt-none">
                                 <q-field
-                                ref="remediationField"
-                                for="remediationField"
-                                class="col-md-12 basic-editor"
-                                :class="{'highlighted-border': fieldHighlighted == 'remediationField' && commentMode}"
+                                class="col-12 q-pt-none"
+                                bg-color="transparent"
                                 borderless
-                                label-slot
-                                stack-label
-                                :rules="($settings.report.public.requiredFields.findingRemediation) ? [val => !!finding.remediation || $t('fieldIsRequired')] : ['']"
-                                lazy-rules="ondemand"
+                                :class="{'highlighted-border': fieldHighlighted == 'referencesField' && commentMode}"
                                 >
-                                    <template v-slot="control">
-                                        <basic-editor
-                                        ref="basiceditor_remediation"
-                                        noSync
-                                        v-model="finding.remediation"
-                                        :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
-                                        fieldName="remediationField"
-                                        :commentMode="commentMode && canCreateComment"
-                                        :focusedComment="focusedComment"
-                                        :commentIdList="commentIdList"
-                                        />
-                                    </template>
-                                    <template v-slot:label>
-                                        {{$t('remediation')}} <span v-if="$settings.report.public.requiredFields.findingRemediation" class="text-red">*</span>
-                                    </template>
+                                    <textarea-array
+                                    ref="referencesField"
+                                    id="referencesField"
+                                    class="col-12 q-pt-none"
+                                    :label="$t('references')+' '+$t('one_per_line')"
+                                    v-model="finding.references"
+                                    :string-array="true"
+                                    :lazy="true"
+                                    :rules="($settings.report.public.requiredFields.findingReferences) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                                    :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT" />
+                                    <q-badge v-if="commentMode && canCreateComment" color="deep-purple" floating class="cursor-pointer" @click="createComment('referencesField')">
+                                        <q-icon name="add_comment" size="xs" />
+                                    </q-badge>
                                 </q-field>
                             </q-card-section>
                         </q-card>
@@ -402,7 +438,7 @@
     
             <q-card v-if="commentMode" class="col-3 bg-grey-11 sidebar-comments">
                 <q-scroll-area class="scrollarea-comments">
-                    <comments-list 
+                    <comments-list
                     height="calc(100vh - 214px)"
                     v-model:comments="auditParent.comments"
                     v-model:editComment="editComment"
@@ -411,6 +447,7 @@
                     :focusComment="focusComment"
                     :updateComment="updateComment"
                     :deleteComment="deleteComment"
+                    :reviewers="auditParent.reviewers || []"
                     >
                     </comments-list>
                 </q-scroll-area>
@@ -552,12 +589,16 @@
                                     <basic-editor ref="basiceditor_observation" noSync v-model="finding.observation" :editable="false"/>
                                 </template>
                             </q-field>
-                            <textarea-array
-                            class="col-12"
-                            :label="$t('references')+' '+$t('one_per_line')"
-                            v-model="finding.references"
-                            readonly
-                            />
+                            <q-field
+                            class="col-md-12 basic-editor"
+                            :label="$t('remediation')"
+                            borderless
+                            stack-label
+                            >
+                                <template v-slot:control>
+                                    <basic-editor ref="basiceditor_remediation" noSync v-model="finding.remediation" :editable="false"/>
+                                </template>
+                            </q-field>
                         </q-card-section>
                         <q-card-section>
                             <q-field
@@ -626,18 +667,16 @@
                             </div>
                         </q-card-section>
                         <q-card-section class="q-pt-none">
-                            <q-field
-                            class="col-md-12 basic-editor"
-                            :label="$t('remediation')"
-                            borderless
-                            stack-label
-                            >
-                                <template v-slot="control">
-                                    <basic-editor ref="basiceditor_remediation" noSync v-model="finding.remediation" :editable="false"/>
-                                </template>
-                            </q-field>
+                            <textarea-array
+                            class="col-12"
+                            :label="$t('references')+' '+$t('one_per_line')"
+                            v-model="finding.references"
+                            :string-array="true"
+                            :lazy="true"
+                            readonly
+                            />
                         </q-card-section>
-                        <q-expansion-item 
+                        <q-expansion-item
                         :label="$t('customFields')"
                         v-if="finding.customFields && finding.customFields.length > 0"
                         default-opened
@@ -710,5 +749,18 @@
 
 .content-retest {
     margin-top: 50px;
+}
+
+.ios-notification-badge {
+    position: relative;
+    .q-badge__content {
+        border-radius: 50%;
+        min-width: 18px;
+        height: 16px;
+        font-size: 12px;
+    }
+}
+.unresolved-label {
+    font-size: 14px;
 }
 </style>

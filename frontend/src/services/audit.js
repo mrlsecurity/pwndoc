@@ -108,6 +108,17 @@ export default {
     return api.get(`audits/${auditId}/children`);
   },
 
+  getFindingStatsByType: function(format = 'json', filters = {}) {
+    var params = { format, ...filters };
+    if (format === 'yaml' || format === 'csv') {
+      return api.get('audits/stats/findings-by-type', {
+        params,
+        responseType: 'blob'
+      });
+    }
+    return api.get('audits/stats/findings-by-type', { params });
+  },
+
   createComment: function(auditId, comment) {
     return api.post(`audits/${auditId}/comments`, comment);
   },
