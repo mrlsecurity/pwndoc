@@ -98,6 +98,40 @@ TemplateSchema.statics.delete = (templateId) => {
 TemplateSchema.statics.backup = (path) => {
     return new Promise(async (resolve, reject) => {
         const fs = require('fs')
+        const pathModule = require('path')
+
+        function shouldSkipFile(filename) {
+            // Skip macOS system files
+            if (filename === '.DS_Store') return true
+            // Skip Office lock files
+            if (filename.startsWith('~$')) return true
+            // Skip hidden files
+            if (filename.startsWith('.')) return true
+            return false
+        }
+
+        function copyRecursive(src, dest) {
+            if (!fs.existsSync(dest)) {
+                fs.mkdirSync(dest, { recursive: true })
+            }
+
+            const entries = fs.readdirSync(src, { withFileTypes: true })
+            
+            for (const entry of entries) {
+                const srcPath = pathModule.join(src, entry.name)
+                const destPath = pathModule.join(dest, entry.name)
+
+                if (shouldSkipFile(entry.name)) {
+                    continue
+                }
+
+                if (entry.isDirectory()) {
+                    copyRecursive(srcPath, destPath)
+                } else {
+                    fs.copyFileSync(srcPath, destPath)
+                }
+            }
+        }
 
         function exportTemplatesPromise() {
             return new Promise((resolve, reject) => {
@@ -125,7 +159,7 @@ TemplateSchema.statics.backup = (path) => {
                 });
 
                 writeStream.on('finish', () => {
-                    fs.cpSync(`${__basedir}/../report-templates`, `${path}/report-templates`, {recursive: true})
+                    copyRecursive(`${__basedir}/../report-templates`, `${path}/report-templates`)
                     resolve('ok');
                 });
             

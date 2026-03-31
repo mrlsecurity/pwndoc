@@ -273,7 +273,7 @@
                 </div>
             </q-card-section>
             <q-card-section>
-                <textarea-array :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" />
+                <textarea-array :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" :string-array="true" />
             </q-card-section>
 
             <q-expansion-item 
@@ -445,7 +445,7 @@
                 </div>
             </q-card-section>
             <q-card-section>
-                <textarea-array :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" />
+                <textarea-array :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" :string-array="true" />
             </q-card-section>
 
             <q-expansion-item 
@@ -591,7 +591,7 @@
                             />
                         </q-card-section>
                         <q-card-section>
-                            <textarea-array :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" />
+                <textarea-array :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" :string-array="true" />
                         </q-card-section>
 
                         <q-expansion-item 
