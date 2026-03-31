@@ -2,7 +2,29 @@
     "report": {
         "inherits": ["user"],
         "allows": [
-            "audits:read-all"
+            "audits:read-all",
+            "audits:review",
+            "audits:review-all",
+            "audits:comments:needs-work",
+            "data:stats"
+        ]
+    },
+    "data-manager": {
+        "inherits": ["user"],
+        "allows": [
+            "data:access",
+            "clients:create",
+            "clients:update",
+            "clients:delete",
+            "companies:create",
+            "companies:update",
+            "companies:delete",
+            "sections:create",
+            "sections:update",
+            "sections:delete",
+            "custom-fields:create",
+            "custom-fields:update",
+            "custom-fields:delete"
         ]
     }
 }

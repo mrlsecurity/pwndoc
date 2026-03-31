@@ -12,6 +12,14 @@ export default defineBoot(async({ router, store, urlPath, redirect }) => {
         else
           next()
       }
+      else if (to.path.startsWith('/data')) {
+        // Check if user has permission to access data section
+        if (!userStore.isAllowed('data:access')) {
+          next('/403')
+        } else {
+          next()
+        }
+      }
       else {
         next()
       }

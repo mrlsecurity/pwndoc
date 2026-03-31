@@ -34,23 +34,28 @@ var builtInRoles = {
     user: {
         allows: [
             // Audits
-            'audits:create',
+            //'audits:create',
             'audits:read',
             'audits:update',
-            'audits:delete',
+            //'audits:delete',
+            //'audits:general-write' //for general audit modifications (scope, clients, etc.)
+            // Comments
+            'audits:comments:create',
+            'audits:comments:update',
+            'audits:comments:delete',
             // Images
             'images:create',
             'images:read',
             // Clients
-            'clients:create',
+            //'clients:create',
             'clients:read',
-            'clients:update',
-            'clients:delete',
+            //'clients:update',
+            //'clients:delete',
             // Companies
-            'companies:create',
+            //'companies:create',
             'companies:read',
-            'companies:update',
-            'companies:delete',
+            //'companies:update',
+            //'companies:delete',
             // Languages
             'languages:read',
             // Audit Types
@@ -62,7 +67,7 @@ var builtInRoles = {
             // Sections Data
             'sections:read',
             // Templates
-            'templates:read',
+            //'templates:read',
             // Users
             'users:read',
             // Roles
