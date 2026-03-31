@@ -16,6 +16,8 @@ const LanguageToolHelpingWords = {
   WordIgnoredEventName: 'spellcheck-word-ignored',
 }
 
+const EXCLUDED_NODE_TYPES = ['codeBlock', 'code']
+
 const updateMatchAndRange = (storage, m, range) => {
   storage.match = m || undefined
   storage.matchRange = range || undefined
@@ -195,7 +197,7 @@ const proofreadAndDecorateWholeDoc = async (storage, doc) => {
   let index = 0
 
   doc.descendants((node, pos, parent) => {
-    if (node.isText && parent?.type.name !== 'codeBlock') {
+    if (node.isText && !EXCLUDED_NODE_TYPES.includes(parent?.type.name)) {
       if (textNodesWithPosition[index]) {
         const text = textNodesWithPosition[index].text + node.text
         const from = textNodesWithPosition[index].from
@@ -454,7 +456,7 @@ export const LanguageTool = Extension.create({
 
                 tr.doc.descendants((node, pos) => {
                   if (!node.isBlock) return false
-                  if (node.type.name === 'codeBlock') return false
+                  if (EXCLUDED_NODE_TYPES.includes(node.type.name)) return false
 
                   const nodeFrom = pos
                   const nodeTo = pos + node.nodeSize
