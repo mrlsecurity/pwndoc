@@ -164,7 +164,7 @@ module.exports = function(app, io) {
             }
 
             // Is the new reviewer the creator of the audit? 
-            if (req.body.reviewers.some(element => element._id === audit.creator._id)) {
+            if (!audit.creatorCanReview && req.body.reviewers.some(element => element._id === audit.creator._id)) {
                 Response.BadParameters(res, "A user cannot simultaneously be a reviewer and a collaborator/creator");
                 return;
             }
