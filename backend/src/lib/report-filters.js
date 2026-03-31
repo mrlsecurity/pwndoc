@@ -378,6 +378,17 @@ defaultFilters.count = function(input, severity, scoreType) {
     return count;
 }
 
+defaultFilters.isWhitebox = function(root) {
+    return root['pen-type'] === 'Whitebox';
+};
+
+defaultFilters.isGraybox = function(root) {
+    return root['pen-type'] === 'Graybox';
+};
+
+defaultFilters.isBlackbox = function(root) {
+    return root['pen-type'] === 'Blackbox';
+};
 // Translate using locale from 'translate' folder
 // Example: {input | translate: 'fr'}
 defaultFilters.translate = function(input, locale) {
