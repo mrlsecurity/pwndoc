@@ -598,8 +598,25 @@ async function prepAuditData(data, settings) {
     result.language = data.language || "undefined"
     result.scope = data.scope.toObject() || []
 
+    // Filter findings: only include completed findings (status === 0)
+    // that have no unresolved "needs work" comments
+    // Include findings where status is undefined/null for backward compatibility
+    var hasUnresolvedNeedsWork = (finding) => {
+        if (!data.comments) return false;
+        return data.comments.some(comment => 
+            comment.findingId && 
+            comment.findingId.toString() === finding._id.toString() && 
+            comment.needsWork && 
+            !comment.resolved
+        );
+    };
+    
+    var completedFindings = data.findings.filter(f => (f.status === 0 || f.status === undefined || f.status === null) && !hasUnresolvedNeedsWork(f));
+
     result.findings = []
-    for (var finding of data.findings) {
+    var findingCounter = 0
+    for (var finding of completedFindings) {
+        findingCounter++
         var tmpFinding = {
             title: finding.title || "",
             vulnType: $t(finding.vulnType) || "",

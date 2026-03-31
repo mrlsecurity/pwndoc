@@ -8,6 +8,17 @@ module.exports = function(app, io) {
     var utils = require('../lib/utils');
     var Settings = require('mongoose').model('Settings');
 
+    // Helper to check if user is a reviewer on this audit
+    var isReviewer = async function(auditId, userId) {
+        try {
+            var audit = await Audit.findById(auditId).select('reviewers').exec()
+            if (!audit) return false
+            return audit.reviewers.some(reviewer => reviewer.toString() === userId)
+        } catch(err) {
+            return false
+        }
+    }
+
     /* ### AUDITS LIST ### */
 
     // Get audits list of user (all for admin) with regex filter on findings
@@ -684,7 +695,7 @@ module.exports = function(app, io) {
     // ### COMMENTS ###
 
     // Add comment to audit
-    app.post("/api/audits/:auditId/comments", acl.hasPermission('audits:comments:create'), function(req, res) {
+    app.post("/api/audits/:auditId/comments", acl.hasPermission('audits:comments:create'), async function(req, res) {
         if ((!req.body.findingId && !req.body.sectionId) || (req.body.findingId && req.body.sectionId)) {
             Response.BadParameters(res, 'Only set one of "findingId" or "sectionId"');
             return;
@@ -705,6 +716,14 @@ module.exports = function(app, io) {
 
         // Optional parameters
         if (req.body.commentId) comment._id = req.body.commentId
+        if (typeof(req.body.needsWork) === 'boolean') {
+            var hasNeedsWorkPermission = acl.isAllowed(req.decodedToken.role, 'audits:comments:needs-work')
+            var isAuditReviewer = await isReviewer(req.params.auditId, req.decodedToken.id)
+
+            if (hasNeedsWorkPermission || isAuditReviewer) {
+                comment.needsWork = req.body.needsWork
+            }
+        }
 
         Audit.createComment(acl.isAllowed(req.decodedToken.role, 'audits:comments:create-all'), req.params.auditId, req.decodedToken.id, comment)
         .then(msg => {
@@ -731,6 +750,14 @@ module.exports = function(app, io) {
         if (req.body.text) comment.text = req.body.text;
         if (req.body.replies) comment.replies = req.body.replies;
         if (typeof(req.body.resolved) === 'boolean') comment.resolved = req.body.resolved
+        if (typeof(req.body.needsWork) === 'boolean') {
+            var hasNeedsWorkPermission = acl.isAllowed(req.decodedToken.role, 'audits:comments:needs-work')
+            var isAuditReviewer = await isReviewer(req.params.auditId, req.decodedToken.id)
+
+            if (hasNeedsWorkPermission || isAuditReviewer) {
+                comment.needsWork = req.body.needsWork
+            }
+        }
 
         Audit.updateComment(acl.isAllowed(req.decodedToken.role, 'audits:comments:update-all'), req.params.auditId, req.decodedToken.id, req.params.commentId, comment)
         .then(msg => {
