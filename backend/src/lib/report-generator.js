@@ -654,11 +654,11 @@ async function prepAuditData(data, settings) {
 
                 tmpFinding.cvss = {
                     vectorString: tmpCVSS.vectorString || "",
-                    baseMetricScore: tmpCVSS.baseScore || "",
+                    baseMetricScore: tmpCVSS.baseScore !== undefined ? Number(tmpCVSS.baseScore).toFixed(1) : "",
                     baseSeverity: tmpCVSS.baseSeverity || "",
-                    temporalMetricScore: tmpCVSS.temporalScore || "",
+                    temporalMetricScore: tmpCVSS.temporalScore !== undefined ? Number(tmpCVSS.temporalScore).toFixed(1) : "",
                     temporalSeverity: tmpCVSS.temporalSeverity || "",
-                    environmentalMetricScore: tmpCVSS.environmentalScore || "",
+                    environmentalMetricScore: tmpCVSS.environmentalScore !== undefined ? Number(tmpCVSS.environmentalScore).toFixed(1) : "",
                     environmentalSeverity: tmpCVSS.environmentalSeverity || ""
                 }
 
@@ -681,7 +681,6 @@ async function prepAuditData(data, settings) {
                 else tmpFinding.cvss.environmentalCellColor = cellNoneColor
 
                 tmpFinding.cvssObj = cvssStrToObject(tmpCVSS.vectorString)
-            }
         }
         
         if (settings.report.public.scoringMethods.CVSS4) {
@@ -695,7 +694,7 @@ async function prepAuditData(data, settings) {
 
                 tmpFinding.cvss4 = {
                     vectorString: tmpCVSS.vectorString || "",
-                    baseScore: tmpCVSS.baseScore || "",
+                    baseScore: tmpCVSS.baseScore !== undefined ? Number(tmpCVSS.baseScore).toFixed(1) : "",
                     baseSeverity: tmpCVSS.baseSeverity || "",
                 }
 
