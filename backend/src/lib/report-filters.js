@@ -348,14 +348,14 @@ defaultFilters.count = function(input, severity, scoreType) {
             break;
         case "environmental":
         default:  // Set default to environmental score
-            scoreAttribute = "environmentalSeverity";            
+            scoreAttribute = "baseSeverity";            
     }
     for(var i = 0; i < input.length; i++){
-
-        if(input[i].cvss[scoreAttribute] === severity){
-            count += 1;
-        }
-    }
+         const cvss = input[i].cvss4 || input[i].cvss; // Prioritize CVSS 4.0
+         if(cvss && cvss[scoreAttribute] === severity){
+             count += 1;
+         }
+     }
 
     return count;
 }
