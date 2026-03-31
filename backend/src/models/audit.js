@@ -71,7 +71,8 @@ var Comment = new Schema ({
     author:         {type: Schema.Types.ObjectId, ref: 'User'},
     text:           {type: String, default: ""},
     replies:        [Reply],
-    resolved:       {type: Boolean, default: false}         
+    resolved:       {type: Boolean, default: false},
+    needsWork:      {type: Boolean, default: false}         
 }, {timestamps: true})
 
 var AuditSchema = new Schema({
