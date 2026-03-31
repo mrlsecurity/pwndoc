@@ -148,12 +148,13 @@ Creator: {creator.firstname} {creator.lastname}
 ### scope
 Array of Objects:
 * **scope[i].name**
+* **scope[i].description**
 * **scope[i].hosts**
 
 > Use in template document
 >```
 Audit Scope:
-{-w:p scope}{name}{/scope}
+{-w:p scope}{name} {description}{/scope}
 >
 Network Scan:
 {#scope}{#hosts}
