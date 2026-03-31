@@ -186,7 +186,20 @@ export default {
         },
 
         canCreateComment: function() {
-            return userStore.isAllowed('audits:comments:create') 
+            return userStore.isAllowed('audits:comments:create')
+        },
+
+        unresolvedCommentsCount: function() {
+            let count = 0;
+            this.auditParent.comments.forEach(comment => {
+                if (!comment.resolved) {
+                    count++; // Count unresolved comment
+                    if (comment.replies && comment.replies.length > 0) {
+                        count += comment.replies.length; // Add replies as unresolved
+                    }
+                }
+            });
+            return count;
         },
     },
 
@@ -254,6 +267,7 @@ export default {
         // Update Finding
         updateFinding: function() {
             Utils.syncEditors(this.$refs)
+            if (this.$refs.referencesField) this.$refs.referencesField.updateParent()
             this.$nextTick(() => {
                 var customFieldsEmpty = this.$refs.customfields && this.$refs.customfields.requiredFieldsEmpty()
                 var defaultFieldsEmpty = this.requiredFieldsEmpty()
@@ -509,7 +523,8 @@ export default {
                     firstname: userStore.firstname,
                     lastname: userStore.lastname
                 },
-                text: "" 
+                text: "",
+                needsWork: false
             }
             if (commentId) comment.commentId = commentId
 
