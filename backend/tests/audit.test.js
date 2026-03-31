@@ -119,8 +119,10 @@ module.exports = function(request, app) {
         expect(response.body.datas.reviewers).toHaveLength(0);
         expect(response.body.datas.customFields).toHaveLength(0);
         expect(response.body.datas.scope).toHaveLength(2);
-        expect(response.body.datas.scope[0]).toBe('Scope Item 1');
-        expect(response.body.datas.scope[1]).toBe('Scope Item 2');
+        expect(response.body.datas.scope[0].name).toBe('Scope Item 1');
+        expect(response.body.datas.scope[0].description).toBe('');
+        expect(response.body.datas.scope[1].name).toBe('Scope Item 2');
+        expect(response.body.datas.scope[1].description).toBe('');
       })
     })
   })

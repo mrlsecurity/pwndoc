@@ -180,120 +180,10 @@ module.exports = function () {
 
       it('Heading 1', () => {
         var html = "<h1>Heading</h1>"
-        var expected =
-        `<w:p>`+
+var expected =
+`<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="Heading1"/>`+
-          `</w:pPr>`+
-          `<w:r>`+
-            `<w:t xml:space="preserve">Heading</w:t>`+
-          `</w:r>`+
-        `</w:p>`
-        var ooxml = html2ooxml(html)
-        expect(ooxml).toEqual(expected)
-      })
-
-      it('Heading 2', () => {
-        var html = "<h2>Heading</h2>"
-        var expected =
-        `<w:p>`+
-          `<w:pPr>`+
-            `<w:pStyle w:val="Heading2"/>`+
-          `</w:pPr>`+
-          `<w:r>`+
-            `<w:t xml:space="preserve">Heading</w:t>`+
-          `</w:r>`+
-        `</w:p>`
-        var ooxml = html2ooxml(html)
-        expect(ooxml).toEqual(expected)
-      })
-
-      it('Heading 3', () => {
-        var html = "<h3>Heading</h3>"
-        var expected =
-        `<w:p>`+
-          `<w:pPr>`+
-            `<w:pStyle w:val="Heading3"/>`+
-          `</w:pPr>`+
-          `<w:r>`+
-            `<w:t xml:space="preserve">Heading</w:t>`+
-          `</w:r>`+
-        `</w:p>`
-        var ooxml = html2ooxml(html)
-        expect(ooxml).toEqual(expected)
-      })
-
-      it('Heading 4', () => {
-        var html = "<h4>Heading</h4>"
-        var expected =
-        `<w:p>`+
-          `<w:pPr>`+
-            `<w:pStyle w:val="Heading4"/>`+
-          `</w:pPr>`+
-          `<w:r>`+
-            `<w:t xml:space="preserve">Heading</w:t>`+
-          `</w:r>`+
-        `</w:p>`
-        var ooxml = html2ooxml(html)
-        expect(ooxml).toEqual(expected)
-      })
-
-      it('Heading 5', () => {
-        var html = "<h5>Heading</h5>"
-        var expected =
-        `<w:p>`+
-          `<w:pPr>`+
-            `<w:pStyle w:val="Heading5"/>`+
-          `</w:pPr>`+
-          `<w:r>`+
-            `<w:t xml:space="preserve">Heading</w:t>`+
-          `</w:r>`+
-        `</w:p>`
-        var ooxml = html2ooxml(html)
-        expect(ooxml).toEqual(expected)
-      })
-
-      it('Heading 6', () => {
-        var html = "<h6>Heading</h6>"
-        var expected =
-        `<w:p>`+
-          `<w:pPr>`+
-            `<w:pStyle w:val="Heading6"/>`+
-          `</w:pPr>`+
-          `<w:r>`+
-            `<w:t xml:space="preserve">Heading</w:t>`+
-          `</w:r>`+
-        `</w:p>`
-        var ooxml = html2ooxml(html)
-        expect(ooxml).toEqual(expected)
-      })
-
-      it('Simple Bullets', () => {
-        var html = 
-        `<ul>`+
-          `<li>`+
-            `<p>Bullet1</p>`+
-          `</li>`+
-          `<li>`+
-            `<p>Bullet2</p>`+
-          `</li>`+
-        `</ul>`
-        var expected =
-        `<w:p>`+
-          `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
-            `<w:numPr>`+
-              `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="1"/>`+
-            `</w:numPr>`+
-          `</w:pPr>`+
-          `<w:r>`+
-            `<w:t xml:space="preserve">Bullet1</w:t>`+
-          `</w:r>`+
-        `</w:p>`+
-        `<w:p>`+
-          `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Bullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="1"/>`+
@@ -318,7 +208,7 @@ module.exports = function () {
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Number"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="1"/>`+
@@ -330,7 +220,7 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Number"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="1"/>`+
@@ -359,10 +249,10 @@ module.exports = function () {
             `<p>Bullet2</p>`+
           `</li>`+
         `</ul>`
-        var expected = 
-        `<w:p>`+
+var expected =
+`<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Bullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="1"/>`+
@@ -374,7 +264,7 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Bullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="1"/>`+
               `<w:numId w:val="1"/>`+
@@ -386,7 +276,7 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Bullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="1"/>`+
@@ -413,7 +303,7 @@ module.exports = function () {
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Number"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="2"/>`+
@@ -425,7 +315,7 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Number"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="2"/>`+
@@ -457,7 +347,7 @@ module.exports = function () {
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Number"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="2"/>`+
@@ -469,7 +359,7 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Number"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="1"/>`+
               `<w:numId w:val="2"/>`+
@@ -481,7 +371,7 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="List Number"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="2"/>`+

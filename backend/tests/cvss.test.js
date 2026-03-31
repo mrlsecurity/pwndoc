@@ -44,7 +44,7 @@ module.exports = function(request, app) {
           "report": {
             "public": {
               "scoringMethods": {
-                "CVSS3": true,
+                "CVSS3": false,
                 "CVSS4": true,
               }
             }
