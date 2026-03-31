@@ -18,7 +18,7 @@
             <q-item-section>{{$t('nav.vulnerabilities')}}</q-item-section>
             </q-item>
 
-            <q-item to='/data' active-class="text-green">
+            <q-item v-if="userStore.isAllowed('data:access')" to='/data' active-class="text-green">
             <q-item-section avatar style="min-width:0" class="q-pr-sm">
                 <q-icon name="fa fa-database" />
             </q-item-section>
