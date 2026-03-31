@@ -630,7 +630,7 @@ async function prepAuditData(data, settings) {
             affected: finding.scope || "",
             status: finding.status || "",
             category: $t(finding.category) || $t("No Category"),
-            identifier: "IDX-" + utils.lPad(finding.identifier),
+            identifier: "WEB-" + String(findingCounter).padStart(3, '0'),
             retestStatus: finding.retestStatus || "",
             retestDescription: await splitHTMLParagraphs(finding.retestDescription)
         }

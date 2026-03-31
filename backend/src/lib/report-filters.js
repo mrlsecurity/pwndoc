@@ -96,7 +96,7 @@ defaultFilters.convertDateLocale = function(input, locale, style) {
 
 // Convert identifier prefix to a user defined prefix: {identifier | changeID: 'PRJ-'}
 defaultFilters.changeID = function (input, prefix) {
-    return input.replace("IDX-", prefix);
+    return input.replace("WEB-", prefix);
 }
 
 // Default value: returns input if it is truthy, otherwise its parameter.
