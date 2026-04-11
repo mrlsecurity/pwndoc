@@ -6,11 +6,7 @@ module.exports = function(app) {
 
     // Get clients list
     app.get("/api/clients", acl.hasPermission('clients:read'), function(req, res) {
-        var userId = req.decodedToken.id;
-        var userRole = req.decodedToken.role;
-        var isAdmin = acl.isAllowed(userRole, '*');
-
-        Client.getAll(userId, isAdmin)
+        Client.getAll()
         .then(msg => Response.Ok(res, msg))
         .catch(err => Response.Internal(res, err))
     });

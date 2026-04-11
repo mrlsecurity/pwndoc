@@ -12,46 +12,18 @@ var CompanySchema = new Schema({
 *** Statics ***
 */
 
-// Get all companies (optionally filtered by user's assigned audits)
-CompanySchema.statics.getAll = (userId = null, isAdmin = false) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            let companyIds = [];
-
-            // If not admin and userId provided, filter by assigned audits
-            if (!isAdmin && userId) {
-                var Audit = mongoose.model('Audit');
-                var audits = await Audit.find({
-                    $or: [
-                        {creator: userId},
-                        {collaborators: userId},
-                        {reviewers: userId}
-                    ]
-                }).select('company').exec();
-
-                // Extract unique company IDs from audits
-                companyIds = [...new Set(audits.map(a => a.company).filter(c => c))];
-
-                // If no companies found in assigned audits, return empty array
-                if (companyIds.length === 0) {
-                    resolve([]);
-                    return;
-                }
-            }
-
-            // Build query
-            var query = Company.find();
-            if (!isAdmin && userId && companyIds.length > 0) {
-                query = query.where('_id').in(companyIds);
-            }
-
-            query.select('name shortName logo');
-
-            var rows = await query.exec();
+// Get all companies
+CompanySchema.statics.getAll = () => {
+    return new Promise((resolve, reject) => {
+        var query = Company.find();
+        query.select('name shortName logo');
+        query.exec()
+        .then((rows) => {
             resolve(rows);
-        } catch (err) {
+        })
+        .catch((err) => {
             reject(err);
-        }
+        })
     });
 }
 

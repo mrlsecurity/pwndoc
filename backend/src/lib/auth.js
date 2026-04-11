@@ -36,6 +36,7 @@ var builtInRoles = {
             // Audits
             //'audits:create',
             'audits:read',
+            'audits:read-all',
             'audits:update',
             //'audits:delete',
             //'audits:general-write' //for general audit modifications (scope, clients, etc.)
@@ -81,7 +82,9 @@ var builtInRoles = {
             'settings:read-public',
             // Spellcheck
             'spellcheck:read',
-            'spellcheck:create'
+            'spellcheck:create',
+            // Data page access
+            'data:access'
         ]
     },
     admin: {
