@@ -55,6 +55,27 @@ To handle images, HTML values with images are converted into an array of text an
                                     Image 1 - {caption}{/images}{/poc}
 ```
 
+### Tables
+
+Tables can be created directly in the HTML editor using the table toolbar buttons. The editor supports:
+- Inserting tables with configurable rows and columns
+- Adding/removing rows and columns
+- Merging and splitting cells
+- Resizing columns by dragging column borders
+
+Tables are automatically converted to OOXML `<w:tbl>` elements during report generation via the `convertHTML` filter. They render at **full page width** with column proportions preserved from the editor.
+
+To apply a Word table style from your template, pass the style name to `convertHTML`:
+
+```
+// Table with a custom Word table style
+{@field | convertHTML: 'Grid Table 4 - Accent 1'}
+```
+
+> **Note**: The style parameter applies to both paragraphs and tables within the same HTML block. If your HTML field contains both, the style name should exist as both a paragraph style and a table style in your Word template.
+
+> **Limitation**: Column spans (`colspan`) are supported, but row spans (`rowspan`) are not yet converted to OOXML.
+
 ## Audit Object
 
 Docxtemplater requires an object containing data that will be used in the template document.
@@ -242,6 +263,7 @@ But in order to apply styles to the data from HTML editors, they must be defined
 | H6         | Heading6      |
 | code (<>)  | CodeChar      |
 | code block | Code          |
+| table      | *(via `convertHTML` style parameter, e.g. `'Grid Table 4 - Accent 1'`)* |
 
 For `bullet list` and `ordered list` they must be correctly set in the *numbering.xml* file of the Docx Template.
 
@@ -353,11 +375,15 @@ Convert Date to proper format using locale. Must be used on values with date for
 
 ### convertHTML
 
-Convert HTML values to OOXML format. See [HTML values](docxtemplate.md?id=html-values-from-text-editors) for usage.
+Convert HTML values to OOXML format. Supports paragraphs, headings, lists, code blocks, images, captions, and tables. See [HTML values](docxtemplate.md?id=html-values-from-text-editors) and [Tables](docxtemplate.md?id=tables) for usage.
+
+An optional style parameter can be passed to apply a Word style to paragraphs and tables:
 
 > Use in template document
 >```
 {@value | convertHTML}
+// With a Word style name:
+{@value | convertHTML: 'CustomStyleName'}
 >```
 
 ### count
@@ -562,13 +588,17 @@ Sorts the input array according an optional given attribute, dotted notation is 
 
 ### sortArrayByField
 
-Sort array by supplied field. S
-Order can be 1 for ascending, or -1 for descending
+Sort array by supplied field. Works with both string and numeric values.
+Order can be 1 for ascending, or -1 for descending. Null/undefined values are sorted to the end.
 
 > Use in template document
 >```
 {#findings | sortArrayByField: 'identifier':1}
 {identifier}
+{/}
+// Also works with numeric fields:
+{#services | sortArrayByField: 'port':1}
+{port}
 {/}
 >```
 

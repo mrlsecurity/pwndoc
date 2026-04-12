@@ -1,6 +1,37 @@
 
 ---
 
+# Feature: Editor & DOCX Table Support + sortArrayByField Fix
+
+Implementation date: 2026-04-12
+
+## Status: IMPLEMENTED
+
+Integrated table support from [pwndoc/pwndoc#680](https://github.com/pwndoc/pwndoc/pull/680) with enhancements for Word table styling.
+
+## Summary
+
+Tables can now be created directly in PwnDoc's rich text editor and are automatically converted to OOXML tables in generated DOCX reports. Also fixes `sortArrayByField` crashing on numeric fields.
+
+## Changes
+
+**Frontend:**
+- Added tiptap table extensions (`@tiptap/extension-table`, `-table-cell`, `-table-header`, `-table-row`)
+- Editor toolbar gains table buttons: insert, add/remove row/column, merge/split cells, delete table
+- HTML sanitizer (`utils.js`) whitelists table tags (`table`, `tbody`, `thead`, `tr`, `th`, `td`, `colgroup`, `col`) and cell attributes (`colspan`, `rowspan`, `data-colwidth`)
+
+**Backend:**
+- `html2ooxml.js`: Parses `<table>` HTML into `docx.Table`/`docx.TableRow`/`docx.TableCell` OOXML elements. Tables render at 100% page width with proportional column widths from the editor. Supports Word table styles via the existing `style` parameter.
+- `report-filters.js`: `sortArrayByField` now handles numeric values, null/undefined values, and mixed types instead of only strings.
+- XML output filter updated to include `w:tbl` elements alongside `w:p`.
+
+## Known Limitations
+
+- `rowspan` is not converted to OOXML (only `colspan` is supported)
+- No built-in table borders/shading — use Word template table styles via `{@field | convertHTML: 'StyleName'}`
+
+---
+
 # Fix: Numbered List Restart Per Finding
 
 Implementation date: 2026-02-02

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Enhancements
+
+- Add table support in HTML editor and DOCX report generation (based on [pwndoc/pwndoc#680](https://github.com/pwndoc/pwndoc/pull/680))
+    - Tables can be created, resized, merged/split directly in the editor
+    - Tables are converted to OOXML and render at full page width with proportional columns
+    - Word table styles can be applied via `convertHTML` filter: `{@field | convertHTML: 'StyleName'}`
+    - HTML sanitizer updated to allow table markup and attributes
+- Fix `sortArrayByField` filter crashing on numeric fields (closes [pwndoc/pwndoc#408](https://github.com/pwndoc/pwndoc/issues/408))
+    - Now handles numeric values, null/undefined values, and mixed types
+
 ## 0.5.3 (2022-07-19)
 
 ### Enhancements
