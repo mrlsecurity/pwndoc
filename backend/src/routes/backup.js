@@ -409,8 +409,8 @@ module.exports = function(app) {
             }
         })
 
-        if (!fs.existsSync(backupTmpPath))
-            fs.mkdirSync(backupTmpPath)
+        fs.rmSync(backupTmpPath, { recursive: true, force: true })
+        fs.mkdirSync(backupTmpPath)
 
         setBackupState(STATE_DUMPING_DATABASE)
         console.log('Dumping database')

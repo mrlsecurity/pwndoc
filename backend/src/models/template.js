@@ -247,7 +247,7 @@ TemplateSchema.statics.restore = (path, mode = "upsert") => {
             if (mode === "revert") 
                 await Template.deleteMany()
             await importTemplatesPromise()
-            fs.cpSync(`${path}/report-templates`, `${__basedir}/../report-templates`, {recursive: true})
+            fs.cpSync(`${path}/report-templates`, `${__basedir}/../report-templates`, {recursive: true, force: true, filter: (src) => !src.endsWith('.DS_Store')})
             resolve()
         }
         catch (error) {
