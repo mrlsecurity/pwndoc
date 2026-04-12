@@ -49,3 +49,12 @@ coverage
 
 # AI configs
 .agents
+
+# Worktrees
+.worktrees
+
+# Backup files
+*.bak
+
+# Superpowers docs
+docs/superpowers/
