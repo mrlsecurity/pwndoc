@@ -79,6 +79,19 @@ const SettingSchema = new Schema({
                 retestDescription: { type: Boolean, default: false }
             }
         }
+    },
+    ai: {
+        enabled: { type: Boolean, default: false },
+        public: {
+            enabled: { type: Boolean, default: false }
+        },
+        private: {
+            provider: {
+                baseURL: { type: String, default: 'https://api.openai.com/v1' },
+                model: { type: String, default: 'gpt-4o-mini' },
+                apiKey: { type: String, default: '' }
+            }
+        }
     }
 }, {strict: true});
 
@@ -99,7 +112,7 @@ SettingSchema.statics.getAll = () => {
 SettingSchema.statics.getPublic = () => {
     return new Promise((resolve, reject) => {
         const query = Settings.findOne({});
-        query.select('-_id report.enabled report.public reviews.enabled reviews.public export.enabled export.public');
+        query.select('-_id report.enabled report.public reviews.enabled reviews.public export.enabled export.public ai.enabled ai.public');
         query.exec()
             .then(settings => resolve(settings))
             .catch(err => reject(err));

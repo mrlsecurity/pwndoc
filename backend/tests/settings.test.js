@@ -54,6 +54,12 @@ module.exports = function(request, app) {
             "minReviewers": 1,
           },
         },
+        "ai": {
+          "enabled": false,
+          "public": {
+            "enabled": false,
+          },
+        },
       }
 
       const defaultSettings = {
@@ -111,6 +117,19 @@ module.exports = function(request, app) {
           "public": {
             "mandatoryReview": false,
             "minReviewers": 1,
+          },
+        },
+        "ai": {
+          "enabled": false,
+          "private": {
+            "provider": {
+              "baseURL": "https://api.openai.com/v1",
+              "model": "gpt-4o-mini",
+              "apiKey": "",
+            },
+          },
+          "public": {
+            "enabled": false,
           },
         },
       };

@@ -6,7 +6,8 @@
             "audits:review",
             "audits:review-all",
             "audits:comments:needs-work",
-            "data:stats"
+            "data:stats",
+            "ai:use"
         ]
     },
     "data-manager": {

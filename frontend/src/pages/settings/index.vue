@@ -541,6 +541,137 @@
                 </q-card-section>
             </q-card>
 
+            <q-card v-if="userStore.isAllowed('*')" class="q-my-lg">
+                <q-card-section class="q-py-none bg-blue-grey-5 text-white">
+                    <q-item style="padding:0px;">
+                        <q-item-section class="col-11">
+                            <div class="text-h6">AI Integration</div>
+                        </q-item-section>
+                        <q-item-section class="col-md-1 items-center">
+                            <q-toggle
+                                color="primary"
+                                keep-color
+                                :disable="!canEdit"
+                                v-model="settings.ai.enabled"
+                                @update:model-value="val => settings.ai.public.enabled = val"
+                            />
+                        </q-item-section>
+                    </q-item>
+                </q-card-section>
+                <template v-if="settings.ai.enabled">
+                    <q-separator />
+                    <q-card-section>
+                        <div class="text-bold">Provider Configuration</div>
+                        <br/>
+                        <div class="text-grey-8">
+                            Configure an OpenAI-compatible API endpoint. Works with OpenAI, Ollama, vLLM, LiteLLM, Azure OpenAI, and more.
+                        </div>
+                    </q-card-section>
+                    <q-card-section>
+                        <div class="row q-col-gutter-md">
+                            <q-input
+                                class="col-md-6 col-12"
+                                v-model="settings.ai.private.provider.baseURL"
+                                label="Provider URL"
+                                outlined
+                                :disable="!canEdit"
+                                hint="e.g., https://api.openai.com/v1 or http://localhost:11434/v1"
+                            />
+                            <q-input
+                                class="col-md-6 col-12"
+                                v-model="settings.ai.private.provider.model"
+                                label="Model"
+                                outlined
+                                :disable="!canEdit"
+                                hint="e.g., gpt-4o-mini, llama3, etc."
+                            />
+                        </div>
+                        <div class="row q-col-gutter-md q-mt-sm">
+                            <q-input
+                                class="col-md-6 col-12"
+                                v-model="settings.ai.private.provider.apiKey"
+                                label="API Key"
+                                outlined
+                                :type="showAiApiKey ? 'text' : 'password'"
+                                :disable="!canEdit"
+                                hint="Leave empty to use AI_API_KEY environment variable"
+                            >
+                                <template v-slot:append>
+                                    <q-icon
+                                        :name="showAiApiKey ? 'visibility_off' : 'visibility'"
+                                        class="cursor-pointer"
+                                        @click="showAiApiKey = !showAiApiKey"
+                                    />
+                                </template>
+                            </q-input>
+                            <div class="col-md-6 col-12 flex items-center">
+                                <q-chip v-if="aiSettings.provider && aiSettings.provider.hasApiKey" color="positive" text-color="white" icon="check_circle">
+                                    API Key: {{ aiSettings.provider.apiKeySource === 'env' ? 'From environment variable' : 'Configured manually' }}
+                                </q-chip>
+                                <q-chip v-else color="negative" text-color="white" icon="error">
+                                    API Key: Not configured
+                                </q-chip>
+                            </div>
+                        </div>
+                    </q-card-section>
+                    <q-separator />
+                    <q-card-section>
+                        <div class="text-bold">Custom Actions</div>
+                        <br/>
+                        <div class="text-grey-8">
+                            Create custom AI actions or add instructions to built-in actions (Generate, Rephrase, Translate, Summarize).
+                        </div>
+                    </q-card-section>
+                    <q-card-section>
+                        <q-table
+                            :rows="aiActions"
+                            :columns="aiActionColumns"
+                            row-key="id"
+                            flat
+                            bordered
+                            :pagination="{ rowsPerPage: 10 }"
+                        >
+                            <template v-slot:top-right>
+                                <q-btn color="positive" icon="add" label="New Action" no-caps @click="showCreateAiAction = true" :disable="!canEdit" />
+                            </template>
+                            <template v-slot:body-cell-actions="props">
+                                <q-td :props="props">
+                                    <q-btn flat round dense icon="edit" color="primary" @click="editAiAction(props.row)" :disable="!canEdit" />
+                                    <q-btn v-if="props.row.type === 'custom'" flat round dense icon="delete" color="negative" @click="deleteAiAction(props.row)" :disable="!canEdit" />
+                                </q-td>
+                            </template>
+                            <template v-slot:body-cell-isEnabled="props">
+                                <q-td :props="props">
+                                    <q-toggle v-model="props.row.isEnabled" @update:model-value="toggleAiAction(props.row)" :disable="!canEdit" />
+                                </q-td>
+                            </template>
+                        </q-table>
+                    </q-card-section>
+                </template>
+            </q-card>
+
+            <q-dialog v-model="showCreateAiAction" persistent>
+                <q-card style="width: 600px">
+                    <q-bar class="bg-fixed-primary text-white">
+                        <span>{{ editingAiAction ? 'Edit Action' : 'Create Action' }}</span>
+                        <q-space />
+                        <q-btn dense flat icon="close" @click="cancelAiActionDialog" />
+                    </q-bar>
+                    <q-card-section>
+                        <q-input v-model="aiActionForm.name" label="Action Name" outlined class="q-mb-md" :disable="editingAiAction && editingAiAction.type === 'builtin'" />
+                        <q-select v-if="!editingAiAction" v-model="aiActionForm.type" :options="[{label: 'Custom Action', value: 'custom'}, {label: 'Built-in Override', value: 'builtin_override'}]" emit-value map-options label="Type" outlined class="q-mb-md" />
+                        <q-select v-if="aiActionForm.type === 'builtin_override'" v-model="aiActionForm.builtinAction" :options="['generate', 'rephrase', 'translate', 'summarize']" label="Built-in Action" outlined class="q-mb-md" />
+                        <q-input v-if="aiActionForm.type === 'custom'" v-model="aiActionForm.systemPrompt" label="System Prompt" outlined type="textarea" rows="4" class="q-mb-md" hint="The system prompt sent to the AI model" />
+                        <q-input v-model="aiActionForm.adminInstructions" label="Additional Instructions" outlined type="textarea" rows="3" hint="Extra instructions appended to the system prompt" />
+                    </q-card-section>
+                    <q-separator />
+                    <q-card-actions align="right">
+                        <q-btn color="primary" outline @click="cancelAiActionDialog">Cancel</q-btn>
+                        <q-btn color="positive" unelevated @click="saveAiAction">{{ editingAiAction ? 'Update' : 'Create' }}</q-btn>
+                    </q-card-actions>
+                </q-card>
+            </q-dialog>
+
             <q-card v-if="userStore.isAllowed('backups:read')" class="q-my-lg">
                 <q-card-section class="q-py-none bg-blue-grey-5 text-white">
                     <q-item style="padding:0px;">

@@ -84,7 +84,9 @@ var builtInRoles = {
             'spellcheck:read',
             'spellcheck:create',
             // Data page access
-            'data:access'
+            'data:access',
+            // AI
+            'ai:use'
         ]
     },
     admin: {

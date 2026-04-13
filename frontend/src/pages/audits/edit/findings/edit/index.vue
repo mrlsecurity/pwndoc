@@ -166,6 +166,7 @@
                                     noSync
                                     v-model="finding.description"
                                     :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                                    :toolbar="['format', 'marks', 'list', 'code', 'table', 'image', 'caption', 'ai']"
                                     fieldName="descriptionField"
                                     :commentMode="commentMode && canCreateComment"
                                     :focusedComment="focusedComment"
@@ -173,10 +174,17 @@
                                     />
                                 </template>
                                  <template v-slot:label>
-                                     <div id="descriptionField">
+                                     <div id="descriptionField" class="row items-center no-wrap">
                                          {{$t('description')}} <span v-if="$settings.report.public.requiredFields.findingDescription" class="text-red">*</span>
+                                         <AiActionButton
+                                             v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                                             field-name="description"
+                                             :field-content="finding.description"
+                                             :finding-context="findingContext"
+                                             :ai-enabled="aiEnabled"
+                                             @update:content="val => finding.description = val"
+                                         />
                                      </div>
-                                     
                                  </template>
                             </q-field>
                             <q-field
@@ -196,6 +204,7 @@
                                     noSync
                                     v-model="finding.observation"
                                     :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                                    :toolbar="['format', 'marks', 'list', 'code', 'table', 'image', 'caption', 'ai']"
                                     fieldName="observationField"
                                     :commentMode="commentMode && canCreateComment"
                                     :focusedComment="focusedComment"
@@ -203,8 +212,16 @@
                                     />
                                 </template>
                                 <template v-slot:label>
-                                    <div id="observationField">
+                                    <div id="observationField" class="row items-center no-wrap">
                                         {{$t('observation')}} <span v-if="$settings.report.public.requiredFields.findingObservation" class="text-red">*</span>
+                                        <AiActionButton
+                                            v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                                            field-name="observation"
+                                            :field-content="finding.observation"
+                                            :finding-context="findingContext"
+                                            :ai-enabled="aiEnabled"
+                                            @update:content="val => finding.observation = val"
+                                        />
                                     </div>
                                 </template>
                             </q-field>
@@ -225,6 +242,7 @@
                                     noSync
                                     v-model="finding.remediation"
                                     :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                                    :toolbar="['format', 'marks', 'list', 'code', 'table', 'image', 'caption', 'ai']"
                                     fieldName="remediationField"
                                     :commentMode="commentMode && canCreateComment"
                                     :focusedComment="focusedComment"
@@ -232,7 +250,17 @@
                                     />
                                 </template>
                                 <template v-slot:label>
-                                    {{$t('remediation')}} <span v-if="$settings.report.public.requiredFields.findingRemediation" class="text-red">*</span>
+                                    <div class="row items-center no-wrap">
+                                        {{$t('remediation')}} <span v-if="$settings.report.public.requiredFields.findingRemediation" class="text-red">*</span>
+                                        <AiActionButton
+                                            v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                                            field-name="remediation"
+                                            :field-content="finding.remediation"
+                                            :finding-context="findingContext"
+                                            :ai-enabled="aiEnabled"
+                                            @update:content="val => finding.remediation = val"
+                                        />
+                                    </div>
                                 </template>
                             </q-field>
                         </q-card-section>

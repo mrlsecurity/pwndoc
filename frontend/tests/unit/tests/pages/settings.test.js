@@ -49,6 +49,17 @@ vi.mock('@/services/backup', () => ({
   }
 }))
 
+vi.mock('@/services/ai', () => ({
+  default: {
+    getSettings: vi.fn(),
+    getActions: vi.fn(),
+    createAction: vi.fn(),
+    updateAction: vi.fn(),
+    deleteAction: vi.fn(),
+    executeAction: vi.fn()
+  }
+}))
+
 vi.mock('@/services/utils', () => ({
   default: {
     bytesToHumanReadable: vi.fn((size) => `${size} bytes`),
@@ -90,6 +101,7 @@ vi.mock('quasar', async () => {
 import SettingsService from '@/services/settings'
 import SpellcheckService from '@/services/spellcheck'
 import BackupService from '@/services/backup'
+import AIService from '@/services/ai'
 import { Notify, Dialog } from 'quasar'
 
 const mockSettings = {
@@ -142,6 +154,11 @@ const mockSettings = {
       mandatoryReview: false,
       minReviewers: 1
     }
+  },
+  ai: {
+    enabled: false,
+    public: { enabled: false },
+    private: { provider: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '' } }
   }
 }
 
@@ -165,7 +182,8 @@ const mockSettingsWithLt = {
         enableSpellCheck: true
       }
     },
-    reviews: { enabled: false, private: { removeApprovalsUponUpdate: true }, public: { mandatoryReview: false, minReviewers: 1 } }
+    reviews: { enabled: false, private: { removeApprovalsUponUpdate: true }, public: { mandatoryReview: false, minReviewers: 1 } },
+    ai: { enabled: false, public: { enabled: false }, private: { provider: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '' } } }
   }))
 }
 
@@ -229,6 +247,12 @@ describe('Settings Page', () => {
     BackupService.getBackupStatus.mockResolvedValue({
       data: { datas: { state: 'idle', operation: 'idle', message: '' } }
     })
+    AIService.getSettings.mockResolvedValue({
+      data: { datas: { enabled: false, provider: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', hasApiKey: false, apiKeySource: 'none' } } }
+    })
+    AIService.getActions.mockResolvedValue({
+      data: { datas: [] }
+    })
 
     vi.clearAllMocks()
 
@@ -241,6 +265,12 @@ describe('Settings Page', () => {
     })
     BackupService.getBackupStatus.mockResolvedValue({
       data: { datas: { state: 'idle', operation: 'idle', message: '' } }
+    })
+    AIService.getSettings.mockResolvedValue({
+      data: { datas: { enabled: false, provider: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', hasApiKey: false, apiKeySource: 'none' } } }
+    })
+    AIService.getActions.mockResolvedValue({
+      data: { datas: [] }
     })
   })
 
@@ -284,6 +314,7 @@ describe('Settings Page', () => {
           'q-pagination': true,
           'q-popup-proxy': true,
           'q-badge': true,
+          'q-chip': true,
           'q-linear-progress': true,
           'q-spinner-hourglass': true,
           'language-selector': true,

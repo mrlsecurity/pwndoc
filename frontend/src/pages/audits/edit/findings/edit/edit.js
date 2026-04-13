@@ -7,6 +7,7 @@ import Cvss4Calculator from 'components/cvss4calculator'
 import TextareaArray from 'components/textarea-array'
 import CustomFields from 'components/custom-fields'
 import CommentsList from 'components/comments-list'
+import AiActionButton from 'components/AiActionButton'
 
 import AuditService from '@/services/audit';
 import DataService from '@/services/data';
@@ -67,7 +68,8 @@ export default {
         Cvss4Calculator,
         TextareaArray,
         CustomFields,
-        CommentsList
+        CommentsList,
+        AiActionButton
     },
 
     mounted: async function() {
@@ -187,6 +189,23 @@ export default {
 
         canCreateComment: function() {
             return userStore.isAllowed('audits:comments:create')
+        },
+
+        aiEnabled: function() {
+            return !!this.$settings?.ai?.enabled
+        },
+
+        findingContext: function() {
+            return {
+                title: this.finding.title || '',
+                vulnType: this.finding.vulnType || '',
+                category: this.finding.category || '',
+                cvssv3: this.finding.cvssv3 || '',
+                cvssv4: this.finding.cvssv4 || '',
+                description: this.finding.description || '',
+                observation: this.finding.observation || '',
+                remediation: this.finding.remediation || ''
+            }
         },
 
         unresolvedCommentsCount: function() {

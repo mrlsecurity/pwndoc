@@ -2,6 +2,7 @@ import { Notify, Dialog } from 'quasar'
 
 import SettingsService from '@/services/settings'
 import SpellcheckService from '@/services/spellcheck'
+import AIService from '@/services/ai'
 import { useUserStore } from 'src/stores/user'
 import BackupService from '@/services/backup'
 import Utils from '@/services/utils'
@@ -92,7 +93,26 @@ export default {
             uploadProgress: 0,
             // LanguageTool connection test
             testingLtConnection: false,
-            ltConnectionResult: null
+            ltConnectionResult: null,
+            // AI Integration
+            showAiApiKey: false,
+            aiSettings: {},
+            aiActions: [],
+            showCreateAiAction: false,
+            editingAiAction: null,
+            aiActionForm: {
+                name: '',
+                type: 'custom',
+                builtinAction: '',
+                systemPrompt: '',
+                adminInstructions: ''
+            },
+            aiActionColumns: [
+                { name: 'name', label: 'Name', field: 'name', align: 'left', sortable: true },
+                { name: 'type', label: 'Type', field: 'type', align: 'left', sortable: true },
+                { name: 'isEnabled', label: 'Enabled', field: 'isEnabled', align: 'center' },
+                { name: 'actions', label: '', field: 'actions', align: 'right' }
+            ]
         }
     },
     components: {
@@ -127,6 +147,8 @@ export default {
             this.getBackups()
             this.canEdit = userStore.isAllowed('settings:update');
             document.addEventListener('keydown', this._listener, false)
+            this.getAiSettings()
+            this.getAiActions()
         }
         else {
             this.loading = false
@@ -149,6 +171,19 @@ export default {
             SettingsService.getSettings()
             .then((data) => {
                 this.settings = data.data.datas;
+                // Ensure AI settings structure exists for older databases
+                if (!this.settings.ai) {
+                    this.settings.ai = { enabled: false, public: { enabled: false }, private: { provider: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '' } } }
+                }
+                if (!this.settings.ai.private) {
+                    this.settings.ai.private = { provider: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '' } }
+                }
+                if (!this.settings.ai.private.provider) {
+                    this.settings.ai.private.provider = { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '' }
+                }
+                if (!this.settings.ai.public) {
+                    this.settings.ai.public = { enabled: false }
+                }
                 this.settingsOrig = this.$_.cloneDeep(this.settings);
                 this.loading = false
             })
@@ -572,7 +607,120 @@ export default {
                 textColor: 'white',
                 position: 'top-right'
             })
+        },
+
+        // AI Integration methods
+        getAiSettings: function() {
+            AIService.getSettings()
+            .then((data) => {
+                this.aiSettings = data.data.datas
+            })
+            .catch(() => {
+                // User may not have ai:configure permission
+                this.aiSettings = {}
+            })
+        },
+
+        getAiActions: function() {
+            AIService.getActions()
+            .then((data) => {
+                this.aiActions = data.data.datas
+            })
+            .catch(() => {
+                this.aiActions = []
+            })
+        },
+
+        editAiAction: function(action) {
+            this.editingAiAction = action
+            this.aiActionForm = {
+                name: action.name,
+                type: action.type === 'builtin' ? 'builtin_override' : action.type,
+                builtinAction: action.builtinAction || '',
+                systemPrompt: action.systemPrompt || '',
+                adminInstructions: action.adminInstructions || ''
+            }
+            this.showCreateAiAction = true
+        },
+
+        cancelAiActionDialog: function() {
+            this.showCreateAiAction = false
+            this.editingAiAction = null
+            this.aiActionForm = { name: '', type: 'custom', builtinAction: '', systemPrompt: '', adminInstructions: '' }
+        },
+
+        saveAiAction: function() {
+            var promise
+            if (this.editingAiAction) {
+                var id = this.editingAiAction.id || this.editingAiAction._id
+                if (this.editingAiAction.type === 'builtin' && !id) {
+                    // Creating a new builtin override
+                    promise = AIService.createAction({
+                        name: this.aiActionForm.builtinAction + '-override',
+                        type: 'builtin_override',
+                        builtinAction: this.aiActionForm.builtinAction,
+                        adminInstructions: this.aiActionForm.adminInstructions
+                    })
+                }
+                else {
+                    promise = AIService.updateAction(id, this.aiActionForm)
+                }
+            }
+            else {
+                promise = AIService.createAction(this.aiActionForm)
+            }
+
+            promise
+            .then(() => {
+                this.cancelAiActionDialog()
+                this.getAiActions()
+                Notify.create({ message: 'AI action saved', color: 'positive', textColor: 'white', position: 'top-right' })
+            })
+            .catch((err) => {
+                Notify.create({ message: err.response?.data?.datas || 'Error saving action', color: 'negative', textColor: 'white', position: 'top-right' })
+            })
+        },
+
+        deleteAiAction: function(action) {
+            Dialog.create({
+                title: 'Delete Action',
+                message: `Delete action "${action.name}"?`,
+                ok: { label: 'Delete', color: 'negative' },
+                cancel: { label: 'Cancel', color: 'white' }
+            })
+            .onOk(() => {
+                AIService.deleteAction(action.id || action._id)
+                .then(() => {
+                    this.getAiActions()
+                    Notify.create({ message: 'Action deleted', color: 'positive', textColor: 'white', position: 'top-right' })
+                })
+                .catch((err) => {
+                    Notify.create({ message: err.response?.data?.datas || 'Error deleting action', color: 'negative', textColor: 'white', position: 'top-right' })
+                })
+            })
+        },
+
+        toggleAiAction: function(action) {
+            var id = action.id || action._id
+            if (action.type === 'builtin' && !id) {
+                // Need to create a builtin override to toggle it
+                AIService.createAction({
+                    name: action.builtinAction + '-override',
+                    type: 'builtin_override',
+                    builtinAction: action.builtinAction,
+                    isEnabled: action.isEnabled
+                })
+                .then(() => this.getAiActions())
+                .catch((err) => {
+                    Notify.create({ message: err.response?.data?.datas || 'Error toggling action', color: 'negative', textColor: 'white', position: 'top-right' })
+                })
+            }
+            else {
+                AIService.updateAction(id, { isEnabled: action.isEnabled })
+                .catch((err) => {
+                    Notify.create({ message: err.response?.data?.datas || 'Error toggling action', color: 'negative', textColor: 'white', position: 'top-right' })
+                })
+            }
         }
-        
     }
 }

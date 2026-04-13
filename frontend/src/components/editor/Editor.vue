@@ -249,6 +249,39 @@
                 </div>
                 <q-separator vertical class="q-mx-sm" v-if="toolbar.indexOf('caption') !== -1" />
 
+                <template v-if="toolbar.indexOf('ai') !== -1 && $settings?.ai?.enabled">
+                    <q-separator vertical class="q-mx-sm" />
+                    <q-btn flat size="sm" dense :loading="aiLoading" color="purple-6">
+                        <q-tooltip :delay="500" class="text-bold">AI Actions</q-tooltip>
+                        <q-icon name="auto_awesome" />
+                        <q-menu>
+                            <q-list dense style="min-width: 150px">
+                                <q-item clickable v-close-popup @click="aiToolbarAction('rephrase')">
+                                    <q-item-section avatar><q-icon name="refresh" size="xs" /></q-item-section>
+                                    <q-item-section>Rephrase</q-item-section>
+                                </q-item>
+                                <q-item clickable v-close-popup @click="aiToolbarAction('summarize')">
+                                    <q-item-section avatar><q-icon name="compress" size="xs" /></q-item-section>
+                                    <q-item-section>Summarize</q-item-section>
+                                </q-item>
+                                <q-separator />
+                                <q-item>
+                                    <q-item-section>
+                                        <q-select
+                                            v-model="aiTranslateLanguage"
+                                            :options="aiLanguages"
+                                            label="Translate to..."
+                                            dense
+                                            options-dense
+                                            @update:model-value="aiToolbarTranslate"
+                                        />
+                                    </q-item-section>
+                                </q-item>
+                            </q-list>
+                        </q-menu>
+                    </q-btn>
+                </template>
+
                 <q-btn flat size="sm" dense
                 @click="editor.commands.undo"
                 >
@@ -356,6 +389,14 @@
     <div v-else class="editor__content q-pa-sm">
         <div class="ProseMirror" v-html="diffContent"></div>
     </div>
+    <AiResultDialog
+        ref="aiResultDialog"
+        :action-label="aiActionLabel"
+        :original-content="aiOriginalContent"
+        :suggested-content="aiSuggestedContent"
+        @accept="aiAcceptResult"
+        @decline="aiDeclineResult"
+    />
 </q-card>
 </template>
 
@@ -388,6 +429,8 @@ import {Diff} from 'diff';
 
 import Utils from '@/services/utils'
 import ImageService from '@/services/image'
+import AIService from '@/services/ai'
+import AiResultDialog from '@/components/AiResultDialog.vue'
 
 import {common, createLowlight} from 'lowlight'
 const lowlight = createLowlight(common)
@@ -441,7 +484,8 @@ export default {
     },
     components: {
         EditorContent,
-        BubbleMenu
+        BubbleMenu,
+        AiResultDialog
     },
     data() {
         const spellcheckStore = useSpellcheckStore()
@@ -518,7 +562,20 @@ export default {
                 '#ffff25', '#00ff41', '#00ffff', '#ff00f9', '#0005fd',
                 '#ff0000', '#000177', '#00807a', '#008021', '#8e0075',
                 '#8f0000', '#817d0c', '#807d78', '#c4c1bb', '#000000'
-            ]
+            ],
+            // AI toolbar state
+            aiLoading: false,
+            aiActionLabel: '',
+            aiOriginalContent: '',
+            aiSuggestedContent: '',
+            aiTranslateLanguage: null,
+            aiLanguages: [
+                'English', 'French', 'German', 'Spanish', 'Italian',
+                'Portuguese', 'Dutch', 'Russian', 'Chinese', 'Japanese',
+                'Korean', 'Arabic'
+            ],
+            aiSelectedFrom: 0,
+            aiSelectedTo: 0
         }
     },
 
@@ -655,6 +712,94 @@ export default {
     },
 
     methods: {
+        async aiToolbarAction(action) {
+            var { from, to } = this.editor.state.selection
+            var selectedText = this.editor.state.doc.textBetween(from, to, ' ')
+
+            if (!selectedText) {
+                this.$q.notify({ type: 'warning', message: 'Select text first to use AI actions', position: 'top' })
+                return
+            }
+
+            this.aiLoading = true
+            this.aiActionLabel = action.charAt(0).toUpperCase() + action.slice(1)
+            this.aiOriginalContent = selectedText
+            this.aiSelectedFrom = from
+            this.aiSelectedTo = to
+
+            try {
+                var response = await AIService.executeAction({
+                    action: action,
+                    content: selectedText,
+                    targetField: this.fieldName
+                })
+                this.aiSuggestedContent = response.data.datas.result
+                this.$refs.aiResultDialog.show()
+            }
+            catch (err) {
+                this.$q.notify({
+                    type: 'negative',
+                    message: err.response?.data?.datas || 'AI action failed',
+                    position: 'top'
+                })
+            }
+            finally {
+                this.aiLoading = false
+            }
+        },
+
+        async aiToolbarTranslate(language) {
+            if (!language) return
+            var { from, to } = this.editor.state.selection
+            var selectedText = this.editor.state.doc.textBetween(from, to, ' ')
+
+            if (!selectedText) {
+                this.$q.notify({ type: 'warning', message: 'Select text first to translate', position: 'top' })
+                this.aiTranslateLanguage = null
+                return
+            }
+
+            this.aiLoading = true
+            this.aiActionLabel = 'Translate to ' + language
+            this.aiOriginalContent = selectedText
+            this.aiSelectedFrom = from
+            this.aiSelectedTo = to
+
+            try {
+                var response = await AIService.executeAction({
+                    action: 'translate',
+                    content: selectedText,
+                    targetField: this.fieldName,
+                    options: { language: language }
+                })
+                this.aiSuggestedContent = response.data.datas.result
+                this.$refs.aiResultDialog.show()
+            }
+            catch (err) {
+                this.$q.notify({
+                    type: 'negative',
+                    message: err.response?.data?.datas || 'Translation failed',
+                    position: 'top'
+                })
+            }
+            finally {
+                this.aiLoading = false
+                this.aiTranslateLanguage = null
+            }
+        },
+
+        aiAcceptResult(content) {
+            this.editor
+                .chain()
+                .focus()
+                .insertContentAt({ from: this.aiSelectedFrom, to: this.aiSelectedTo }, content)
+                .run()
+        },
+
+        aiDeclineResult() {
+            this.aiSuggestedContent = ''
+        },
+
         importImage(files) {
             var file = files[0];
             var fileReader = new FileReader();

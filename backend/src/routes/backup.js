@@ -39,6 +39,7 @@ module.exports = function(app) {
     const VulnerabilityCategory = require('mongoose').model('VulnerabilityCategory');
     const VulnerabilityType = require('mongoose').model('VulnerabilityType');
     const VulnerabilityUpdate = require('mongoose').model('VulnerabilityUpdate');
+    const AIAction = require('mongoose').model('AIAction');
     const DISK_SAFETY_MARGIN_BYTES = 1024 * 1024 * 1024
 
     function getMaxWritableBackupBytes() {
@@ -326,6 +327,7 @@ module.exports = function(app) {
             "Vulnerability Types",
             "Vulnerability Categories",
             "Settings",
+            "AI Actions",
         ]
         let backup = {
             name: 'backup',
@@ -406,6 +408,11 @@ module.exports = function(app) {
             // Settings
             if (e === "Settings") {
                 backupPromises.push(Settings.backup(backupTmpPath))
+            }
+
+            // AI Actions
+            if (e === "AI Actions") {
+                backupPromises.push(AIAction.backup(backupTmpPath))
             }
         })
 
@@ -658,6 +665,7 @@ module.exports = function(app) {
             "Vulnerability Types",
             "Vulnerability Categories",
             "Settings",
+            "AI Actions",
         ]
         let backupData = []
         let info = {}
@@ -776,6 +784,11 @@ module.exports = function(app) {
                 files.push('settings.json')
             }
 
+            // AI Actions
+            if (info.data.includes('AI Actions') && backupData.includes('AI Actions')) {
+                files.push('aiActions.json')
+            }
+
             if (!fs.existsSync(restoreTmpPath))
                 fs.mkdirSync(restoreTmpPath)
 
@@ -844,8 +857,12 @@ module.exports = function(app) {
             if (info.data.includes('Settings') && backupData.includes('Settings')) {
                 restorePromises.push(Settings.restore(restoreTmpPath))
             }
-            
-            
+
+            // AI Actions
+            if (info.data.includes('AI Actions') && backupData.includes('AI Actions')) {
+                restorePromises.push(AIAction.restore(restoreTmpPath))
+            }
+
             // return Promise.allSettled(restorePromises)
             return processPromisesSequentially(restorePromises)
         })
