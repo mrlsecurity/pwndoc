@@ -156,6 +156,20 @@
                         <q-btn data-testid="download-report-button" size="sm" flat color="info" @click="generateReport(props.row._id)" icon="fa fa-download">
                             <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('tooltip.downloadReport')}}</q-tooltip>
                         </q-btn>
+                        <q-btn-dropdown data-testid="export-findings-button" size="sm" flat color="info" icon="fa fa-file-export" no-caps>
+                            <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('tooltip.exportFindings')}}</q-tooltip>
+                            <q-list>
+                                <q-item clickable v-close-popup @click="exportFindings(props.row._id, 'csv')">
+                                    <q-item-section>CSV</q-item-section>
+                                </q-item>
+                                <q-item clickable v-close-popup @click="exportFindings(props.row._id, 'json-defectdojo')">
+                                    <q-item-section>DefectDojo JSON</q-item-section>
+                                </q-item>
+                                <q-item clickable v-close-popup @click="exportFindings(props.row._id, 'json-pwndoc')">
+                                    <q-item-section>PwnDoc JSON</q-item-section>
+                                </q-item>
+                            </q-list>
+                        </q-btn-dropdown>
                         <q-btn data-testid="delete-audit-button" size="sm" flat color="negative" @click="confirmDeleteAudit(props.row)" icon="fa fa-trash">
                             <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('tooltip.deleteAudit')}}</q-tooltip>
                         </q-btn>

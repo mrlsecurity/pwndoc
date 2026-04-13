@@ -502,6 +502,45 @@
                 </q-card-section>
             </q-card>
 
+            <q-card v-if="userStore.isAllowed('settings:read')" class="q-my-lg">
+                <q-card-section class="q-py-none bg-blue-grey-5 text-white">
+                    <q-item style="padding:0px;">
+                        <q-item-section class="col-11">
+                            <div class="text-h6">{{$t('findingsExport')}}</div>
+                        </q-item-section>
+                        <q-item-section class="col-md-1 items-center">
+                            <q-toggle
+                                color="primary"
+                                keep-color
+                                :disable="!canEdit"
+                                v-model="settings.export.enabled"
+                            />
+                        </q-item-section>
+                    </q-item>
+                </q-card-section>
+                <q-separator />
+                <q-card-section>
+                    <div class="text-bold">{{$t('excludedExportFields')}}</div>
+                    <br/>
+                    <div class="text-grey-8">{{$t('excludedExportFieldsDescription')}}</div>
+                </q-card-section>
+                <q-card-section>
+                    <q-list>
+                        <q-item v-for="(value, field) in settings.export.public.excludedFields" :key="field" dense>
+                            <q-item-section class="col-md-2">
+                                <q-item-label>{{$t('exportField_' + field)}}</q-item-label>
+                            </q-item-section>
+                            <q-item-section>
+                                <q-toggle
+                                    v-model="settings.export.public.excludedFields[field]"
+                                    :disable="!canEdit || !settings.export.enabled"
+                                />
+                            </q-item-section>
+                        </q-item>
+                    </q-list>
+                </q-card-section>
+            </q-card>
+
             <q-card v-if="userStore.isAllowed('backups:read')" class="q-my-lg">
                 <q-card-section class="q-py-none bg-blue-grey-5 text-white">
                     <q-item style="padding:0px;">

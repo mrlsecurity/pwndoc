@@ -72,6 +72,13 @@ export default {
     return api.get(`audits/${auditId}/generate`, {responseType: 'blob'})
   },
 
+  exportFindings: function(auditId, format) {
+    return api.get(`audits/${auditId}/export`, {
+      params: { format },
+      responseType: 'blob'
+    })
+  },
+
   updateAuditSortFindings: function(auditId, audit) {
     return api.put(`audits/${auditId}/sortfindings`, audit)
   },

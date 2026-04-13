@@ -4,6 +4,7 @@ module.exports = function(app, io) {
     var Audit = require('mongoose').model('Audit');
     var acl = require('../lib/auth').acl;
     var reportGenerator = require('../lib/report-generator');
+    var findingsExport = require('../lib/findings-export');
     var _ = require('lodash');
     var utils = require('../lib/utils');
     var Settings = require('mongoose').model('Settings');
@@ -509,6 +510,44 @@ module.exports = function(app, io) {
             else
                 Response.Internal(res, err)
         });
+    });
+
+    // Export findings for specific audit
+    app.get("/api/audits/:auditId/export", acl.hasPermission('audits:read'), function(req, res){
+        Audit.getAudit(acl.isAllowed(req.decodedToken.role, 'audits:read-all'), req.params.auditId, req.decodedToken.id)
+        .then(async audit => {
+            var settings = await Settings.getAll();
+
+            if (!settings.export || !settings.export.enabled) {
+                Response.Forbidden(res, "Findings export is disabled.");
+                return;
+            }
+
+            var format = req.query.format;
+            var validFormats = ['csv', 'json-defectdojo', 'json-pwndoc'];
+            if (!format || !validFormats.includes(format)) {
+                Response.BadParameters(res, 'Invalid format. Valid formats: ' + validFormats.join(', '));
+                return;
+            }
+
+            var excludedFields = (settings.export.public && settings.export.public.excludedFields) || {};
+            var sanitizedName = audit.name.replace(/[\\\/:*?"<>|]/g, '');
+
+            if (format === 'csv') {
+                var content = findingsExport.toCsv(audit, settings, excludedFields);
+                res.set({'Content-Type': 'text/csv; charset=utf-8'});
+                Response.SendFile(res, sanitizedName + '-findings.csv', content);
+            } else if (format === 'json-defectdojo') {
+                var content = findingsExport.toDefectDojoJson(audit, settings, excludedFields);
+                res.set({'Content-Type': 'application/json; charset=utf-8'});
+                Response.SendFile(res, sanitizedName + '-findings-defectdojo.json', content);
+            } else if (format === 'json-pwndoc') {
+                var content = findingsExport.toPwndocJson(audit, settings, excludedFields);
+                res.set({'Content-Type': 'application/json; charset=utf-8'});
+                Response.SendFile(res, sanitizedName + '-findings.json', content);
+            }
+        })
+        .catch(err => Response.Internal(res, err));
     });
 
     // Update sort options of an audit

@@ -63,6 +63,22 @@ const SettingSchema = new Schema({
         private: {
             removeApprovalsUponUpdate: { type: Boolean, default: false }
         }
+    },
+    export: {
+        enabled: { type: Boolean, default: true },
+        public: {
+            excludedFields: {
+                poc: { type: Boolean, default: false },
+                observation: { type: Boolean, default: false },
+                references: { type: Boolean, default: false },
+                scope: { type: Boolean, default: false },
+                remediation: { type: Boolean, default: false },
+                remediationComplexity: { type: Boolean, default: false },
+                priority: { type: Boolean, default: false },
+                retestStatus: { type: Boolean, default: false },
+                retestDescription: { type: Boolean, default: false }
+            }
+        }
     }
 }, {strict: true});
 
@@ -83,7 +99,7 @@ SettingSchema.statics.getAll = () => {
 SettingSchema.statics.getPublic = () => {
     return new Promise((resolve, reject) => {
         const query = Settings.findOne({});
-        query.select('-_id report.enabled report.public reviews.enabled reviews.public');
+        query.select('-_id report.enabled report.public reviews.enabled reviews.public export.enabled export.public');
         query.exec()
             .then(settings => resolve(settings))
             .catch(err => reject(err));

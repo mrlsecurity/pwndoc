@@ -75,9 +75,24 @@
 						</template>
 						<q-item-section side class="topButtonSection">
 							<q-btn flat color="info" @click="generateReport">
-								<q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('tooltip.downloadReport')}}</q-tooltip> 
+								<q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('tooltip.downloadReport')}}</q-tooltip>
 								<i class="fa fa-download fa-lg"></i>
 							</q-btn>
+						</q-item-section>
+						<q-item-section side class="topButtonSection">
+							<q-btn-dropdown flat color="info" :label="$t('btn.exportFindings')" no-caps dense>
+								<q-list>
+									<q-item clickable v-close-popup @click="exportFindings('csv')">
+										<q-item-section>CSV</q-item-section>
+									</q-item>
+									<q-item clickable v-close-popup @click="exportFindings('json-defectdojo')">
+										<q-item-section>DefectDojo JSON</q-item-section>
+									</q-item>
+									<q-item clickable v-close-popup @click="exportFindings('json-pwndoc')">
+										<q-item-section>PwnDoc JSON</q-item-section>
+									</q-item>
+								</q-list>
+							</q-btn-dropdown>
 						</q-item-section>
 					</q-item>
 
@@ -758,6 +773,52 @@ export default {
 				}
 
 				fileReader.readAsText(data)
+			})
+		},
+
+		exportFindings: function(format) {
+			const exportNotif = Notify.create({
+				spinner: QSpinnerGears,
+				message: this.$t('msg.exportingFindings'),
+				color: "blue",
+				timeout: 0,
+				group: false
+			})
+			AuditService.exportFindings(this.auditId, format)
+			.then(response => {
+				var blob = new Blob([response.data], {type: response.headers['content-type'] || "application/octet-stream"});
+				var link = document.createElement('a');
+				link.href = window.URL.createObjectURL(blob);
+				link.download = response.headers['content-disposition'].split('"')[1];
+				document.body.appendChild(link);
+				link.click();
+				link.remove();
+
+				exportNotif({
+					icon: 'done',
+					spinner: false,
+					message: this.$t('msg.findingsExported'),
+					color: 'green',
+					timeout: 2500
+				})
+			})
+			.catch( async err => {
+				var message = this.$t('msg.exportError')
+				if (err.response && err.response.data) {
+					var blob = new Blob([err.response.data], {type: "application/json"})
+					var blobData = await this.BlobReader(blob)
+					message = JSON.parse(blobData).datas
+				}
+				exportNotif()
+				Notify.create({
+					message: message,
+					type: 'negative',
+					textColor:'white',
+					position: 'top',
+					closeBtn: true,
+					timeout: 0,
+					classes: "text-pre-wrap"
+				})
 			})
 		},
 

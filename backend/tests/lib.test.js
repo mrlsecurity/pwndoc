@@ -39,6 +39,10 @@ module.exports = function () {
     })
 
     describe('html2ooxml tests', () => {
+      beforeEach(() => {
+        html2ooxml.clearUsedNumIds();
+      });
+
       it('Simple Paragraph', () => {
         var html = "<p>Paragraph Text</p>"
         var expected = `<w:p><w:r><w:t xml:space="preserve">Paragraph Text</w:t></w:r></w:p>`
@@ -262,10 +266,10 @@ var expected =
 var expected =
 `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Bullet"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="1"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -274,10 +278,10 @@ var expected =
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Bullet"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="1"/>`+
-              `<w:numId w:val="1"/>`+
+              `<w:numId w:val="101"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -286,10 +290,10 @@ var expected =
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Bullet"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="1"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -313,10 +317,10 @@ var expected =
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Number"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -325,10 +329,10 @@ var expected =
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Number"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -357,10 +361,10 @@ var expected =
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Number"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -369,10 +373,10 @@ var expected =
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Number"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="1"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="101"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -381,10 +385,10 @@ var expected =
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Number"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -1102,5 +1106,74 @@ var expected =
       })
     })
 
+  })
+
+  describe('Findings Export Lib Tests', () => {
+    var findingsExport = require('../src/lib/findings-export')
+
+    describe('stripHtml', () => {
+      it('Should strip HTML tags', () => {
+        expect(findingsExport.stripHtml('<p>Hello <b>world</b></p>')).toBe('Hello world')
+      })
+
+      it('Should convert br tags to newlines', () => {
+        expect(findingsExport.stripHtml('line1<br>line2<br/>line3')).toBe('line1\nline2\nline3')
+      })
+
+      it('Should decode HTML entities', () => {
+        expect(findingsExport.stripHtml('&amp; &lt; &gt; &quot; &#39;')).toBe('& < > " \'')
+      })
+
+      it('Should handle empty/null input', () => {
+        expect(findingsExport.stripHtml('')).toBe('')
+        expect(findingsExport.stripHtml(null)).toBe('')
+        expect(findingsExport.stripHtml(undefined)).toBe('')
+      })
+
+      it('Should collapse multiple newlines', () => {
+        expect(findingsExport.stripHtml('<p>a</p><p></p><p></p><p>b</p>')).toBe('a\n\nb')
+      })
+    })
+
+    describe('deriveSeverity', () => {
+      var settings = {
+        report: {
+          public: {
+            scoringMethods: { CVSS3: true, CVSS4: false }
+          }
+        }
+      }
+
+      it('Should return Critical for score >= 9.0', () => {
+        var result = findingsExport.deriveSeverity(
+          { cvssv3: 'AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' },
+          settings
+        )
+        expect(result.severity).toBe('Critical')
+        expect(result.score).toBeGreaterThanOrEqual(9)
+      })
+
+      it('Should return High for score >= 7.0', () => {
+        var result = findingsExport.deriveSeverity(
+          { cvssv3: 'AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N' },
+          settings
+        )
+        expect(result.severity).toBe('High')
+      })
+
+      it('Should return Medium for score >= 4.0', () => {
+        var result = findingsExport.deriveSeverity(
+          { cvssv3: 'AV:N/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:N' },
+          settings
+        )
+        expect(result.severity).toBe('Medium')
+      })
+
+      it('Should return Info for no CVSS vector', () => {
+        var result = findingsExport.deriveSeverity({}, settings)
+        expect(result.severity).toBe('Info')
+        expect(result.score).toBe(0)
+      })
+    })
   })
 }
