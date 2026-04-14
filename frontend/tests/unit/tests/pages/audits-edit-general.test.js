@@ -593,6 +593,11 @@ describe('Audit Edit General Page', () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
+      setRefs(wrapper, {
+        customfields: null,
+        scopeField: { validate: vi.fn(), hasError: false, updateParent: vi.fn() }
+      })
+
       AuditService.updateAuditGeneral.mockResolvedValue({})
 
       wrapper.vm.updateAuditGeneral()
@@ -614,7 +619,7 @@ describe('Audit Edit General Page', () => {
         dateStartField: { validate: vi.fn(), hasError: false },
         dateEndField: { validate: vi.fn(), hasError: false },
         dateReportField: { validate: vi.fn(), hasError: false },
-        scopeField: { validate: vi.fn(), hasError: false }
+        scopeField: { validate: vi.fn(), hasError: false, updateParent: vi.fn() }
       })
 
       AuditService.updateAuditGeneral.mockResolvedValue({})
@@ -638,7 +643,7 @@ describe('Audit Edit General Page', () => {
         dateStartField: { validate: vi.fn(), hasError: false },
         dateEndField: { validate: vi.fn(), hasError: false },
         dateReportField: { validate: vi.fn(), hasError: false },
-        scopeField: { validate: vi.fn(), hasError: false }
+        scopeField: { validate: vi.fn(), hasError: false, updateParent: vi.fn() }
       })
 
       AuditService.updateAuditGeneral.mockResolvedValue({})
@@ -668,7 +673,7 @@ describe('Audit Edit General Page', () => {
         dateStartField: { validate: vi.fn(), hasError: false },
         dateEndField: { validate: vi.fn(), hasError: false },
         dateReportField: { validate: vi.fn(), hasError: false },
-        scopeField: { validate: vi.fn(), hasError: false }
+        scopeField: { validate: vi.fn(), hasError: false, updateParent: vi.fn() }
       })
 
       AuditService.updateAuditGeneral.mockRejectedValue({
@@ -700,7 +705,7 @@ describe('Audit Edit General Page', () => {
         dateStartField: { validate: vi.fn(), hasError: false },
         dateEndField: { validate: vi.fn(), hasError: false },
         dateReportField: { validate: vi.fn(), hasError: false },
-        scopeField: { validate: vi.fn(), hasError: false }
+        scopeField: { validate: vi.fn(), hasError: false, updateParent: vi.fn() }
       })
 
       wrapper.vm.updateAuditGeneral()
@@ -728,7 +733,7 @@ describe('Audit Edit General Page', () => {
         dateStartField: { validate: vi.fn(), hasError: false },
         dateEndField: { validate: vi.fn(), hasError: false },
         dateReportField: { validate: vi.fn(), hasError: false },
-        scopeField: { validate: vi.fn(), hasError: false }
+        scopeField: { validate: vi.fn(), hasError: false, updateParent: vi.fn() }
       })
 
       wrapper.vm.updateAuditGeneral()
@@ -873,7 +878,7 @@ describe('Audit Edit General Page', () => {
         dateStartField: { validate: vi.fn(), hasError: false },
         dateEndField: { validate: vi.fn(), hasError: false },
         dateReportField: { validate: vi.fn(), hasError: false },
-        scopeField: { validate: vi.fn(), hasError: false }
+        scopeField: { validate: vi.fn(), hasError: false, updateParent: vi.fn() }
       }
       setRefs(wrapper, mockRefs)
 
@@ -900,7 +905,7 @@ describe('Audit Edit General Page', () => {
         dateStartField: { validate: vi.fn(), hasError: false },
         dateEndField: { validate: vi.fn(), hasError: false },
         dateReportField: { validate: vi.fn(), hasError: false },
-        scopeField: { validate: vi.fn(), hasError: false }
+        scopeField: { validate: vi.fn(), hasError: false, updateParent: vi.fn() }
       })
 
       const result = wrapper.vm.requiredFieldsEmpty()

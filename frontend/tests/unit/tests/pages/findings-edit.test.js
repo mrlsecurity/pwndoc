@@ -830,6 +830,7 @@ describe('Findings Edit Page', () => {
           lastname: 'User'
         },
         text: '',
+        needsWork: false,
         commentId: 'commentId1'
       })
     })
