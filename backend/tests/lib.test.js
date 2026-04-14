@@ -1159,7 +1159,7 @@ var expected =
 
       it('Should return Medium for score >= 4.0', () => {
         var result = findingsExport.deriveSeverity(
-          { cvssv3: 'AV:N/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:N' },
+          { cvssv3: 'AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N' },
           settings
         )
         expect(result.severity).toBe('Medium')

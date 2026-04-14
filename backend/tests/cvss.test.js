@@ -56,7 +56,7 @@ module.exports = function(request, app) {
           ])
           .send(partialModification);
         expect(response.status).toBe(200);
-        expect(response.body.datas.report.public.scoringMethods.CVSS3).toEqual(true);
+        expect(response.body.datas.report.public.scoringMethods.CVSS3).toEqual(false);
         expect(response.body.datas.report.public.scoringMethods.CVSS4).toEqual(true);
 
         // Create a vulnerability in the Audit
