@@ -197,14 +197,10 @@ module.exports = function () {
 var expected =
 `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Bullet"/>`+
-            `<w:numPr>`+
-              `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="1"/>`+
-            `</w:numPr>`+
+            `<w:pStyle w:val="Heading1"/>`+
           `</w:pPr>`+
           `<w:r>`+
-            `<w:t xml:space="preserve">Bullet2</w:t>`+
+            `<w:t xml:space="preserve">Heading</w:t>`+
           `</w:r>`+
         `</w:p>`
         var ooxml = html2ooxml(html)
@@ -222,7 +218,7 @@ var expected =
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Number"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="1"/>`+
@@ -234,7 +230,7 @@ var expected =
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="List Number"/>`+
+            `<w:pStyle w:val="ListParagraph"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
               `<w:numId w:val="1"/>`+
@@ -807,7 +803,7 @@ var expected =
               references: ['ref-1'],
               poc: '<p>PoC</p>',
               scope: 'target-1',
-              status: 1,
+              status: 0,
               category: 'No Category',
               retestStatus: 'partial',
               retestDescription: '<p>Retest details</p>',
@@ -951,7 +947,7 @@ var expected =
         expect(buffer.toString()).toBe('generated-docx')
         expect(rendered.company.shortName).toBe('Acme')
         expect(rendered.findings).toHaveLength(2)
-        expect(rendered.findings[0].identifier).toBe('IDX-001')
+        expect(rendered.findings[0].identifier).toBe('WEB-001')
         expect(rendered.findings[0].cvss.baseSeverity).toBe('Critical')
         expect(rendered.findings[0].cvss4.baseSeverity).toBe('High')
         expect(rendered.findings[0].cvssObj.AV).toBe('Network')
