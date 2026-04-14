@@ -604,13 +604,35 @@
                                     />
                                 </template>
                             </q-input>
-                            <div class="col-md-6 col-12 flex items-center">
-                                <q-chip v-if="aiSettings.provider && aiSettings.provider.hasApiKey" color="positive" text-color="white" icon="check_circle">
-                                    API Key: {{ aiSettings.provider.apiKeySource === 'env' ? 'From environment variable' : 'Configured manually' }}
-                                </q-chip>
-                                <q-chip v-else color="negative" text-color="white" icon="error">
-                                    API Key: Not configured
-                                </q-chip>
+                            <div class="col-md-6 col-12">
+                                <div class="flex items-center q-mb-sm">
+                                    <q-chip v-if="aiSettings.provider && aiSettings.provider.hasApiKey" color="positive" text-color="white" icon="check_circle">
+                                        API Key: {{ aiSettings.provider.apiKeySource === 'env' ? 'From environment variable' : 'Configured manually' }}
+                                    </q-chip>
+                                    <q-chip v-else color="negative" text-color="white" icon="error">
+                                        API Key: Not configured
+                                    </q-chip>
+                                </div>
+                                <q-btn
+                                    label="Test Connection"
+                                    color="secondary"
+                                    icon="wifi_tethering"
+                                    dense
+                                    no-caps
+                                    :disable="!canEdit"
+                                    :loading="testingAiConnection"
+                                    @click="testAiConnection"
+                                />
+                                <div v-if="aiConnectionResult" class="q-mt-sm">
+                                    <q-badge
+                                        :color="aiConnectionResult.success ? 'positive' : 'negative'"
+                                        class="q-mr-sm"
+                                    >
+                                        {{ aiConnectionResult.success
+                                            ? `Connected (${aiConnectionResult.latencyMs}ms)`
+                                            : aiConnectionResult.error }}
+                                    </q-badge>
+                                </div>
                             </div>
                         </div>
                     </q-card-section>
