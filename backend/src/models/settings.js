@@ -139,6 +139,9 @@ SettingSchema.statics.ensureInitialized = async function() {
         return liveSettings;
     }
 
+    // Lean document reflects actual stored fields (no Mongoose defaults applied)
+    var rawSettings = await this.findOne({}).lean()
+
     var needUpdate = false
     var liveSettingsPaths = Utils.getObjectPaths(liveSettings.toObject())
 
@@ -149,8 +152,18 @@ SettingSchema.statics.ensureInitialized = async function() {
         }
     })
 
+    var defaultInstance = new Settings({})
+    var defaultPaths = Utils.getObjectPaths(defaultInstance.toObject())
+
+    defaultPaths.forEach(path => {
+        if (SettingSchema.path(path) && _.get(rawSettings, path) === undefined) {
+            needUpdate = true
+            _.set(liveSettings, path, _.get(defaultInstance, path))
+        }
+    })
+
     if (needUpdate) {
-        console.log("Removing unused fields from Settings")
+        console.log("Updating Settings with latest defaults")
         await liveSettings.save()
     }
 

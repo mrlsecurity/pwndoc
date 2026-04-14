@@ -42,8 +42,8 @@ module.exports = function(request, app) {
                 "findingRemediation": false
               },
               "scoringMethods": {
-                "CVSS3": false,
-                "CVSS4": true,
+                "CVSS3": true,
+                "CVSS4": false,
               }
             },
           },
@@ -52,6 +52,22 @@ module.exports = function(request, app) {
           "public": {
             "mandatoryReview": false,
             "minReviewers": 1,
+          },
+        },
+        "export": {
+          "enabled": true,
+          "public": {
+            "excludedFields": {
+              "observation": false,
+              "poc": false,
+              "priority": false,
+              "references": false,
+              "remediation": false,
+              "remediationComplexity": false,
+              "retestDescription": false,
+              "retestStatus": false,
+              "scope": false,
+            },
           },
         },
         "ai": {
@@ -104,8 +120,8 @@ module.exports = function(request, app) {
                 "findingRemediation": false
               },
               "scoringMethods": {
-                "CVSS3": false,
-                "CVSS4": true,
+                "CVSS3": true,
+                "CVSS4": false,
               }
             },
           },
@@ -117,6 +133,22 @@ module.exports = function(request, app) {
           "public": {
             "mandatoryReview": false,
             "minReviewers": 1,
+          },
+        },
+        "export": {
+          "enabled": true,
+          "public": {
+            "excludedFields": {
+              "observation": false,
+              "poc": false,
+              "priority": false,
+              "references": false,
+              "remediation": false,
+              "remediationComplexity": false,
+              "retestDescription": false,
+              "retestStatus": false,
+              "scope": false,
+            },
           },
         },
         "ai": {
@@ -213,6 +245,35 @@ module.exports = function(request, app) {
               "minReviewers": 2,
             },
           },
+          "export": {
+            "enabled": true,
+            "public": {
+              "excludedFields": {
+                "observation": false,
+                "poc": false,
+                "priority": false,
+                "references": false,
+                "remediation": false,
+                "remediationComplexity": false,
+                "retestDescription": false,
+                "retestStatus": false,
+                "scope": false,
+              },
+            },
+          },
+          "ai": {
+            "enabled": false,
+            "private": {
+              "provider": {
+                "baseURL": "https://api.openai.com/v1",
+                "model": "gpt-4o-mini",
+                "apiKey": "",
+              },
+            },
+            "public": {
+              "enabled": false,
+            },
+          },
         };
         var response = await request(app).put('/api/settings')
           .set('Cookie', [
@@ -277,6 +338,25 @@ module.exports = function(request, app) {
       expect(response.status).toBe(200);
       expect(response.type).toEqual('application/json');
       expect(response.headers['content-disposition'].indexOf('attachment; filename=')).toBe(0);
+    })
+
+    it('ensureInitialized adds missing ai defaults to existing settings document', async () => {
+      // Simulate a pre-AI-integration document by removing the ai field directly in MongoDB
+      await Settings.collection.updateOne({}, { $unset: { ai: '' } })
+      // Use the raw collection (no Mongoose defaults applied) to confirm ai is truly absent
+      var rawBefore = await Settings.collection.findOne({})
+      expect(rawBefore.ai).toBeUndefined()
+
+      await Settings.ensureInitialized()
+
+      // Use raw collection again to confirm ensureInitialized() persisted the defaults
+      var rawAfter = await Settings.collection.findOne({})
+      expect(rawAfter.ai.enabled).toBe(false)
+      expect(rawAfter.ai.public.enabled).toBe(false)
+      expect(rawAfter.ai.private.provider.baseURL).toBe('https://api.openai.com/v1')
+
+      // Restore defaults so subsequent tests are not affected
+      await Settings.restoreDefaults()
     })
 
     it('Returns internal error when loading full settings fails', async () => {
