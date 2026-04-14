@@ -5,6 +5,7 @@ module.exports = function(app) {
     var Settings = require('mongoose').model('Settings');
     var aiClient = require('../lib/ai-client');
     var aiPrompts = require('../lib/ai-prompts');
+    var OpenAI = require('openai');
 
     // Execute an AI action
     app.post("/api/ai/execute", acl.hasPermission('ai:use'), async function(req, res) {
@@ -172,6 +173,42 @@ module.exports = function(app) {
         }
         catch (error) {
             Response.Internal(res, error.message);
+        }
+    });
+
+    // Test AI provider connection with provided (unsaved) credentials
+    app.post("/api/ai/test-connection", acl.hasPermission('ai:configure'), async function(req, res) {
+        try {
+            var { baseURL, model, apiKey: providedApiKey } = req.body;
+
+            if (!baseURL) return Response.BadParameters(res, 'Provider URL is required');
+            if (!model)   return Response.BadParameters(res, 'Model is required');
+
+            // Resolve API key: prefer form value, then stored key, then env var
+            var resolvedApiKey = providedApiKey;
+            if (!resolvedApiKey) {
+                var settings = await Settings.getAll();
+                var storedKey = settings.ai && settings.ai.private && settings.ai.private.provider && settings.ai.private.provider.apiKey;
+                resolvedApiKey = storedKey || process.env.AI_API_KEY || '';
+            }
+            if (!resolvedApiKey) {
+                return Response.BadParameters(res, 'API key not configured. Enter one in the form or set the AI_API_KEY environment variable.');
+            }
+
+            var start = Date.now();
+            var client = new OpenAI({ baseURL, apiKey: resolvedApiKey });
+            await client.chat.completions.create({
+                model,
+                messages: [{ role: 'user', content: 'ping' }],
+                max_tokens: 1
+            });
+            var latencyMs = Date.now() - start;
+
+            Response.Ok(res, { success: true, model, latencyMs });
+        }
+        catch (error) {
+            // Return a structured failure so the UI can display the message instead of a 500
+            Response.Ok(res, { success: false, error: error.message });
         }
     });
 

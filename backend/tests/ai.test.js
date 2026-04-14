@@ -257,5 +257,65 @@ module.exports = function(request, app) {
                 .set('Cookie', [`token=JWT ${adminToken}`]);
             await AIAction.deleteMany({});
         });
+
+        describe('AI Test Connection', () => {
+            it('Should require authentication', async () => {
+                var response = await request(app).post('/api/ai/test-connection')
+                    .send({ baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: 'test' });
+                expect(response.status).toBe(401);
+            });
+
+            it('Should require ai:configure permission', async () => {
+                var reportUserResponse = await request(app).post('/api/users/token')
+                    .send({ username: 'report', password: 'Report123' });
+                var reportToken = reportUserResponse.body.datas?.token;
+                if (!reportToken) return;
+
+                var response = await request(app).post('/api/ai/test-connection')
+                    .set('Cookie', [`token=JWT ${reportToken}`])
+                    .send({ baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: 'test' });
+                expect(response.status).toBe(403);
+            });
+
+            it('Should return 422 when baseURL is missing', async () => {
+                var response = await request(app).post('/api/ai/test-connection')
+                    .set('Cookie', [`token=JWT ${adminToken}`])
+                    .send({ model: 'gpt-4o-mini', apiKey: 'test' });
+                expect(response.status).toBe(422);
+            });
+
+            it('Should return 422 when model is missing', async () => {
+                var response = await request(app).post('/api/ai/test-connection')
+                    .set('Cookie', [`token=JWT ${adminToken}`])
+                    .send({ baseURL: 'https://api.openai.com/v1', apiKey: 'test' });
+                expect(response.status).toBe(422);
+            });
+
+            it('Should return 422 when no API key available', async () => {
+                await Settings.update({ ai: { enabled: false, private: { provider: { baseURL: '', model: '', apiKey: '' } }, public: { enabled: false } } });
+                var savedEnv = process.env.AI_API_KEY;
+                delete process.env.AI_API_KEY;
+
+                var response = await request(app).post('/api/ai/test-connection')
+                    .set('Cookie', [`token=JWT ${adminToken}`])
+                    .send({ baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '' });
+                expect(response.status).toBe(422);
+
+                if (savedEnv) process.env.AI_API_KEY = savedEnv;
+            });
+
+            it('Should return structured error (not crash) when provider is unreachable', async () => {
+                var response = await request(app).post('/api/ai/test-connection')
+                    .set('Cookie', [`token=JWT ${adminToken}`])
+                    .send({
+                        baseURL: 'http://127.0.0.1:19999/v1',
+                        model: 'any-model',
+                        apiKey: 'test-key'
+                    });
+                expect(response.status).toBe(200);
+                expect(response.body.datas.success).toBe(false);
+                expect(typeof response.body.datas.error).toBe('string');
+            });
+        });
     });
 };
