@@ -23,5 +23,9 @@ export default {
 
     getSettings: function() {
         return api.get('ai/settings')
+    },
+
+    testConnection: function(data) {
+        return api.post('ai/test-connection', data)
     }
 }
