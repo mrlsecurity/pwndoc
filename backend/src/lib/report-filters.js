@@ -375,8 +375,10 @@ defaultFilters.count = function(input, severity, scoreType) {
             scoreAttribute = "temporalSeverity";
             break;
         case "environmental":
-        default:  // Set default to environmental score
-            scoreAttribute = "baseSeverity";            
+            scoreAttribute = "environmentalSeverity";
+            break;
+        default:
+            scoreAttribute = "baseSeverity";
     }
     for(var i = 0; i < input.length; i++){
          const cvss = input[i].cvss4 || input[i].cvss; // Prioritize CVSS 4.0
