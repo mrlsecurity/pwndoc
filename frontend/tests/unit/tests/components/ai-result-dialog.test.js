@@ -13,14 +13,20 @@ describe('AiResultDialog Component', () => {
       },
       global: {
         stubs: {
-          'q-dialog': { template: '<div class="q-dialog"><slot /></div>' },
+          'q-dialog': { template: '<div class="q-dialog"><slot /></div>', methods: { show() {}, hide() {} } },
           'q-card': { template: '<div class="q-card"><slot /></div>' },
           'q-bar': { template: '<div class="q-bar"><slot /></div>' },
           'q-card-section': { template: '<div class="q-card-section"><slot /></div>' },
           'q-card-actions': { template: '<div class="q-card-actions"><slot /></div>' },
+          'q-expansion-item': { template: '<div class="q-expansion-item"><slot name="default" /></div>' },
           'q-separator': true,
           'q-space': true,
           'q-icon': true,
+          'q-input': {
+            template: '<textarea :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)"></textarea>',
+            props: ['modelValue'],
+            emits: ['update:modelValue']
+          },
           'q-btn': { template: '<button @click="$attrs.onClick"><slot />{{ $attrs.label }}</button>', inheritAttrs: false },
           ...(overrides.stubs || {})
         }
@@ -46,7 +52,6 @@ describe('AiResultDialog Component', () => {
 
   it('should emit accept event with suggested content', async () => {
     const wrapper = createWrapper()
-    // Find the Accept button
     const buttons = wrapper.findAll('button')
     const acceptBtn = buttons.find(b => b.text().includes('Accept'))
     if (acceptBtn) {
@@ -64,5 +69,36 @@ describe('AiResultDialog Component', () => {
       await declineBtn.trigger('click')
       expect(wrapper.emitted('decline')).toBeTruthy()
     }
+  })
+
+  it('should emit refine event with userPrompt when Regenerate is clicked', async () => {
+    const wrapper = createWrapper()
+
+    // Type a refine instruction
+    const textarea = wrapper.find('textarea')
+    expect(textarea.exists()).toBe(true)
+    await textarea.setValue('make it shorter')
+
+    // Find and click Regenerate button
+    const buttons = wrapper.findAll('button')
+    const regenerateBtn = buttons.find(b => b.text().includes('Regenerate'))
+    expect(regenerateBtn).toBeDefined()
+    await regenerateBtn.trigger('click')
+
+    expect(wrapper.emitted('refine')).toBeTruthy()
+    expect(wrapper.emitted('refine')[0][0]).toEqual({ userPrompt: 'make it shorter' })
+  })
+
+  it('should clear refinePrompt after Regenerate', async () => {
+    const wrapper = createWrapper()
+    const textarea = wrapper.find('textarea')
+    await textarea.setValue('some instruction')
+
+    const buttons = wrapper.findAll('button')
+    const regenerateBtn = buttons.find(b => b.text().includes('Regenerate'))
+    await regenerateBtn.trigger('click')
+
+    // After regenerate, the textarea should be cleared
+    expect(wrapper.vm.refinePrompt).toBe('')
   })
 })

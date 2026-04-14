@@ -389,6 +389,7 @@
     <div v-else class="editor__content q-pa-sm">
         <div class="ProseMirror" v-html="diffContent"></div>
     </div>
+    <AiPromptDialog ref="aiPromptDialog" />
     <AiResultDialog
         ref="aiResultDialog"
         :action-label="aiActionLabel"
@@ -396,6 +397,7 @@
         :suggested-content="aiSuggestedContent"
         @accept="aiAcceptResult"
         @decline="aiDeclineResult"
+        @refine="aiRefineResult"
     />
 </q-card>
 </template>
@@ -431,6 +433,7 @@ import Utils from '@/services/utils'
 import ImageService from '@/services/image'
 import AIService from '@/services/ai'
 import AiResultDialog from '@/components/AiResultDialog.vue'
+import AiPromptDialog from '@/components/AiPromptDialog.vue'
 
 import {common, createLowlight} from 'lowlight'
 const lowlight = createLowlight(common)
@@ -485,7 +488,8 @@ export default {
     components: {
         EditorContent,
         BubbleMenu,
-        AiResultDialog
+        AiResultDialog,
+        AiPromptDialog
     },
     data() {
         const spellcheckStore = useSpellcheckStore()
@@ -569,6 +573,7 @@ export default {
             aiOriginalContent: '',
             aiSuggestedContent: '',
             aiTranslateLanguage: null,
+            aiLastActionPayload: null,
             aiLanguages: [
                 'English', 'French', 'German', 'Spanish', 'Italian',
                 'Portuguese', 'Dutch', 'Russian', 'Chinese', 'Japanese',
@@ -721,18 +726,28 @@ export default {
                 return
             }
 
+            var label = action.charAt(0).toUpperCase() + action.slice(1)
+            var promptResult = await this.$refs.aiPromptDialog.open(label)
+            if (promptResult === null) return
+
             this.aiLoading = true
-            this.aiActionLabel = action.charAt(0).toUpperCase() + action.slice(1)
+            this.aiActionLabel = label
             this.aiOriginalContent = selectedText
             this.aiSelectedFrom = from
             this.aiSelectedTo = to
 
+            var payload = {
+                action: action,
+                content: selectedText,
+                targetField: this.fieldName
+            }
+            if (promptResult.userPrompt) {
+                payload.options = { userPrompt: promptResult.userPrompt }
+            }
+            this.aiLastActionPayload = payload
+
             try {
-                var response = await AIService.executeAction({
-                    action: action,
-                    content: selectedText,
-                    targetField: this.fieldName
-                })
+                var response = await AIService.executeAction(payload)
                 this.aiSuggestedContent = response.data.datas.result
                 this.$refs.aiResultDialog.show()
             }
@@ -759,19 +774,34 @@ export default {
                 return
             }
 
+            var label = 'Translate to ' + language
+            var promptResult = await this.$refs.aiPromptDialog.open(label)
+            if (promptResult === null) {
+                this.aiTranslateLanguage = null
+                return
+            }
+
             this.aiLoading = true
-            this.aiActionLabel = 'Translate to ' + language
+            this.aiActionLabel = label
             this.aiOriginalContent = selectedText
             this.aiSelectedFrom = from
             this.aiSelectedTo = to
 
+            var options = { language: language }
+            if (promptResult.userPrompt) {
+                options.userPrompt = promptResult.userPrompt
+            }
+
+            var payload = {
+                action: 'translate',
+                content: selectedText,
+                targetField: this.fieldName,
+                options: options
+            }
+            this.aiLastActionPayload = payload
+
             try {
-                var response = await AIService.executeAction({
-                    action: 'translate',
-                    content: selectedText,
-                    targetField: this.fieldName,
-                    options: { language: language }
-                })
+                var response = await AIService.executeAction(payload)
                 this.aiSuggestedContent = response.data.datas.result
                 this.$refs.aiResultDialog.show()
             }
@@ -788,16 +818,48 @@ export default {
             }
         },
 
+        async aiRefineResult({ userPrompt }) {
+            if (!this.aiLastActionPayload) return
+            this.aiLoading = true
+
+            var payload = {
+                ...this.aiLastActionPayload,
+                content: this.aiSuggestedContent,
+                options: {
+                    ...(this.aiLastActionPayload.options || {}),
+                    userPrompt: userPrompt
+                }
+            }
+            this.aiLastActionPayload = payload
+
+            try {
+                var response = await AIService.executeAction(payload)
+                this.aiSuggestedContent = response.data.datas.result
+            }
+            catch (err) {
+                this.$q.notify({
+                    type: 'negative',
+                    message: err.response?.data?.datas || 'Refinement failed',
+                    position: 'top'
+                })
+            }
+            finally {
+                this.aiLoading = false
+            }
+        },
+
         aiAcceptResult(content) {
             this.editor
                 .chain()
                 .focus()
                 .insertContentAt({ from: this.aiSelectedFrom, to: this.aiSelectedTo }, content)
                 .run()
+            this.aiLastActionPayload = null
         },
 
         aiDeclineResult() {
             this.aiSuggestedContent = ''
+            this.aiLastActionPayload = null
         },
 
         importImage(files) {

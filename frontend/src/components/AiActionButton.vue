@@ -44,6 +44,8 @@
             </q-menu>
         </q-btn>
 
+        <AiPromptDialog ref="promptDialog" />
+
         <AiResultDialog
             ref="resultDialog"
             :action-label="currentActionLabel"
@@ -51,6 +53,7 @@
             :suggested-content="aiResult"
             @accept="onAccept"
             @decline="onDecline"
+            @refine="onRefine"
         />
     </span>
 </template>
@@ -60,6 +63,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import AIService from 'src/services/ai'
 import AiResultDialog from './AiResultDialog.vue'
+import AiPromptDialog from './AiPromptDialog.vue'
 
 const $q = useQuasar()
 
@@ -78,6 +82,10 @@ const aiResult = ref('')
 const currentActionLabel = ref('')
 const translateLanguage = ref(null)
 const resultDialog = ref(null)
+const promptDialog = ref(null)
+
+// State for refine: remember last action payload so we can replay with a new userPrompt
+const lastActionPayload = ref(null)
 
 const languages = [
     'English', 'French', 'German', 'Spanish', 'Italian',
@@ -121,17 +129,25 @@ async function loadActions() {
 }
 
 async function executeAction(action) {
+    var promptResult = await promptDialog.value.open(action.name)
+    if (promptResult === null) return  // user cancelled
+
     loading.value = true
     currentActionLabel.value = action.name
 
-    try {
-        var response = await AIService.executeAction({
-            action: action.builtinAction || action.id,
-            content: props.fieldContent,
-            context: props.findingContext,
-            targetField: props.fieldName
-        })
+    var payload = {
+        action: action.builtinAction || action.id,
+        content: props.fieldContent,
+        context: props.findingContext,
+        targetField: props.fieldName
+    }
+    if (promptResult.userPrompt) {
+        payload.options = { userPrompt: promptResult.userPrompt }
+    }
+    lastActionPayload.value = payload
 
+    try {
+        var response = await AIService.executeAction(payload)
         aiResult.value = response.data.datas.result
         resultDialog.value.show()
     }
@@ -149,18 +165,32 @@ async function executeAction(action) {
 
 async function onTranslateSelect(language) {
     if (!language) return
+
+    var promptResult = await promptDialog.value.open(`Translate to ${language}`)
+    if (promptResult === null) {
+        translateLanguage.value = null
+        return
+    }
+
     loading.value = true
     currentActionLabel.value = `Translate to ${language}`
 
-    try {
-        var response = await AIService.executeAction({
-            action: 'translate',
-            content: props.fieldContent,
-            context: props.findingContext,
-            targetField: props.fieldName,
-            options: { language: language }
-        })
+    var options = { language: language }
+    if (promptResult.userPrompt) {
+        options.userPrompt = promptResult.userPrompt
+    }
 
+    var payload = {
+        action: 'translate',
+        content: props.fieldContent,
+        context: props.findingContext,
+        targetField: props.fieldName,
+        options: options
+    }
+    lastActionPayload.value = payload
+
+    try {
+        var response = await AIService.executeAction(payload)
         aiResult.value = response.data.datas.result
         resultDialog.value.show()
     }
@@ -177,12 +207,45 @@ async function onTranslateSelect(language) {
     }
 }
 
+async function onRefine({ userPrompt }) {
+    if (!lastActionPayload.value) return
+    loading.value = true
+
+    // Refine against the previously suggested content so refinements compound
+    var payload = {
+        ...lastActionPayload.value,
+        content: aiResult.value,
+        options: {
+            ...(lastActionPayload.value.options || {}),
+            userPrompt: userPrompt
+        }
+    }
+    lastActionPayload.value = payload
+
+    try {
+        var response = await AIService.executeAction(payload)
+        aiResult.value = response.data.datas.result
+    }
+    catch (err) {
+        $q.notify({
+            type: 'negative',
+            message: err.response?.data?.datas || 'Refinement failed',
+            position: 'top'
+        })
+    }
+    finally {
+        loading.value = false
+    }
+}
+
 function onAccept(content) {
     emit('update:content', content)
+    lastActionPayload.value = null
 }
 
 function onDecline() {
     aiResult.value = ''
+    lastActionPayload.value = null
 }
 
 onMounted(() => {

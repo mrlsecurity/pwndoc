@@ -22,6 +22,39 @@
 
             <q-separator />
 
+            <q-expansion-item
+                v-model="refineExpanded"
+                icon="tune"
+                label="Refine with additional instructions"
+                header-class="text-grey-7"
+                dense
+            >
+                <q-card-section class="q-pt-sm">
+                    <q-input
+                        v-model="refinePrompt"
+                        type="textarea"
+                        autogrow
+                        outlined
+                        dense
+                        placeholder="e.g. make it shorter, add a sentence about CVSS, use a more formal tone..."
+                        @keydown.ctrl.enter="regenerate"
+                        @keydown.meta.enter="regenerate"
+                    />
+                    <div class="q-mt-sm flex justify-end">
+                        <q-btn
+                            color="secondary"
+                            unelevated
+                            icon="refresh"
+                            label="Regenerate"
+                            :disable="!refinePrompt.trim()"
+                            @click="regenerate"
+                        />
+                    </div>
+                </q-card-section>
+            </q-expansion-item>
+
+            <q-separator />
+
             <q-card-actions align="right">
                 <q-btn color="negative" outline @click="decline" label="Decline" />
                 <q-btn color="positive" unelevated @click="accept" label="Accept" />
@@ -39,11 +72,15 @@ const props = defineProps({
     suggestedContent: { type: String, default: '' }
 })
 
-const emit = defineEmits(['accept', 'decline'])
+const emit = defineEmits(['accept', 'decline', 'refine'])
 
 const dialog = ref(null)
+const refineExpanded = ref(false)
+const refinePrompt = ref('')
 
 function show() {
+    refineExpanded.value = false
+    refinePrompt.value = ''
     dialog.value.show()
 }
 
@@ -59,6 +96,12 @@ function accept() {
 function decline() {
     emit('decline')
     hide()
+}
+
+function regenerate() {
+    if (!refinePrompt.value.trim()) return
+    emit('refine', { userPrompt: refinePrompt.value.trim() })
+    refinePrompt.value = ''
 }
 
 defineExpose({ show, hide })

@@ -210,6 +210,23 @@ module.exports = function(request, app) {
                     });
                 expect(response.status).toBe(404);
             });
+
+            it('Should forward options.userPrompt into the assembled user prompt', async () => {
+                var aiClient = require('../src/lib/ai-client');
+                var spy = jest.spyOn(aiClient, 'complete').mockResolvedValue('refined result');
+                var response = await request(app).post('/api/ai/execute')
+                    .set('Cookie', [`token=JWT ${adminToken}`])
+                    .send({
+                        action: 'rephrase',
+                        content: 'hello world',
+                        options: { userPrompt: 'make it formal' }
+                    });
+                expect(response.status).toBe(200);
+                expect(spy).toHaveBeenCalled();
+                var callArgs = spy.mock.calls[0][0];
+                expect(callArgs.userPrompt).toContain('User instruction: make it formal');
+                spy.mockRestore();
+            });
         });
 
         describe('AI Permissions', () => {
