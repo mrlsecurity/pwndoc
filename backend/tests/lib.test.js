@@ -1171,5 +1171,26 @@ var expected =
         expect(result.score).toBe(0)
       })
     })
+
+    describe('buildContextString', () => {
+      var aiPrompts = require('../src/lib/ai-prompts')
+
+      it('includes retestDescription in context output', () => {
+        var result = aiPrompts.buildContextString({ retestDescription: 'Retest notes here' })
+        expect(result).toContain('RetestDescription: Retest notes here')
+      })
+
+      it('truncates long retestDescription to 500 chars', () => {
+        var longStr = 'x'.repeat(600)
+        var result = aiPrompts.buildContextString({ retestDescription: longStr })
+        expect(result).toContain('...')
+        expect(result).not.toContain(longStr)
+      })
+
+      it('omits retestDescription when not provided', () => {
+        var result = aiPrompts.buildContextString({ description: 'desc' })
+        expect(result).not.toContain('RetestDescription')
+      })
+    })
   })
 }

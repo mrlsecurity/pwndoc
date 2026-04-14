@@ -53,7 +53,7 @@ function buildContextString(context) {
     if (context.cvssv4) parts.push('- CVSS v4: ' + context.cvssv4);
 
     // Include other fields as context (truncated)
-    var contextFields = ['description', 'observation', 'remediation'];
+    var contextFields = ['description', 'observation', 'remediation', 'retestDescription'];
     contextFields.forEach(function(field) {
         if (context[field]) {
             var value = context[field];

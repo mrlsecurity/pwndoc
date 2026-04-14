@@ -204,7 +204,8 @@ export default {
                 cvssv4: this.finding.cvssv4 || '',
                 description: this.finding.description || '',
                 observation: this.finding.observation || '',
-                remediation: this.finding.remediation || ''
+                remediation: this.finding.remediation || '',
+                retestDescription: this.finding.retestDescription || ''
             }
         },
 

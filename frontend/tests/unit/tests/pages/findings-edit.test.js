@@ -1034,6 +1034,38 @@ describe('Findings Edit Page', () => {
     })
   })
 
+  describe('findingContext computed', () => {
+    it('retestDescription returns empty string when finding.retestDescription is falsy', async () => {
+      const wrapper = createWrapper()
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      wrapper.vm.finding.retestDescription = ''
+      expect(wrapper.vm.findingContext.retestDescription).toBe('')
+    })
+
+    it('retestDescription returns finding.retestDescription value', async () => {
+      const wrapper = createWrapper()
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      wrapper.vm.finding.retestDescription = '<p>Retest notes</p>'
+      expect(wrapper.vm.findingContext.retestDescription).toBe('<p>Retest notes</p>')
+    })
+
+    it('retestDescription falls back to empty string when undefined', async () => {
+      const wrapper = createWrapper()
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      wrapper.vm.finding.retestDescription = undefined
+      expect(wrapper.vm.findingContext.retestDescription).toBe('')
+    })
+  })
+
   describe('Cleanup', () => {
     it('should remove event listeners on unmount', () => {
       const removeEventSpy = vi.spyOn(document, 'removeEventListener')

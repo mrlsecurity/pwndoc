@@ -558,11 +558,20 @@
                                         :commentMode="commentMode && canCreateComment"
                                         :focusedComment="focusedComment"
                                         :commentIdList="commentIdList"
+                                        :toolbar="['format', 'marks', 'list', 'code', 'table', 'image', 'caption', 'ai']"
                                         />
                                     </template>
                                     <template v-slot:label>
-                                        <div id="retestDescriptionField">
+                                        <div id="retestDescriptionField" class="row items-center no-wrap">
                                             {{$t('description')}} <span v-if="$settings.report.public.requiredFields.retestDescription" class="text-red">*</span>
+                                            <AiActionButton
+                                                v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                                                field-name="retestDescription"
+                                                :field-content="finding.retestDescription"
+                                                :finding-context="findingContext"
+                                                :ai-enabled="aiEnabled"
+                                                @update:content="val => finding.retestDescription = val"
+                                            />
                                         </div>
                                     </template>
                                 </q-field>
