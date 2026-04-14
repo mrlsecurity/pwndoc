@@ -100,6 +100,8 @@ export default {
             aiActions: [],
             showCreateAiAction: false,
             editingAiAction: null,
+            testingAiConnection: false,
+            aiConnectionResult: null,
             aiActionForm: {
                 name: '',
                 type: 'custom',
@@ -123,6 +125,9 @@ export default {
         'settings.report.private.languageToolUrl'() { this.ltConnectionResult = null },
         'settings.report.private.languageToolApiKey'() { this.ltConnectionResult = null },
         'settings.report.private.languageToolUsername'() { this.ltConnectionResult = null },
+        'settings.ai.private.provider.baseURL'() { this.aiConnectionResult = null },
+        'settings.ai.private.provider.model'()   { this.aiConnectionResult = null },
+        'settings.ai.private.provider.apiKey'()  { this.aiConnectionResult = null },
     },
 
     beforeRouteLeave (to, from , next) {
@@ -356,6 +361,45 @@ export default {
                 });
             } finally {
                 this.testingLtConnection = false;
+            }
+        },
+
+        testAiConnection: async function() {
+            this.testingAiConnection = true;
+            this.aiConnectionResult = null;
+            try {
+                var provider = this.settings.ai.private.provider;
+                var data = await AIService.testConnection({
+                    baseURL: provider.baseURL,
+                    model:   provider.model,
+                    apiKey:  provider.apiKey
+                });
+                this.aiConnectionResult = data.data.datas;
+                if (this.aiConnectionResult.success) {
+                    Notify.create({
+                        message: `Connected to ${this.aiConnectionResult.model} in ${this.aiConnectionResult.latencyMs}ms`,
+                        color: 'positive',
+                        textColor: 'white',
+                        position: 'top-right'
+                    });
+                } else {
+                    Notify.create({
+                        message: this.aiConnectionResult.error || 'Connection failed',
+                        color: 'negative',
+                        textColor: 'white',
+                        position: 'top-right'
+                    });
+                }
+            } catch (err) {
+                this.aiConnectionResult = { success: false, error: err.response?.data?.datas || 'Connection failed' };
+                Notify.create({
+                    message: this.aiConnectionResult.error,
+                    color: 'negative',
+                    textColor: 'white',
+                    position: 'top-right'
+                });
+            } finally {
+                this.testingAiConnection = false;
             }
         },
 
