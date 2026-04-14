@@ -67,3 +67,14 @@ function getSockets(io, room) {
   return result
 }
 exports.getSockets = getSockets
+
+function sanitizeDocxBuffer(buffer) {
+    try {
+        var PizZip = require("pizzip");
+        var zip = new PizZip(buffer);
+        return zip.generate({type: "nodebuffer"});
+    } catch (e) {
+        return buffer;
+    }
+}
+exports.sanitizeDocxBuffer = sanitizeDocxBuffer

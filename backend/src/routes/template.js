@@ -33,6 +33,8 @@ module.exports = function(app) {
         Template.create(template)
         .then(data => {
             var fileBuffer = Buffer.from(req.body.file, 'base64');
+            if (template.ext === 'docx')
+                fileBuffer = utils.sanitizeDocxBuffer(fileBuffer);
             fs.writeFileSync(`${__basedir}/../report-templates/${template.name}.${template.ext}`, fileBuffer);
             Response.Created(res, data);
         })
@@ -73,6 +75,8 @@ module.exports = function(app) {
             // Update both name and file
             else if (req.body.name && req.body.file && req.body.ext) {
                 var fileBuffer = Buffer.from(req.body.file, 'base64');
+                if (req.body.ext === 'docx')
+                    fileBuffer = utils.sanitizeDocxBuffer(fileBuffer);
                 try {fs.unlinkSync(`${__basedir}/../report-templates/${data.name}.${data.ext || 'docx'}`)} catch {}
                 fs.writeFileSync(`${__basedir}/../report-templates/${req.body.name}.${req.body.ext}`, fileBuffer);
             }
@@ -107,7 +111,16 @@ module.exports = function(app) {
         Template.getOne(req.params.templateId)
         .then(data => {
             var file = `${__basedir}/../report-templates/${data.name}.${data.ext || 'docx'}`
-            res.download(file, `${data.name}.${data.ext}`)
+            var ext = data.ext || 'docx'
+            if (ext === 'docx') {
+                var fileBuffer = fs.readFileSync(file);
+                fileBuffer = utils.sanitizeDocxBuffer(fileBuffer);
+                res.setHeader('Content-Disposition', `attachment; filename="${data.name}.${ext}"`);
+                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+                res.send(fileBuffer);
+            } else {
+                res.download(file, `${data.name}.${ext}`)
+            }
         })
         .catch(err => Response.Internal(res, err))
     });

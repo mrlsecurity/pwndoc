@@ -5,7 +5,8 @@ var domutils = require("domutils")
 const render = require('dom-serializer').default
 const hljs = require('highlight.js');
 
-var usedNumIds = [];
+var usedBulletNumIds = [];
+var usedNumberNumIds = [];
 var numIdCounter = 100;
 
 function html2ooxml(html, style = '') {
@@ -101,23 +102,26 @@ function html2ooxml(html, style = '') {
                     cParagraph.addChildElement(new docx.Run({break: 1}))
             }
             else if (tag === "ul") {
-                list_state.push('bullet')
+                var newNumId = numIdCounter++;
+                list_state.push('bullet:' + newNumId);
+                if (!usedBulletNumIds.includes(newNumId))
+                    usedBulletNumIds.push(newNumId);
             }
             else if (tag === "ol") {
                 var newNumId = numIdCounter++;
                 list_state.push('number:' + newNumId);
-                if (!usedNumIds.includes(newNumId)) {
-                    usedNumIds.push(newNumId);
-                }
+                if (!usedNumberNumIds.includes(newNumId))
+                    usedNumberNumIds.push(newNumId);
             }
             else if (tag === "li") {
                 var level = list_state.length - 1
-                if (level >= 0 && list_state[level] === 'bullet')
-                    cParagraphProperties.bullet = {level: level}
+                if (level >= 0 && list_state[level].startsWith('bullet:')) {
+                    var numRef = parseInt(list_state[level].split(':')[1]);
+                    cParagraphProperties.numbering = {reference: numRef, level: level}
+                }
                 else if (level >= 0 && list_state[level].startsWith('number:')) {
                     var numRef = parseInt(list_state[level].split(':')[1]);
                     cParagraphProperties.numbering = {reference: numRef, level: level}
-                    cParagraphProperties.style = "ListNumber"
                 }
                 else
                     cParagraphProperties.bullet = {level: 0}
@@ -308,11 +312,12 @@ function html2ooxml(html, style = '') {
 module.exports = html2ooxml
 
 html2ooxml.getUsedNumIds = function() {
-    return usedNumIds;
+    return { bullet: usedBulletNumIds, number: usedNumberNumIds };
 };
 
 html2ooxml.clearUsedNumIds = function() {
-    usedNumIds = [];
+    usedBulletNumIds = [];
+    usedNumberNumIds = [];
     numIdCounter = 100;
 };
 
