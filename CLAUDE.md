@@ -76,7 +76,8 @@ npm run test:coverage
 
 ## Development Workflow Rules
 
-- **Write tests for new features automatically:** Whenever a new feature is implemented, add corresponding tests (backend Jest, frontend Vitest unit, or Playwright E2E as appropriate) without being asked. Tests are part of the implementation, not optional.
+- **Implementation first, tests last:** Complete the full feature implementation before writing any tests. Never write or run tests mid-implementation. Tests are written only once all production code for the task is done. Add corresponding tests (backend Jest, frontend Vitest unit, or Playwright E2E as appropriate) without being asked. Tests are part of the implementation, not optional.
+- **Write tests for new features automatically:** After implementation is complete, add corresponding tests (backend Jest, frontend Vitest unit, or Playwright E2E as appropriate) without being asked. Tests are part of the implementation, not optional.
 - **No manual testing:** After implementing a feature, do not perform or suggest manual testing steps. Validation is done exclusively by running the automated test suites via `./pwndoc-cli test`.
 - **No co-author lines in commits:** Do not add any `Co-Authored-By` or similar attribution lines to git commit messages.
 
