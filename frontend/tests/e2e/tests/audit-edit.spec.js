@@ -86,14 +86,20 @@ test.describe('Audit Edit Page', () => {
       await expect(nameField).toHaveValue('E2E Test Audit');
     });
 
-    test('should update audit name and save', async ({ page }) => {
-      // Update the name
+test('should update audit name and save', async ({ page }) => {
+      // Update the name - wait for field to be ready, clear, fill, then blur to trigger validation
       const nameField = page.getByLabel(/Name/).first();
+      await nameField.focus();
       await nameField.clear();
       await nameField.fill('E2E Test Audit Updated');
+      await nameField.blur();
+      // Wait for value to be updated in the model
+      await expect(nameField).toHaveValue('E2E Test Audit Updated');
 
-      // Click save
-      await page.getByRole('button', { name: /Save/ }).click();
+      // Wait for Save button to be ready and click
+      const saveButton = page.getByRole('button', { name: /Save/ });
+      await expect(saveButton).toBeEnabled();
+      await saveButton.evaluate((node) => node.click());
 
       // Verify success notification
       await expect(page.getByText('Audit updated successfully')).toBeVisible();
@@ -101,7 +107,8 @@ test.describe('Audit Edit Page', () => {
       // Revert the name back
       await nameField.clear();
       await nameField.fill('E2E Test Audit');
-      await page.getByRole('button', { name: /Save/ }).click();
+      await expect(saveButton).toBeVisible();
+      await saveButton.click();
       await expect(page.getByText('Audit updated successfully')).toBeVisible();
     });
 
@@ -115,7 +122,9 @@ test.describe('Audit Edit Page', () => {
       await endDateField.fill('2025-01-31');
 
       // Save
-      await page.getByRole('button', { name: /Save/ }).click();
+      const saveButton = page.getByRole('button', { name: /Save/ });
+      await expect(saveButton).toBeVisible();
+      await saveButton.click();
       await expect(page.getByText('Audit updated successfully')).toBeVisible();
 
       // Verify dates are saved by reloading

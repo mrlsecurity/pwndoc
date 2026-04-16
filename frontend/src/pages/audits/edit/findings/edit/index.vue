@@ -138,7 +138,7 @@
                             map-options
                             options-sanitize
                             outlined
-                            :rules="($settings.report.public.requiredFields.findingType) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                            :rules="($settings.report.public.requiredFields.findingType) ? [val => !!val || $t('fieldIsRequired')] : []"
                             lazy-rules="ondemand"
                             :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                             >
@@ -157,7 +157,7 @@
                             label-slot
                             borderless
                             stack-label
-                            :rules="($settings.report.public.requiredFields.findingDescription) ? [val => !!finding.description || $t('fieldIsRequired')] : ['']"
+                            :rules="($settings.report.public.requiredFields.findingDescription) ? [val => !!finding.description || $t('fieldIsRequired')] : []"
                             lazy-rules="ondemand"
                             >
                                 <template v-slot="control">
@@ -195,7 +195,7 @@
                             borderless
                             label-slot
                             stack-label
-                            :rules="($settings.report.public.requiredFields.findingObservation) ? [val => !!finding.observation || $t('fieldIsRequired')] : ['']"
+                            :rules="($settings.report.public.requiredFields.findingObservation) ? [val => !!finding.observation || $t('fieldIsRequired')] : []"
                             lazy-rules="ondemand"
                             >
                                 <template v-slot="control">
@@ -233,7 +233,7 @@
                             borderless
                             label-slot
                             stack-label
-                            :rules="($settings.report.public.requiredFields.findingRemediation) ? [val => !!finding.remediation || $t('fieldIsRequired')] : ['']"
+                            :rules="($settings.report.public.requiredFields.findingRemediation) ? [val => !!finding.remediation || $t('fieldIsRequired')] : []"
                             lazy-rules="ondemand"
                             >
                                 <template v-slot:control>
@@ -298,7 +298,7 @@
                             borderless
                             label-slot
                             stack-label
-                            :rules="($settings.report.public.requiredFields.findingProofs) ? [val => !!finding.poc || $t('fieldIsRequired')] : ['']"
+                            :rules="($settings.report.public.requiredFields.findingProofs) ? [val => !!finding.poc || $t('fieldIsRequired')] : []"
                             lazy-rules="ondemand"
                             >
                                 <template v-slot="control">
@@ -334,7 +334,7 @@
                                 borderless
                                 label-slot
                                 stack-label
-                                :rules="($settings.report.public.requiredFields.findingAffected) ? [val => !!finding.scope || $t('fieldIsRequired')] : ['']"
+                                :rules="($settings.report.public.requiredFields.findingAffected) ? [val => !!finding.scope || $t('fieldIsRequired')] : []"
                                 lazy-rules="ondemand"
                                 >
                                     <template v-slot="control">
@@ -400,7 +400,7 @@
                                     emit-value
                                     options-sanitize
                                     outlined
-                                    :rules="($settings.report.public.requiredFields.findingRemediationDifficulty) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                                    :rules="($settings.report.public.requiredFields.findingRemediationDifficulty) ? [val => !!val || $t('fieldIsRequired')] : []"
                                     lazy-rules="ondemand"
                                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                                     >
@@ -424,7 +424,7 @@
                                     emit-value
                                     options-sanitize
                                     outlined
-                                    :rules="($settings.report.public.requiredFields.findingPriority) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                                    :rules="($settings.report.public.requiredFields.findingPriority) ? [val => !!val || $t('fieldIsRequired')] : []"
                                     lazy-rules="ondemand"
                                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                                     >
@@ -452,7 +452,7 @@
                                     v-model="finding.references"
                                     :string-array="true"
                                     :lazy="true"
-                                    :rules="($settings.report.public.requiredFields.findingReferences) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                                    :rules="($settings.report.public.requiredFields.findingReferences) ? [val => !!val || $t('fieldIsRequired')] : []"
                                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT" />
                                     <q-badge v-if="commentMode && canCreateComment" color="deep-purple" floating class="cursor-pointer" @click="createComment('referencesField')">
                                         <q-icon name="add_comment" size="xs" />
@@ -546,7 +546,7 @@
                                 label-slot
                                 borderless
                                 stack-label
-                                :rules="($settings.report.public.requiredFields.retestDescription) ? [val => !!finding.retestDescription || $t('fieldIsRequired')] : ['']"
+                                :rules="($settings.report.public.requiredFields.retestDescription) ? [val => !!finding.retestDescription || $t('fieldIsRequired')] : []"
                                 lazy-rules="ondemand"
                                 >
                                     <template v-slot="control">

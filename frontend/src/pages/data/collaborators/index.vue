@@ -76,10 +76,10 @@
                             />
                         </q-td>
                         <q-td style="width: 20%">
-                            <q-select 
+                            <q-select
                             dense
                             :label="$t('search')"
-                            v-model="search.role"
+                            v-model="search.roles"
                             clearable
                             :options="roles"
                             options-sanitize
@@ -208,8 +208,10 @@
                 data-testid="create-collaborator-role-select"
                 :label="$t('role')+' *'"
                 class="col-md-12"
-                v-model="currentCollab.role"
-                :options=roles
+                v-model="currentCollab.roles"
+                :options="roles"
+                multiple
+                use-chips
                 @keyup.enter="createCollab()"
                 options-sanitize
                 outlined
@@ -227,7 +229,7 @@
                 hide-bottom-space
                 @keyup.enter="createCollab()"
                 outlined
-                :rules="(currentCollab.password) ? strongPassword : ['']"
+                :rules="(currentCollab.password) ? strongPassword : []"
                 />
             </q-card-section>
 
@@ -328,8 +330,10 @@
                 data-testid="edit-collaborator-role-select"
                 :label="$t('role')+' *'"
                 class="col-md-12"
-                v-model="currentCollab.role"
-                :options=roles
+                v-model="currentCollab.roles"
+                :options="roles"
+                multiple
+                use-chips
                 @keyup.enter="updateCollab()"
                 options-sanitize
                 outlined
@@ -344,7 +348,7 @@
                 type="password"
                 @keyup.enter="updateCollab()"
                 outlined
-                :rules="(currentCollab.password) ? strongPassword : ['']"
+                :rules="(currentCollab.password) ? strongPassword : []"
                 />
             </q-card-section>
             <q-card-section>

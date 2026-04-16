@@ -18,7 +18,7 @@ var UserSchema = new Schema({
     email:          {type: String, required: false},
     phone:          {type: String, required: false},
     jobTitle:       {type: String, required: false},
-    role:           {type: String, default: 'user'},
+    roles:          {type: [String], default: ['user']},
     totpEnabled:    {type: Boolean, default: false},
     totpSecret:     {type: String, default: ''},
     enabled:        {type: Boolean, default: true},
@@ -85,7 +85,7 @@ UserSchema.statics.create = function (user) {
 UserSchema.statics.getAll = function () {
     return new Promise((resolve, reject) => {
         var query = this.find();
-        query.select('username firstname lastname email phone jobTitle role totpEnabled enabled');
+        query.select('username firstname lastname email phone jobTitle roles totpEnabled enabled');
         query.exec()
         .then(function(rows) {
             resolve(rows);
@@ -100,7 +100,7 @@ UserSchema.statics.getAll = function () {
 UserSchema.statics.getByUsername = function (username) {
     return new Promise((resolve, reject) => {
         var query = this.findOne({username: username})
-        query.select('username firstname lastname email phone jobTitle role totpEnabled enabled');
+        query.select('username firstname lastname email phone jobTitle roles totpEnabled enabled');
         query.exec()
         .then(function(row) {
             if (row)
@@ -135,7 +135,7 @@ UserSchema.statics.updateProfile = function (username, user) {
 
                 payload.id = row._id;
                 payload.username = row.username;
-                payload.role = row.role;
+                payload.role = (row.roles && row.roles.length) ? row.roles : ['user'];
                 payload.firstname = row.firstname;
                 payload.lastname = row.lastname;
                 payload.email = row.email;
@@ -215,7 +215,7 @@ UserSchema.statics.updateRefreshToken = function (refreshToken, userAgent) {
                 var payload = {}
                 payload.id = row._id
                 payload.username = row.username
-                payload.role = row.role
+                payload.role = (row.roles && row.roles.length) ? row.roles : ['user']
                 payload.firstname = row.firstname
                 payload.lastname = row.lastname
                 payload.email = row.email
@@ -534,5 +534,32 @@ UserSchema.methods.getToken = function (userAgent) {
     })
 }
 
+// One-shot migration: copy legacy `role` string into `roles` array.
+// Idempotent; runs once when the DB connection is open.
+UserSchema.statics.migrateLegacyRoleField = async function () {
+    try {
+        var legacy = await User.collection.find({
+            role: { $exists: true },
+            $or: [{ roles: { $exists: false } }, { roles: { $size: 0 } }]
+        }).toArray();
+        for (var doc of legacy) {
+            if (typeof doc.role === 'string' && doc.role) {
+                var mappedRole = doc.role === 'report' ? 'reviewer-lead' : doc.role;
+                await User.collection.updateOne(
+                    { _id: doc._id },
+                    { $set: { roles: [mappedRole] }, $unset: { role: "" } }
+                );
+            }
+        }
+    } catch (e) {
+        console.error('User role->roles migration failed:', e.message);
+    }
+};
+
 var User = mongoose.model('User', UserSchema);
+
+mongoose.connection.once('open', function () {
+    User.migrateLegacyRoleField();
+});
+
 module.exports = User;

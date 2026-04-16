@@ -685,10 +685,10 @@ async function prepAuditData(data, settings) {
             lastname: reviewer.lastname || "undefined",
             email: reviewer.email || "undefined",
             phone: reviewer.phone || "undefined",
-            role: reviewer.role || "undefined"
+            role: (Array.isArray(reviewer.roles) && reviewer.roles.length ? reviewer.roles.join(', ') : (reviewer.role || "undefined"))
         })
     })
-    
+
     result.collaborators = []
     data.collaborators.forEach(collab => {
         result.collaborators.push({
@@ -698,7 +698,7 @@ async function prepAuditData(data, settings) {
             email: collab.email || "undefined",
             phone: collab.phone || "undefined",
             jobTitle: collab.jobTitle || "undefined",
-            role: collab.role || "undefined"
+            role: (Array.isArray(collab.roles) && collab.roles.length ? collab.roles.join(', ') : (collab.role || "undefined"))
         })
     })
     result.language = data.language || "undefined"
@@ -848,7 +848,7 @@ async function prepAuditData(data, settings) {
         result.creator.lastname = data.creator.lastname || "undefined"
         result.creator.email = data.creator.email || "undefined"
         result.creator.phone = data.creator.phone || "undefined"
-        result.creator.role = data.creator.role || "undefined"
+        result.creator.role = (Array.isArray(data.creator.roles) && data.creator.roles.length ? data.creator.roles.join(', ') : (data.creator.role || "undefined"))
     }
 
     for (var section of data.sections) {

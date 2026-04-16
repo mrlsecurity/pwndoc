@@ -160,10 +160,12 @@ export default {
             })
         },
 
-        // Save Audit
+// Save Audit
         updateAuditGeneral: function() {
             Utils.syncEditors(this.$refs)
-            this.$refs.scopeField.updateParent();
+            if (this.$refs.scopeField) {
+                this.$refs.scopeField.updateParent()
+            }
             this.$nextTick(() => {
                 var customFieldsEmpty = this.$refs.customfields && this.$refs.customfields.requiredFieldsEmpty()
                 var defaultFieldsEmpty = this.requiredFieldsEmpty()
@@ -188,7 +190,7 @@ export default {
                 })
                 .catch((err) => {
                     Notify.create({
-                        message: err.response.data.datas,
+                        message: (err.response && err.response.data && err.response.data.datas) ? err.response.data.datas : err.message || 'An unexpected error occurred',
                         color: 'negative',
                         textColor:'white',
                         position: 'top-right'
@@ -358,22 +360,22 @@ export default {
         },
 
         requiredFieldsEmpty: function() {
-            this.$refs.nameField.validate()
-            this.$refs.companyField.validate()
-            this.$refs.clientField.validate()
-            this.$refs.dateStartField.validate()
-            this.$refs.dateEndField.validate()
-            this.$refs.dateReportField.validate()
-            this.$refs.scopeField.validate()
+            if (this.$refs.nameField) this.$refs.nameField.validate()
+            if (this.$refs.companyField) this.$refs.companyField.validate()
+            if (this.$refs.clientField) this.$refs.clientField.validate()
+            if (this.$refs.dateStartField) this.$refs.dateStartField.validate()
+            if (this.$refs.dateEndField) this.$refs.dateEndField.validate()
+            if (this.$refs.dateReportField) this.$refs.dateReportField.validate()
+            if (this.$refs.scopeField) this.$refs.scopeField.validate()
 
             return (
-                this.$refs.nameField.hasError ||
-                this.$refs.companyField.hasError ||
-                this.$refs.clientField.hasError ||
-                this.$refs.dateStartField.hasError ||
-                this.$refs.dateEndField.hasError ||
-                this.$refs.dateReportField.hasError ||
-                this.$refs.scopeField.hasError
+                (this.$refs.nameField && this.$refs.nameField.hasError) ||
+                (this.$refs.companyField && this.$refs.companyField.hasError) ||
+                (this.$refs.clientField && this.$refs.clientField.hasError) ||
+                (this.$refs.dateStartField && this.$refs.dateStartField.hasError) ||
+                (this.$refs.dateEndField && this.$refs.dateEndField.hasError) ||
+                (this.$refs.dateReportField && this.$refs.dateReportField.hasError) ||
+                (this.$refs.scopeField && this.$refs.scopeField.hasError)
             )
         }
     }

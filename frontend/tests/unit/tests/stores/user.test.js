@@ -143,5 +143,25 @@ describe('User Store', () => {
 
       expect(store.isAllowed('admin')).toBe(false)
     })
+
+    it('should return true for permission present in a multi-role-derived permission array', () => {
+      // Simulates a user with roles: ['reviewer', 'vuln-librarian'] whose JWT
+      // carries the unioned permission array.
+      const store = useUserStore()
+      store.setUser({
+        role: ['reviewer', 'vuln-librarian'],
+        roles: [
+          'audits:read', 'audits:read-all', 'audits:review',
+          'audits:comments:needs-work',
+          'vulnerabilities:create', 'vulnerabilities:update', 'vulnerabilities:delete'
+        ]
+      })
+
+      expect(store.isAllowed('audits:review')).toBe(true)
+      expect(store.isAllowed('vulnerabilities:create')).toBe(true)
+      // Permission from an unassigned add-on must NOT be granted
+      expect(store.isAllowed('backups:create')).toBe(false)
+      expect(store.isAllowed('users:create')).toBe(false)
+    })
   })
 })

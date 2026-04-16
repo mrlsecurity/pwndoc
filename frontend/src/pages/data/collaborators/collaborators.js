@@ -23,7 +23,7 @@ export default {
                 {name: 'lastname', label: $t('lastname'), field: 'lastname', align: 'left', sortable: true},
                 {name: 'email', label: $t('email'), field: 'email', align: 'left', sortable: true},
                 {name: 'jobTitle', label: $t('jobTitle'), field: 'jobTitle', align: 'left', sortable: true},
-                {name: 'role', label: $t('role'), field: 'role', align: 'left', sortable: true},
+                {name: 'roles', label: $t('role'), field: row => Array.isArray(row.roles) ? row.roles.join(', ') : (row.role || ''), align: 'left', sortable: true},
                 {name: 'action', label: '', field: 'action', align: 'left', sortable: false},
             ],
             // Datatable pagination
@@ -39,16 +39,16 @@ export default {
                 {label:'All', value:0}
             ],
             // Search filter
-            search: {username: '', firstname: '', lastname: '', role: '', email: '', jobTitle: '', enabled: true},
+            search: {username: '', firstname: '', lastname: '', roles: '', email: '', jobTitle: '', enabled: true},
             customFilter: Utils.customFilter,
             // Errors messages
             errors: {lastname: '', firstname: '', username: ''},
             // Collab to create or update
             currentCollab: {
-                lastname: '', 
-                firstname: '', 
+                lastname: '',
+                firstname: '',
                 username: '',
-                role: '',
+                roles: ['user'],
                 email: '',
                 phone: '',
                 jobTitle: '',
@@ -161,6 +161,9 @@ export default {
 
         clone: function(row) {
             this.currentCollab = this.$_.clone(row);
+            if (!Array.isArray(this.currentCollab.roles) || this.currentCollab.roles.length === 0) {
+                this.currentCollab.roles = row.role ? [row.role] : ['user'];
+            }
             this.idUpdate = row._id;
         },
 
@@ -175,7 +178,7 @@ export default {
             this.currentCollab.lastname = '';
             this.currentCollab.firstname = '';
             this.currentCollab.username = '';
-            this.currentCollab.role = 'user';
+            this.currentCollab.roles = ['user'];
             this.currentCollab.password = '';
             this.currentCollab.email = '';
             this.currentCollab.phone = '';
@@ -183,7 +186,7 @@ export default {
         },
 
         dblClick: function(evt, row) {
-            if (userStore.isAllowed('users:updates')) {
+            if (userStore.isAllowed('users:update')) {
                 this.clone(row)
                 this.$refs.editModal.show()  
             }     

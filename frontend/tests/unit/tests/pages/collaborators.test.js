@@ -209,7 +209,7 @@ describe('Collaborators Page', () => {
         lastname: '',
         firstname: '',
         username: '',
-        role: '',
+        roles: ['user'],
         email: '',
         phone: '',
         jobTitle: '',
@@ -241,7 +241,7 @@ describe('Collaborators Page', () => {
         username: '',
         firstname: '',
         lastname: '',
-        role: '',
+        roles: '',
         email: '',
         jobTitle: '',
         enabled: true
@@ -837,7 +837,7 @@ describe('Collaborators Page', () => {
         lastname: 'Doe',
         firstname: 'John',
         username: 'johndoe',
-        role: 'admin',
+        roles: ['admin'],
         password: 'secret',
         email: 'john@example.com',
         phone: '555-1234',
@@ -849,7 +849,7 @@ describe('Collaborators Page', () => {
       expect(wrapper.vm.currentCollab.lastname).toBe('')
       expect(wrapper.vm.currentCollab.firstname).toBe('')
       expect(wrapper.vm.currentCollab.username).toBe('')
-      expect(wrapper.vm.currentCollab.role).toBe('user')
+      expect(wrapper.vm.currentCollab.roles).toEqual(['user'])
       expect(wrapper.vm.currentCollab.password).toBe('')
       expect(wrapper.vm.currentCollab.email).toBe('')
       expect(wrapper.vm.currentCollab.phone).toBe('')
@@ -879,7 +879,7 @@ describe('Collaborators Page', () => {
 
       wrapper.vm.dblClick({}, row)
 
-      expect(wrapper.vm.userStore.isAllowed).toHaveBeenCalledWith('users:updates')
+      expect(wrapper.vm.userStore.isAllowed).toHaveBeenCalledWith('users:update')
       expect(wrapper.vm.idUpdate).toBe('abc123')
       expect(showMock).toHaveBeenCalled()
     })
@@ -904,7 +904,7 @@ describe('Collaborators Page', () => {
 
       wrapper.vm.dblClick({}, row)
 
-      expect(wrapper.vm.userStore.isAllowed).toHaveBeenCalledWith('users:updates')
+      expect(wrapper.vm.userStore.isAllowed).toHaveBeenCalledWith('users:update')
       expect(showMock).not.toHaveBeenCalled()
     })
   })
@@ -919,7 +919,7 @@ describe('Collaborators Page', () => {
       expect(headerNames).toContain('lastname')
       expect(headerNames).toContain('email')
       expect(headerNames).toContain('jobTitle')
-      expect(headerNames).toContain('role')
+      expect(headerNames).toContain('roles')
       expect(headerNames).toContain('action')
     })
 

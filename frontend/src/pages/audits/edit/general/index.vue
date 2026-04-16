@@ -42,6 +42,19 @@
                     outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                     />
+                    <q-select
+                    class="col-md-6 col-12 q-pt-none"
+                    :label="$t('template')"
+                    v-model="audit.template"
+                    :options="templates"
+                    option-value="_id"
+                    option-label="name"
+                    emit-value
+                    map-options
+                    options-sanitize
+                    outlined
+                    :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+                    />
                 </div>
             </q-card-section>
 
@@ -65,7 +78,7 @@
                     options-sanitize
                     use-input
                     outlined
-                    :rules="($settings.report.public.requiredFields.company) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.company) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                     >
@@ -86,7 +99,7 @@
                     clearable
                     options-sanitize
                     outlined
-                    :rules="($settings.report.public.requiredFields.client) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.client) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                     >
@@ -171,7 +184,7 @@
                     class="col-md-4 col-12"
                     label-slot
                     v-model="audit.date_start"
-                    :rules="($settings.report.public.requiredFields.dateStart) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.dateStart) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT">
@@ -191,7 +204,7 @@
                     class="col-md-4 col-12"
                     label-slot
                     v-model="audit.date_end"
-                    :rules="($settings.report.public.requiredFields.dateEnd) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.dateEnd) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT">
@@ -211,7 +224,7 @@
                     class="col-md-4 col-12"
                     label-slot
                     v-model="audit.date"
-                    :rules="($settings.report.public.requiredFields.dateReport) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.dateReport) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT">
@@ -235,7 +248,8 @@
                 :label="$t('auditScope')"
                 v-model="audit.scope"
                 :object-fields="{name: 'name', description: 'description'}"
-                :rules="($settings.report.public.requiredFields.scope) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                :no-empty-line="true"
+                :rules="($settings.report.public.requiredFields.scope) ? [val => !!val || $t('fieldIsRequired')] : []"
                 :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                 :lazy="true"/>
             </q-card-section>

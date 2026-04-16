@@ -84,7 +84,7 @@ module.exports = function(request, app) {
           username: 'admin',
           firstname: 'Admin',
           lastname: 'Istrator',
-          role: 'admin'
+          roles: ['admin']
         }
         var response = await request(app).get('/api/users/me')
           .set('Cookie', [
@@ -179,7 +179,7 @@ module.exports = function(request, app) {
           username: 'user',
           firstname: 'User',
           lastname: 'Test',
-          role: 'user'
+          roles: ['user']
         }
         var response = await request(app).get('/api/users/user')
           .set('Cookie', [
@@ -195,7 +195,7 @@ module.exports = function(request, app) {
           username: 'admin',
           firstname: 'Admin2',
           lastname: 'Istrator',
-          role: 'admin'
+          roles: ['admin']
         }
 
         var user = {
@@ -225,7 +225,7 @@ module.exports = function(request, app) {
           username: 'user2',
           firstname: 'User2',
           lastname: 'Test',
-          role: 'user'
+          roles: ['user']
         }
 
         var user = {
@@ -371,6 +371,76 @@ module.exports = function(request, app) {
           ])
           .send({totpToken: validToken})
         expect(response.status).toBe(200)
+      })
+    })
+
+    describe('Multi-role support', () => {
+      it('Create user with multiple roles (reviewer + vuln-librarian)', async () => {
+        var user = {
+          username: 'multi',
+          password: 'Multi1234',
+          firstname: 'Multi',
+          lastname: 'Role',
+          roles: ['reviewer', 'vuln-librarian']
+        }
+        var response = await request(app).post('/api/users')
+          .set('Cookie', [`token=JWT ${userToken}`])
+          .send(user)
+        expect(response.status).toBe(201)
+
+        response = await request(app).post('/api/users/token').send({username: 'multi', password: 'Multi1234'})
+        expect(response.status).toBe(200)
+
+        var multiToken = response.body.datas.token
+        // Decode the JWT payload (2nd segment) without verifying the signature
+        var payload = JSON.parse(Buffer.from(multiToken.split('.')[1], 'base64').toString())
+        // Should carry both role names
+        expect(payload.role).toEqual(expect.arrayContaining(['reviewer', 'vuln-librarian']))
+        // Union of permissions: reviewer brings audits:review, vuln-librarian brings vulnerabilities:create
+        expect(payload.roles).toEqual(expect.arrayContaining(['audits:review', 'vulnerabilities:create']))
+        // Should NOT have permissions from unrelated add-ons (e.g. backups:create)
+        expect(payload.roles).not.toContain('backups:create')
+      })
+
+      it('ACL isAllowed accepts an array of role names (union semantics)', () => {
+        var acl = require('../src/lib/auth').acl
+        // vuln-librarian grants vulnerabilities:create, reviewer does NOT
+        expect(acl.isAllowed(['reviewer'], 'vulnerabilities:create')).toBe(false)
+        expect(acl.isAllowed(['vuln-librarian'], 'vulnerabilities:create')).toBe(true)
+        expect(acl.isAllowed(['reviewer', 'vuln-librarian'], 'vulnerabilities:create')).toBe(true)
+        // audits:review comes from reviewer
+        expect(acl.isAllowed(['reviewer', 'vuln-librarian'], 'audits:review')).toBe(true)
+        // Neither grants backups:create
+        expect(acl.isAllowed(['reviewer', 'vuln-librarian'], 'backups:create')).toBe(false)
+        // admin wildcard short-circuits
+        expect(acl.isAllowed(['user', 'admin'], 'backups:create')).toBe(true)
+      })
+
+      it('reviewer-lead inherits reviewer + user permissions', () => {
+        var acl = require('../src/lib/auth').acl
+        // from user base
+        expect(acl.isAllowed('reviewer-lead', 'audits:read')).toBe(true)
+        // from reviewer (inherited)
+        expect(acl.isAllowed('reviewer-lead', 'audits:review')).toBe(true)
+        expect(acl.isAllowed('reviewer-lead', 'audits:comments:needs-work')).toBe(true)
+        // own permissions
+        expect(acl.isAllowed('reviewer-lead', 'audits:review-all')).toBe(true)
+        expect(acl.isAllowed('reviewer-lead', 'data:stats')).toBe(true)
+        // NOT inherited
+        expect(acl.isAllowed('reviewer-lead', 'backups:create')).toBe(false)
+      })
+
+      it('User without a role add-on cannot use add-on permissions', async () => {
+        // user 'user2' has roles: ['user'] only
+        var response = await request(app).post('/api/users/token').send({username: 'user2', password: 'User1234'})
+        expect(response.status).toBe(200)
+        var plainUserToken = response.body.datas.token
+
+        // Try backup creation — requires backups:create (backup-operator role only)
+        response = await request(app).post('/api/backups')
+          .set('Cookie', [`token=JWT ${plainUserToken}`])
+          .send({})
+        expect(response.status).toBe(403)
       })
     })
 

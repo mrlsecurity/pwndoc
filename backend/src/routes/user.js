@@ -109,7 +109,8 @@ module.exports = function(app) {
         .then((users) => {
             var reviewers = [];
             users.forEach(user => {
-                if (acl.isAllowed(user.role, 'audits:review') || acl.isAllowed(user.role, 'audits:review-all')) {
+                var userRoles = (user.roles && user.roles.length) ? user.roles : ['user'];
+                if (acl.isAllowed(userRoles, 'audits:review') || acl.isAllowed(userRoles, 'audits:review-all')) {
                     reviewers.push(user);
                 }
             })
@@ -182,7 +183,13 @@ module.exports = function(app) {
         user.lastname = req.body.lastname;
 
         //Optionals params
-        user.role = req.body.role || 'user';
+        if (Array.isArray(req.body.roles) && req.body.roles.length > 0) {
+            user.roles = req.body.roles.filter(r => typeof r === 'string');
+        } else if (typeof req.body.role === 'string' && req.body.role) {
+            user.roles = [req.body.role];
+        } else {
+            user.roles = ['user'];
+        }
         if (req.body.email) user.email = req.body.email;
         if (req.body.phone) user.phone = req.body.phone;
         if (req.body.jobTitle) user.jobTitle = req.body.jobTitle;
@@ -208,7 +215,7 @@ module.exports = function(app) {
         user.password = req.body.password;
         user.firstname = req.body.firstname;
         user.lastname = req.body.lastname;
-        user.role = 'admin';
+        user.roles = ['admin'];
 
         User.getAll()
         .then(users => {
@@ -289,7 +296,11 @@ module.exports = function(app) {
         if (!_.isNil(req.body.email)) user.email = req.body.email;
         if (!_.isNil(req.body.phone)) user.phone = req.body.phone;
         if (!_.isNil(req.body.jobTitle)) user.jobTitle = req.body.jobTitle;
-        if (req.body.role) user.role = req.body.role;
+        if (Array.isArray(req.body.roles) && req.body.roles.length > 0) {
+            user.roles = req.body.roles.filter(r => typeof r === 'string');
+        } else if (typeof req.body.role === 'string' && req.body.role) {
+            user.roles = [req.body.role];
+        }
         if (typeof(req.body.totpEnabled) === 'boolean') user.totpEnabled = req.body.totpEnabled;
         if (typeof(req.body.enabled) === 'boolean') user.enabled = req.body.enabled;
 

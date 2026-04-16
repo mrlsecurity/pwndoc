@@ -159,6 +159,8 @@ export default {
     let result = rows && rows.filter(row => {
         for (const [key, value] of Object.entries(terms)) { // for each search term
           let searchString = (_.get(row, key) || "")
+          if (Array.isArray(searchString))
+            searchString = searchString.join(', ')
           if (typeof searchString === "string")
             searchString = searchString.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
           let termString = (value || "")

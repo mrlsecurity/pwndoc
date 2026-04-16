@@ -11,7 +11,10 @@
                         <q-item>
                             <q-item-section side>{{$t('role')}}</q-item-section>
                             <q-item-section side>
-                                <q-chip square :label="user.role" class="text-white" :color="(user.role === 'admin')?'orange':'info'" />
+                                <template v-if="Array.isArray(user.roles)">
+                                    <q-chip v-for="r in user.roles" :key="r" square :label="r" class="text-white" :color="(r === 'admin')?'orange':'info'" />
+                                </template>
+                                <q-chip v-else square :label="user.roles" class="text-white" :color="(user.roles === 'admin')?'orange':'info'" />
                             </q-item-section>
                         </q-item>
                         <q-item>

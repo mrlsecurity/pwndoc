@@ -110,6 +110,12 @@ class ACL {
     }
 
     isAllowed(role, permission) {
+        // Accept an array of role names — allow if ANY role grants the permission
+        if (Array.isArray(role)) {
+            if (role.length === 0) return this.isAllowed('user', permission)
+            return role.some(r => this.isAllowed(r, permission))
+        }
+
         // Check if role exists
         if(!this.roles[role] && !this.roles['user']) {
             return false
@@ -183,11 +189,23 @@ class ACL {
     }
 
     getRoles(role) {
+        // Accept an array of role names — union the permissions
+        if (Array.isArray(role)) {
+            if (role.length === 0) return this.getRoles('user')
+            var union = []
+            for (var r of role) {
+                var perms = this.buildRoles(r)
+                if (perms.includes('*')) return '*'
+                union = [...new Set([...union, ...perms])]
+            }
+            return union
+        }
+
         var result = this.buildRoles(role)
 
         if (result.includes('*'))
             return '*'
-        
+
         return result
     }
 }
