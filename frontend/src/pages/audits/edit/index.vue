@@ -80,19 +80,22 @@
 							</q-btn>
 						</q-item-section>
 						<q-item-section side class="topButtonSection">
-							<q-btn-dropdown flat color="info" :label="$t('btn.exportFindings')" no-caps dense>
-								<q-list>
-									<q-item clickable v-close-popup @click="exportFindings('csv')">
-										<q-item-section>CSV</q-item-section>
-									</q-item>
-									<q-item clickable v-close-popup @click="exportFindings('json-defectdojo')">
-										<q-item-section>DefectDojo JSON</q-item-section>
-									</q-item>
-									<q-item clickable v-close-popup @click="exportFindings('json-pwndoc')">
-										<q-item-section>PwnDoc JSON</q-item-section>
-									</q-item>
-								</q-list>
-							</q-btn-dropdown>
+							<q-btn flat color="info" no-caps size="sm" icon="fa fa-file-export">
+								<q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('tooltip.exportFindings')}}</q-tooltip>
+								<q-menu>
+									<q-list>
+										<q-item clickable v-close-popup @click="exportFindings('csv')">
+											<q-item-section>CSV</q-item-section>
+										</q-item>
+										<q-item clickable v-close-popup @click="exportFindings('json-defectdojo')">
+											<q-item-section>DefectDojo JSON</q-item-section>
+										</q-item>
+										<q-item clickable v-close-popup @click="exportFindings('json-pwndoc')">
+											<q-item-section>PwnDoc JSON</q-item-section>
+										</q-item>
+									</q-list>
+								</q-menu>
+							</q-btn>
 						</q-item-section>
 					</q-item>
 
