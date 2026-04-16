@@ -93,7 +93,7 @@ The language details from the Vulnerability of the right column will be moved to
 
 ## Validate
 
-All users can request creation or modifications on a vulnerability when redacting findings in an Audit. Users with admin role can see and validate those modifications in Vulnerabilities menu.
+All users can request creation or modifications on a vulnerability when redacting findings in an Audit. Users with vuln-librarian role or admin can see and validate those modifications in Vulnerabilities menu.
 
 ![Validate](/_images/new_updates_vulns.png)
 

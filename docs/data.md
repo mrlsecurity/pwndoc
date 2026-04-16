@@ -17,22 +17,75 @@ A Collaborator is defined by:
 - Role
 - Password
 
-There are 3 different roles:
+There are 12 different roles:
 
-**user**
+**user** (base)
 
+- Default role for all users
 - Read/Write on created and collaboration Audits
-- Readonly on Vulnerabilities
+- Read on Vulnerabilities
 - Read/Write on *Companies* and *Clients* Data
+- Use AI features
 
-**report**
+**pentester-senior**
 
-- Inherit from user role
-- \+ Read/Write on all Audits
+- Inherits from user
+- + Update all audits
+- + Comment on all audits
+- + See users currently editing
+
+**reviewer**
+
+- Inherits from user
+- + Review assigned audits
+- + Mark comments as "needs work"
+
+**reviewer-lead**
+
+- Inherits from reviewer
+- + Review all audits
+- + Edit all comments
+- + View data statistics
+
+**vuln-librarian**
+
+- Inherits from user
+- + Full CRUD on Vulnerabilities
+
+**data-manager**
+
+- Inherits from user
+- + Full CRUD on Clients, Companies, Languages, Audit Types, Vulnerability Types, Vulnerability Categories, Sections, Custom Fields
+
+**template-manager**
+
+- Inherits from user
+- + Full CRUD on Templates
+
+**audit-manager**
+
+- Inherits from user
+- + Read all audits
+- + Delete all audits
+
+**user-manager**
+
+- Inherits from user
+- + Create/Update user accounts
+
+**backup-operator**
+
+- Inherits from user
+- + Full CRUD on Backups
+
+**ai-admin**
+
+- Inherits from user
+- + Configure AI settings
 
 **admin**
 
-- Read/Write on everything
+- Full access to everything (wildcard)
 
 
 ## Companies

@@ -50,7 +50,7 @@ Example for `users`:
 
 ```
 > db.users.find()
-{ "_id" : ObjectId("REDACTED"), "role" : "admin", "username" : "demo", "password" : "REDACTED", "firstname" : "demo", "lastname" : "demo", "createdAt" : ISODate("2020-08-21T15:45:18.999Z"), "updatedAt" : ISODate("2020-09-21T14:45:18.999Z"), "__v" : 0 }
+{ "_id" : ObjectId("REDACTED"), "roles" : ["user", "admin"], "username" : "demo", "password" : "REDACTED", "firstname" : "demo", "lastname" : "demo", "createdAt" : ISODate("2020-08-21T15:45:18.999Z"), "updatedAt" : ISODate("2020-09-21T14:45:18.999Z"), "__v" : 0 }
 ...
 ```
 
@@ -76,7 +76,7 @@ to query specific objects:
 It is possible to [filter the output](https://docs.mongodb.com/compass/current/query/project/):
 
 ```
-> db.users.find( { role: "admin" }, {_id: 1} )
+> db.users.find( { roles: "admin" }, {_id: 1} )
 ```
 
 For example to get a synthetic view of custom fields:
