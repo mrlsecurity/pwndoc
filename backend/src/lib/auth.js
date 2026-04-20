@@ -139,19 +139,59 @@ class ACL {
     hasPermission (permission) {
         var Response = require('./httpResponse')
         var jwt = require('jsonwebtoken')
+        var mongoose = require('mongoose')
+        var actionLabels = require('./api-key-actions')
+        var self = this
 
         return (req, res, next) => {
+            var authHeader = req.headers['authorization']
+            if (authHeader && authHeader.startsWith('Bearer pwndoc_')) {
+                var raw = authHeader.slice('Bearer '.length)
+                var User = mongoose.model('User')
+                User.findByApiKey(raw).then(match => {
+                    if (!match) return Response.Unauthorized(res, 'Invalid API key')
+                    var user = match.user
+                    if (permission !== 'validtoken' && !self.isAllowed(user.roles, permission))
+                        return Response.Forbidden(res, 'Insufficient privileges')
+
+                    req.decodedToken = {
+                        id: user._id,
+                        username: user.username,
+                        role: user.roles,        // back-compat (auth code does isAllowed(decoded.role, ...))
+                        roles: user.roles,
+                        firstname: user.firstname,
+                        lastname: user.lastname,
+                        email: user.email,
+                        phone: user.phone,
+                        jobTitle: user.jobTitle
+                    }
+                    req.apiKeyId = match.apiKeyId
+
+                    // Fire-and-forget access log write. IMPORTANT: never trust X-Forwarded-For.
+                    var entry = {
+                        at: new Date(),
+                        ip: req.ip || (req.connection && req.connection.remoteAddress) || '',
+                        userAgent: req.headers['user-agent'] || '',
+                        method: req.method,
+                        path: req.originalUrl,
+                        action: actionLabels.labelFor(req)
+                    }
+                    User.recordApiKeyAccess(user._id, entry).catch(() => {})
+                    return next()
+                }).catch(() => Response.Internal(res, { message: 'API key auth error' }))
+                return
+            }
+
+            // ---- Existing cookie-JWT branch (unchanged) ----
             if (!req.cookies['token']) {
                 Response.Unauthorized(res, 'No token provided')
                 return;
             }
-    
             var cookie = req.cookies['token'].split(' ')
             if (cookie.length !== 2 || cookie[0] !== 'JWT') {
                 Response.Unauthorized(res, 'Bad token type')
                 return
             }
-    
             var token = cookie[1]
             jwt.verify(token, jwtSecret, (err, decoded) => {
                 if (err) {
@@ -161,12 +201,10 @@ class ACL {
                         Response.Unauthorized(res, 'Invalid token')
                     return
                 }
-                
-                if ( permission === "validtoken" || this.isAllowed(decoded.role, permission)) {
+                if ( permission === "validtoken" || self.isAllowed(decoded.role, permission)) {
                     req.decodedToken = decoded
                     return next()
-                }
-                else {
+                } else {
                     Response.Forbidden(res, 'Insufficient privileges')
                     return
                 }
