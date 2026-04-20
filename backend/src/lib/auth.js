@@ -176,7 +176,9 @@ class ACL {
                         path: req.originalUrl,
                         action: actionLabels.labelFor(req)
                     }
-                    User.recordApiKeyAccess(user._id, entry).catch(() => {})
+                    User.recordApiKeyAccess(user._id, entry).catch(err => { 
+                        console.warn('Failed to record API key access log:', err && err.message) 
+                    })
                     return next()
                 }).catch(() => Response.Internal(res, { message: 'API key auth error' }))
                 return

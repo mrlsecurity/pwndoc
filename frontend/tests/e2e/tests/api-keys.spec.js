@@ -28,10 +28,7 @@ test.describe('API Keys — profile panel', () => {
     await createBtn.click();
 
     // Step 3: Assert the reveal dialog appears and capture the key text
-    // The dialog contains a readonly textarea with the plaintext key
-    const revealTextarea = page.locator('q-dialog textarea, dialog textarea, [role="dialog"] textarea').first();
-    // Also accept a q-input rendered textarea inside the dialog
-    const keyTextarea = page.locator('q-dialog').locator('textarea').first();
+    const keyTextarea = page.locator('[data-testid="api-key-reveal-textarea"]');
     await expect(keyTextarea).toBeVisible({ timeout: 10000 });
     const capturedKey = await keyTextarea.inputValue();
     expect(capturedKey).toMatch(/^pwndoc_[0-9a-f]{64}$/);

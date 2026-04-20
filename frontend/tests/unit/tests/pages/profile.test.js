@@ -15,7 +15,10 @@ vi.mock('@/services/user', () => ({
     refreshToken: vi.fn(),
     getTotpQrCode: vi.fn(),
     setupTotp: vi.fn(),
-    cancelTotp: vi.fn()
+    cancelTotp: vi.fn(),
+    getApiKey: vi.fn().mockResolvedValue({ data: { datas: null } }),
+    createApiKey: vi.fn(),
+    revokeApiKey: vi.fn()
   }
 }))
 

@@ -280,7 +280,7 @@
                     </q-card-section>
                     <q-card-section>
                         <div class="q-mb-sm text-negative">{{ $t('apiKeyCopyWarning') }}</div>
-                        <q-input readonly :model-value="apiKeyReveal.key" type="textarea" autogrow outlined />
+                        <q-input readonly :model-value="apiKeyReveal.key" type="textarea" autogrow outlined data-testid="api-key-reveal-textarea" />
                     </q-card-section>
                     <q-card-actions align="right">
                         <q-btn :label="$t('btn.copy')" color="primary" unelevated @click="copyApiKey" />
