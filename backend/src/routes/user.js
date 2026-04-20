@@ -287,7 +287,7 @@ module.exports = function(app) {
             return;
         }
         var user = {};
-    
+
         // Optionals params
         if (req.body.username) user.username = req.body.username;
         if (req.body.password) user.password = req.body.password;
@@ -307,5 +307,46 @@ module.exports = function(app) {
         User.updateUser(req.params.id, user)
         .then(msg => Response.Ok(res, msg))
         .catch(err => Response.Internal(res, err));
+    });
+
+    // Helper: reject if caller is using an API key (keys cannot manage keys)
+    function apiKeyForbidden(req, res) {
+        if (req.apiKeyId) {
+            Response.Forbidden(res, 'API keys cannot be managed via an API key')
+            return true
+        }
+        return false
+    }
+
+    // GET current user's API key metadata
+    app.get("/api/users/me/api-key", acl.hasPermission('validtoken'), function(req, res) {
+        if (apiKeyForbidden(req, res)) return
+        User.getApiKey(req.decodedToken.id)
+            .then(data => Response.Ok(res, data))   // data may be null
+            .catch(err => Response.Internal(res, err))
+    });
+
+    // CREATE the single API key
+    app.post("/api/users/me/api-key", acl.hasPermission('validtoken'), function(req, res) {
+        if (apiKeyForbidden(req, res)) return
+        if (!req.body.name || typeof req.body.name !== 'string')
+            return Response.BadParameters(res, 'Missing required field: name')
+
+        User.createApiKey(req.decodedToken.id, req.body.name)
+            .then(result => Response.Created(res, result))
+            .catch(err => {
+                if (err && err.fn === 'Conflict')   return Response.Forbidden(res, err.message)
+                if (err && err.fn === 'NotFound')   return Response.NotFound(res, err.message)
+                if (err && err.fn === 'BadParameters') return Response.BadParameters(res, err.message)
+                Response.Internal(res, err)
+            })
+    });
+
+    // REVOKE (delete) the API key
+    app.delete("/api/users/me/api-key", acl.hasPermission('validtoken'), function(req, res) {
+        if (apiKeyForbidden(req, res)) return
+        User.revokeApiKey(req.decodedToken.id)
+            .then(msg => Response.Ok(res, msg))
+            .catch(err => Response.Internal(res, err))
     });
 }
