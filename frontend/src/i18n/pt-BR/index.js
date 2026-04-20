@@ -34,7 +34,10 @@ export default {
       accountsEnabled: 'Contas Habilitadas',
       accountsDisabled: 'Contas Desabilitadas',
       accountEnabled: 'Conta Habilitada',
-      accountDisabled: 'Conta Desabilitada'
+      accountDisabled: 'Conta Desabilitada',
+      close: 'Close',
+      copy: 'Copy',
+      revoke: 'Revoke',
   },
   tooltip: {
     usersConnected: 'Usuários na Auditoria:',
@@ -120,7 +123,10 @@ msg: {
     tryingToContactBackend: '<p>Tentando entrar em contato com o servidor</p>',
     wrongContactingBackend: 'Algo deu errado ao entrar em contato com o servidor',
     highlightWarningTitle: 'Texto destacado ainda presente!',
-    noAuditTypeForThisStage: 'Nenhum tipo de auditoria para esta etapa. Crie um tipo de auditoria primeiro'
+    noAuditTypeForThisStage: 'Nenhum tipo de auditoria para esta etapa. Crie um tipo de auditoria primeiro',
+    apiKeyNameRequired: 'API key name is required',
+    apiKeyRevoked: 'API key revoked',
+    copiedToClipboard: 'Copied to clipboard',
 },
 err: {
   notDefinedLanguage: 'Não definido para este idioma',
@@ -548,4 +554,21 @@ spellcheckCategory: {
     COLLOQUIALISMS: { label: 'Coloquialismos', description: 'Expressões informais ou coloquiais' },
     MISC: { label: 'Miscelânea', description: 'Outras regras não cobertas pelas categorias acima' },
 },
+// API Keys
+apiKeys: 'API Key',
+apiKeyIntro: 'Create an API key to authenticate scripts and integrations as yourself. You can have at most one key at a time.',
+apiKeyName: 'Key name',
+apiKeyPrefix: 'Prefix',
+apiKeyCreatedTitle: 'API key created',
+apiKeyCopyWarning: 'Copy this key now. It will not be shown again.',
+apiKeyRecentAccesses: 'Recent accesses',
+apiKeyNoAccesses: 'No recorded accesses yet.',
+lastUsed: 'Last used',
+never: 'Never',
+ipAddress: 'IP',
+userAgent: 'User-Agent',
+action: 'Action',
+time: 'Time',
+created: 'Created',
+name: 'Name',
 }

@@ -37,7 +37,9 @@ export default {
         accountsDisabled: 'Disabled accounts',
         accountEnabled: 'Account enabled',
         accountDisabled: 'Account disabled',
-        exportFindings: 'Export'
+        exportFindings: 'Export',
+        copy: 'Copy',
+        revoke: 'Revoke',
     },
     tooltip: {
         usersConnected: 'Users on the Audit:',
@@ -154,7 +156,10 @@ export default {
         tryingToContactBackend: '<p>Trying to contact backend</p>',
         wrongContactingBackend: 'Something went wrong contacting backend',
         highlightWarningTitle: 'Highlighted Text still present !',
-        noAuditTypeForThisStage: 'No Assessments. Create an Audit Type first'
+        noAuditTypeForThisStage: 'No Assessments. Create an Audit Type first',
+        apiKeyNameRequired: 'API key name is required',
+        apiKeyRevoked: 'API key revoked',
+        copiedToClipboard: 'Copied to clipboard',
     },
     err: {
         notDefinedLanguage: 'Not defined for this language',
@@ -921,4 +926,20 @@ export default {
         COLLOQUIALISMS: { label: 'Colloquialisms', description: 'Informal or colloquial expressions' },
         MISC: { label: 'Miscellaneous', description: 'Other rules not covered by the categories above' },
     },
+    // API Keys
+    apiKeys: 'API Key',
+    apiKeyIntro: 'Create an API key to authenticate scripts and integrations as yourself. You can have at most one key at a time.',
+    apiKeyName: 'Key name',
+    apiKeyPrefix: 'Prefix',
+    apiKeyCreatedTitle: 'API key created',
+    apiKeyCopyWarning: 'Copy this key now. It will not be shown again.',
+    apiKeyRecentAccesses: 'Recent accesses',
+    apiKeyNoAccesses: 'No recorded accesses yet.',
+    lastUsed: 'Last used',
+    never: 'Never',
+    ipAddress: 'IP',
+    userAgent: 'User-Agent',
+    action: 'Action',
+    time: 'Time',
+    created: 'Created',
 }

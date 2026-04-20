@@ -32,6 +32,9 @@ export default {
         valid: 'Validées',
         new: 'Nouvelles',
         updates: 'Modifiées',
+        close: 'Close',
+        copy: 'Copy',
+        revoke: 'Revoke',
     },
     tooltip: {
         usersConnected: 'Utilisateurs sur l\'Audit:',
@@ -119,7 +122,10 @@ export default {
         tryingToContactBackend: '<p>Essaie de contacter le backend</p>',
         wrongContactingBackend: 'Une erreur s\'est produite lors du contact avec le backend',
         highlightWarningTitle: 'Texte Surligné toujours présent !',
-        noAuditTypeForThisStage: 'Aucun type d\'Audit pour cette phase'
+        noAuditTypeForThisStage: 'Aucun type d\'Audit pour cette phase',
+        apiKeyNameRequired: 'API key name is required',
+        apiKeyRevoked: 'API key revoked',
+        copiedToClipboard: 'Copied to clipboard',
     },
     err: {
         notDefinedLanguage: 'Non défini pour cette langue',
@@ -452,5 +458,21 @@ export default {
         SEMANTICS: { label: 'Sémantique', description: 'Mots utilisés avec un sens incorrect' },
         COLLOQUIALISMS: { label: 'Expressions familières', description: 'Expressions informelles ou familières' },
         MISC: { label: 'Divers', description: 'Autres règles non couvertes par les catégories ci-dessus' },
-    }
+    },
+    // API Keys
+    apiKeys: 'API Key',
+    apiKeyIntro: 'Create an API key to authenticate scripts and integrations as yourself. You can have at most one key at a time.',
+    apiKeyName: 'Key name',
+    apiKeyPrefix: 'Prefix',
+    apiKeyCreatedTitle: 'API key created',
+    apiKeyCopyWarning: 'Copy this key now. It will not be shown again.',
+    apiKeyRecentAccesses: 'Recent accesses',
+    apiKeyNoAccesses: 'No recorded accesses yet.',
+    lastUsed: 'Last used',
+    never: 'Never',
+    ipAddress: 'IP',
+    userAgent: 'User-Agent',
+    action: 'Action',
+    time: 'Time',
+    created: 'Created',
   }

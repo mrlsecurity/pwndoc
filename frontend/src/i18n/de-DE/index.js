@@ -26,6 +26,9 @@ export default {
         valid: 'Geprüft',
         new: 'Neu',
         updates: 'Aktualisierungen',
+        close: 'Close',
+        copy: 'Copy',
+        revoke: 'Revoke',
     },
     tooltip: {
         usersConnected: 'Benutzer im Audit:',
@@ -103,6 +106,9 @@ export default {
         vulnerabilityMergeOk: 'Schwachstellen erfolgreich zusammengeführt',
         tryingToContactBackend: '<p>Versuche das Backend zu erreichen</p>',
         wrongContactingBackend: 'Beim Versuch das Backend zu erreichen ist etwas schief gegangen',
+        apiKeyNameRequired: 'API key name is required',
+        apiKeyRevoked: 'API key revoked',
+        copiedToClipboard: 'Copied to clipboard',
     },
     err: {
         notDefinedLanguage: 'Für diese Sprache nicht definiert',
@@ -508,5 +514,21 @@ export default {
         SEMANTICS: { label: 'Semantik', description: 'Wörter mit falscher Bedeutungsverwendung' },
         COLLOQUIALISMS: { label: 'Umgangssprache', description: 'Umgangssprachliche oder informelle Ausdrücke' },
         MISC: { label: 'Sonstiges', description: 'Sonstige Regeln, die nicht durch die obigen Kategorien abgedeckt sind' },
-    }
+    },
+    // API Keys
+    apiKeys: 'API Key',
+    apiKeyIntro: 'Create an API key to authenticate scripts and integrations as yourself. You can have at most one key at a time.',
+    apiKeyName: 'Key name',
+    apiKeyPrefix: 'Prefix',
+    apiKeyCreatedTitle: 'API key created',
+    apiKeyCopyWarning: 'Copy this key now. It will not be shown again.',
+    apiKeyRecentAccesses: 'Recent accesses',
+    apiKeyNoAccesses: 'No recorded accesses yet.',
+    lastUsed: 'Last used',
+    never: 'Never',
+    ipAddress: 'IP',
+    userAgent: 'User-Agent',
+    action: 'Action',
+    time: 'Time',
+    created: 'Created',
   }

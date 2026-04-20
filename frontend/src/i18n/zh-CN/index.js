@@ -29,7 +29,10 @@ export default {
         accountsEnabled: '账号启用',
         accountsDisabled: '账号禁用',
         accountEnabled: '账号启用',
-        accountDisabled: '账号禁用'
+        accountDisabled: '账号禁用',
+        close: 'Close',
+        copy: 'Copy',
+        revoke: 'Revoke',
     },
     tooltip: {
         usersConnected: '正在做审计的用户',
@@ -107,6 +110,9 @@ export default {
         vulnerabilityMergeOk: '漏洞合并成功',
         tryingToContactBackend: '<p>尝试连接后端服务</p>',
         wrongContactingBackend: '连接后端服务失败',
+        apiKeyNameRequired: 'API key name is required',
+        apiKeyRevoked: 'API key revoked',
+        copiedToClipboard: 'Copied to clipboard',
     },
     err: {
         notDefinedLanguage: '没有定义这种语言',
@@ -513,5 +519,21 @@ export default {
         SEMANTICS: { label: '语义', description: '含义使用不当的词语' },
         COLLOQUIALISMS: { label: '口语表达', description: '非正式或口语化表达' },
         MISC: { label: '其他', description: '上述类别未涵盖的其他规则' },
-    }
+    },
+    // API Keys
+    apiKeys: 'API Key',
+    apiKeyIntro: 'Create an API key to authenticate scripts and integrations as yourself. You can have at most one key at a time.',
+    apiKeyName: 'Key name',
+    apiKeyPrefix: 'Prefix',
+    apiKeyCreatedTitle: 'API key created',
+    apiKeyCopyWarning: 'Copy this key now. It will not be shown again.',
+    apiKeyRecentAccesses: 'Recent accesses',
+    apiKeyNoAccesses: 'No recorded accesses yet.',
+    lastUsed: 'Last used',
+    never: 'Never',
+    ipAddress: 'IP',
+    userAgent: 'User-Agent',
+    action: 'Action',
+    time: 'Time',
+    created: 'Created',
   }
