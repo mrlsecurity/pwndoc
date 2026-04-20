@@ -10,6 +10,26 @@ var _ = require('lodash')
 var QRCode = require('qrcode');
 var OTPAuth = require('otpauth');
 
+var crypto = require('crypto');
+
+var AccessLogSchema = new Schema({
+    at:        { type: Date,   default: Date.now },
+    ip:        { type: String, default: '' },
+    userAgent: { type: String, default: '' },
+    method:    { type: String, default: '' },
+    path:      { type: String, default: '' },
+    action:    { type: String, default: '' }
+}, { _id: false });
+
+var ApiKeySchema = new Schema({
+    name:           { type: String, required: true },
+    prefix:         { type: String, required: true },
+    hash:           { type: String, required: true },
+    created:        { type: Date,   default: Date.now },
+    lastUsed:       { type: Date,   default: null },
+    recentAccesses: { type: [AccessLogSchema], default: [] }
+}, { _id: true });
+
 var UserSchema = new Schema({
     username:       {type: String, unique: true, required: true},
     password:       {type: String, required: true},
@@ -22,7 +42,8 @@ var UserSchema = new Schema({
     totpEnabled:    {type: Boolean, default: false},
     totpSecret:     {type: String, default: ''},
     enabled:        {type: Boolean, default: true},
-    refreshTokens:  [{_id: false, sessionId: String, userAgent: String, token: String}]
+    refreshTokens:  [{_id: false, sessionId: String, userAgent: String, token: String}],
+    apiKey:         { type: ApiKeySchema, default: null }
 }, {timestamps: true});
 
 var totpConfig = {
@@ -80,6 +101,81 @@ UserSchema.statics.create = function (user) {
         })
     })
 }
+
+// Create a single API key for the user. Rejects if one already exists.
+// Returns { name, prefix, key } — plaintext key shown ONCE.
+UserSchema.statics.createApiKey = function (userId, name) {
+    return new Promise((resolve, reject) => {
+        if (!name || typeof name !== 'string' || !name.trim())
+            return reject({ fn: 'BadParameters', message: 'API key name is required' });
+
+        User.findById(userId).select('apiKey').then(user => {
+            if (!user) return reject({ fn: 'NotFound', message: 'User not found' });
+            if (user.apiKey) return reject({ fn: 'Conflict', message: 'An API key already exists. Revoke it before creating a new one.' });
+
+            var raw = 'pwndoc_' + crypto.randomBytes(32).toString('hex');
+            var hash = crypto.createHash('sha256').update(raw).digest('hex');
+            var prefix = raw.slice(0, 15); // "pwndoc_" + 8 hex chars
+
+            user.apiKey = {
+                name: name.trim(),
+                prefix: prefix,
+                hash: hash,
+                created: new Date(),
+                lastUsed: null,
+                recentAccesses: []
+            };
+            user.save()
+                .then(() => resolve({ name: user.apiKey.name, prefix: prefix, key: raw }))
+                .catch(err => reject(err));
+        }).catch(err => reject(err));
+    });
+};
+
+// Return the user's API key metadata (never the hash). null if none.
+UserSchema.statics.getApiKey = function (userId) {
+    return User.findById(userId).select('apiKey').then(user => {
+        if (!user || !user.apiKey) return null;
+        var k = user.apiKey;
+        return {
+            _id: k._id,
+            name: k.name,
+            prefix: k.prefix,
+            created: k.created,
+            lastUsed: k.lastUsed,
+            recentAccesses: (k.recentAccesses || []).slice().reverse() // newest first
+        };
+    });
+};
+
+UserSchema.statics.revokeApiKey = function (userId) {
+    return User.updateOne({ _id: userId }, { $set: { apiKey: null } })
+        .then(r => {
+            if (!r.matchedCount) throw { fn: 'NotFound', message: 'User not found' };
+            return { status: 'ok' };
+        });
+};
+
+// Look up a user by raw API key. Returns { user, apiKeyId } or null.
+UserSchema.statics.findByApiKey = function (rawKey) {
+    if (typeof rawKey !== 'string' || !rawKey.startsWith('pwndoc_')) return Promise.resolve(null);
+    var hash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    return User.findOne({ 'apiKey.hash': hash }).then(user => {
+        if (!user || !user.apiKey) return null;
+        return { user: user, apiKeyId: user.apiKey._id };
+    });
+};
+
+// Append an access log entry (capped at 5, newest last) and update lastUsed.
+UserSchema.statics.recordApiKeyAccess = function (userId, entry) {
+    return User.updateOne(
+        { _id: userId, apiKey: { $ne: null } },
+        {
+            $push: { 'apiKey.recentAccesses': { $each: [entry], $slice: -5 } },
+            $set:  { 'apiKey.lastUsed': entry.at || new Date() }
+        }
+    );
+};
 
 // Get all users
 UserSchema.statics.getAll = function () {
