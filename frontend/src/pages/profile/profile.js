@@ -12,12 +12,16 @@ export default {
             totpQrcode: "",
             totpSecret: "",
             totpToken: "",
-            errors: {username: "", firstname:"", lastname: "", currentPassword: "", newPassword: ""}
+            errors: {username: "", firstname:"", lastname: "", currentPassword: "", newPassword: ""},
+            apiKey: null,
+            apiKeyNewName: '',
+            apiKeyReveal: { show: false, name: '', prefix: '', key: '' },
         }
     },
 
     mounted: function() {
         this.getProfile();
+        this.loadApiKey();
     },
 
     methods: {
@@ -135,6 +139,44 @@ export default {
                     position: 'top-right'
                 })
             })
+        },
+
+        loadApiKey: function() {
+            UserService.getApiKey()
+                .then(resp => { this.apiKey = resp.data.datas; })
+                .catch(err => { console.log(err); });
+        },
+
+        createApiKey: function() {
+            if (!this.apiKeyNewName || !this.apiKeyNewName.trim()) {
+                Notify.create({ message: $t('msg.apiKeyNameRequired') || 'Name required', color: 'negative', textColor: 'white', position: 'top-right' });
+                return;
+            }
+            UserService.createApiKey(this.apiKeyNewName.trim())
+                .then(resp => {
+                    var d = resp.data.datas;
+                    this.apiKeyReveal = { show: true, name: d.name, prefix: d.prefix, key: d.key };
+                    this.apiKeyNewName = '';
+                    this.loadApiKey();
+                })
+                .catch(err => {
+                    var msg = (err && err.response && err.response.data && err.response.data.datas) || 'Error';
+                    Notify.create({ message: msg, color: 'negative', textColor: 'white', position: 'top-right' });
+                });
+        },
+
+        revokeApiKey: function() {
+            UserService.revokeApiKey()
+                .then(() => {
+                    this.apiKey = null;
+                    Notify.create({ message: $t('msg.apiKeyRevoked') || 'API key revoked', color: 'positive', textColor: 'white', position: 'top-right' });
+                })
+                .catch(err => { console.log(err); });
+        },
+
+        copyApiKey: function() {
+            navigator.clipboard.writeText(this.apiKeyReveal.key);
+            Notify.create({ message: $t('msg.copiedToClipboard') || 'Copied', color: 'positive', textColor: 'white', position: 'top-right' });
         },
 
         cleanErrors: function() {
