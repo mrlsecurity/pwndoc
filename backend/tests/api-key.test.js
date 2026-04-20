@@ -35,7 +35,8 @@ module.exports = function(request, app) {
         it('Bearer key authenticates /api/audits', async () => {
             var res = await request(app)
                 .get('/api/audits')
-                .set('Authorization', 'Bearer ' + apiKey);
+                .set('Authorization', 'Bearer ' + apiKey)
+                .set('User-Agent', 'pwndoc-test/1.0');
             expect(res.statusCode).toBe(200);
         });
 
@@ -53,7 +54,9 @@ module.exports = function(request, app) {
 
         it('recentAccesses is capped at 5', async () => {
             for (var i = 0; i < 7; i++) {
-                await request(app).get('/api/audits').set('Authorization', 'Bearer ' + apiKey);
+                await request(app).get('/api/audits')
+                    .set('Authorization', 'Bearer ' + apiKey)
+                    .set('User-Agent', 'pwndoc-test/1.0');
             }
             var res = await request(app)
                 .get('/api/users/me/api-key')
