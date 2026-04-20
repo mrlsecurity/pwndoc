@@ -124,6 +124,12 @@ function browserChain(browser, browserDevices, prevChainLast) {
       testMatch: ['**/vuln-merge.spec.js'],
       dependencies: deps(prefix('audit-edit')),
     },
+    {
+      name: prefix('api-keys'),
+      use: useWithAuth,
+      testMatch: ['**/api-keys.spec.js'],
+      dependencies: deps(prefix('audit-edit')),
+    },
     // Step 5j: settings-backup runs last among edge-case specs (restore is destructive)
     {
       name: prefix('settings-backup'),
@@ -139,6 +145,7 @@ function browserChain(browser, browserDevices, prevChainLast) {
         prefix('drag-drop'),
         ...(browser === 'chromium' ? [prefix('editor-images')] : []),
         prefix('vuln-merge'),
+        prefix('api-keys'),
       ],
     },
     // Step 6: Audits list with data (verify audit appears, warnings gone)
