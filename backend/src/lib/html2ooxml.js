@@ -51,7 +51,7 @@ function html2ooxml(html, style = '') {
                 cParagraph = new docx.Paragraph({heading: 'Heading6'})
             }
             else if (tag === "div" || tag === "p") {
-                if (style && typeof style === 'string')
+                if (style && typeof style === 'string' && !cParagraphProperties.numbering)
                     cParagraphProperties.style = style
                 cParagraph = new docx.Paragraph(cParagraphProperties)
             }
@@ -118,10 +118,12 @@ function html2ooxml(html, style = '') {
                 if (level >= 0 && list_state[level].startsWith('bullet:')) {
                     var numRef = parseInt(list_state[level].split(':')[1]);
                     cParagraphProperties.numbering = {reference: numRef, level: level}
+                    cParagraphProperties.style = 'ListBullet'
                 }
                 else if (level >= 0 && list_state[level].startsWith('number:')) {
                     var numRef = parseInt(list_state[level].split(':')[1]);
                     cParagraphProperties.numbering = {reference: numRef, level: level}
+                    cParagraphProperties.style = 'ListNumber'
                 }
                 else
                     cParagraphProperties.bullet = {level: 0}

@@ -36,7 +36,84 @@ async function generateDoc(audit) {
     html2ooxml.clearUsedNumIds();
     
     var preppedAudit = await prepAuditData(audit, settings)
-    
+
+    var opts = {};
+    // opts.centered = true;
+    opts.getImage = function(tagValue, tagName) {
+        if (tagValue !== "undefined") {
+            tagValue = tagValue.split(",")[1];
+            return Buffer.from(tagValue, 'base64');
+        }
+        // return fs.readFileSync(tagValue, {encoding: 'base64'});
+    }
+    opts.getSize = function(img, tagValue, tagName) {
+        if (img) {
+            var sizeObj = sizeOf.default(img);
+            var width = sizeObj.width;
+            var height = sizeObj.height;
+            if (tagName === "company.logo_small") {
+                var divider = sizeObj.height / 37;
+                height = 37;
+                width = Math.floor(sizeObj.width / divider);
+            }
+            else if (tagName === "company.logo") {
+                var divider = sizeObj.height / 250;
+                height = 250;
+                width = Math.floor(sizeObj.width / divider);
+                if (width > 400) {
+                    divider = sizeObj.width / 400;
+                    height = Math.floor(sizeObj.height / divider);
+                    width = 400;
+                }
+            }
+            else if (sizeObj.width > 600) {
+                var divider = sizeObj.width / 600;
+                width = 600;
+                height = Math.floor(sizeObj.height / divider);
+            }
+            return [width,height];
+        }
+        return [0,0];
+    }
+
+    if (settings.report.private.imageBorder && settings.report.private.imageBorderColor)
+        opts.border = settings.report.private.imageBorderColor.replace('#', '')
+
+    try {
+        var imageModule = new ImageModule(opts);
+    }
+    catch(err) {
+        console.log(err)
+    }
+    expressionParser.filters = {...reportFilters.expressions, ...reportFiltersCustom.expressions}   
+    var doc = new Docxtemplater(zip, {
+        parser: parser,
+        paragraphLoop: true,
+        modules: [imageModule],
+    });
+    try {
+        doc.render(preppedAudit);
+    }
+    catch (error) {
+        if (error.properties.id === 'multi_error') {
+            error.properties.errors.forEach(function(err) {
+                console.log(err);
+            });
+        }
+        else
+            console.log(error)
+        if (error.properties && error.properties.errors instanceof Array) {
+            const errorMessages = error.properties.errors.map(function (error) {
+                return `Explanation: ${error.properties.explanation}\nScope: ${JSON.stringify(error.properties.scope).substring(0,142)}...`
+            }).join("\n\n");
+            // errorMessages is a humanly readable message looking like this :
+            // 'The tag beginning with "foobar" is unopened'
+            throw `Template Error:\n${errorMessages}`;
+        }
+        else {
+            throw error
+        }
+    }
     var usedNumIds = html2ooxml.getUsedNumIds();
     if (usedNumIds.bullet.length > 0 || usedNumIds.number.length > 0) {
         var numberingXml = zip.file("word/numbering.xml").asText();
@@ -137,84 +214,6 @@ async function generateDoc(audit) {
 
         numberingXml = numberingXml.replace('</w:numbering>', newEntries + '</w:numbering>');
         zip.file("word/numbering.xml", numberingXml);
-    }
-
-    var opts = {};
-    // opts.centered = true;
-    opts.getImage = function(tagValue, tagName) {
-        if (tagValue !== "undefined") {
-            tagValue = tagValue.split(",")[1];
-            return Buffer.from(tagValue, 'base64');
-        }
-        // return fs.readFileSync(tagValue, {encoding: 'base64'});
-    }
-    opts.getSize = function(img, tagValue, tagName) {
-        if (img) {
-            var sizeObj = sizeOf.default(img);
-            var width = sizeObj.width;
-            var height = sizeObj.height;
-            if (tagName === "company.logo_small") {
-                var divider = sizeObj.height / 37;
-                height = 37;
-                width = Math.floor(sizeObj.width / divider);
-            }
-            else if (tagName === "company.logo") {
-                var divider = sizeObj.height / 250;
-                height = 250;
-                width = Math.floor(sizeObj.width / divider);
-                if (width > 400) {
-                    divider = sizeObj.width / 400;
-                    height = Math.floor(sizeObj.height / divider);
-                    width = 400;
-                }
-            }
-            else if (sizeObj.width > 600) {
-                var divider = sizeObj.width / 600;
-                width = 600;
-                height = Math.floor(sizeObj.height / divider);
-            }
-            return [width,height];
-        }
-        return [0,0];
-    }
-
-    if (settings.report.private.imageBorder && settings.report.private.imageBorderColor)
-        opts.border = settings.report.private.imageBorderColor.replace('#', '')
-
-    try {
-        var imageModule = new ImageModule(opts);
-    }
-    catch(err) {
-        console.log(err)
-    }
-    expressionParser.filters = {...reportFilters.expressions, ...reportFiltersCustom.expressions}   
-    var doc = new Docxtemplater(zip, {
-        parser: parser,
-        paragraphLoop: true,
-        modules: [imageModule],
-    });
-    try {
-        doc.render(preppedAudit);
-    }
-    catch (error) {
-        if (error.properties.id === 'multi_error') {
-            error.properties.errors.forEach(function(err) {
-                console.log(err);
-            });
-        }
-        else
-            console.log(error)
-        if (error.properties && error.properties.errors instanceof Array) {
-            const errorMessages = error.properties.errors.map(function (error) {
-                return `Explanation: ${error.properties.explanation}\nScope: ${JSON.stringify(error.properties.scope).substring(0,142)}...`
-            }).join("\n\n");
-            // errorMessages is a humanly readable message looking like this :
-            // 'The tag beginning with "foobar" is unopened'
-            throw `Template Error:\n${errorMessages}`;
-        }
-        else {
-            throw error
-        }
     }
     var buf = doc.getZip().generate({type:"nodebuffer"});
 
