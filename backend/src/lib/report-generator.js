@@ -786,8 +786,9 @@ async function prepAuditData(data, settings) {
                 else tmpFinding.cvss.environmentalCellColor = cellNoneColor
 
                 tmpFinding.cvssObj = cvssStrToObject(tmpCVSS.vectorString)
+            }
         }
-        
+
         if (settings.report.public.scoringMethods.CVSS4) {
             // Handle CVSS 4.0
             var tmpCVSS = getSafeCvss4Data(finding.cvssv4);
