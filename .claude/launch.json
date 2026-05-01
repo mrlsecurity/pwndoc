@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Backend (Express API)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "backend",
+      "port": 4242
+    },
+    {
+      "name": "Frontend (Quasar SPA)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "frontend",
+      "port": 8081
+    },
+    {
+      "name": "Docker Full Stack (pwndoc-cli)",
+      "runtimeExecutable": "./pwndoc-cli",
+      "runtimeArgs": ["up", "--dev"],
+      "port": 8443
+    }
+  ]
+}
