@@ -1,7 +1,7 @@
 <template>
   <div class="qa-results-panel column full-height">
     <q-toolbar class="bg-grey-3" @mousedown.prevent>
-      <q-icon name="auto_awesome" size="sm" class="q-mr-sm" />
+      <q-icon name="fas fa-list-check" size="sm" class="q-mr-sm" />
       <q-toolbar-title class="text-subtitle1">{{ title }}</q-toolbar-title>
       <q-btn icon="close" flat round dense @click="$emit('close')" />
     </q-toolbar>
@@ -11,114 +11,162 @@
       <div class="q-mt-md text-grey-7">{{ runningLabel }}</div>
     </q-card-section>
 
-    <q-card-section v-else-if="errorMessage" class="text-negative col" @mousedown.prevent>
-      {{ errorMessage }}
-      <div class="q-mt-md">
-        <q-btn flat color="primary" :label="retryLabel" @click="$emit('retry')" />
-      </div>
-    </q-card-section>
-
     <template v-else>
       <q-card-section class="col-auto q-pb-none" @mousedown.prevent>
         <q-banner v-if="topBanner" dense rounded class="bg-blue-grey-1 text-grey-9 q-mb-md">
           {{ topBanner }}
         </q-banner>
 
-        <q-banner v-if="cached" dense rounded class="bg-blue-grey-1 text-grey-9 q-mb-md">
-          {{ cachedAtLabel }}
-        </q-banner>
-
-        <div class="row q-col-gutter-sm q-mb-md">
-          <div class="col-4">
-            <div
-            class="qa-stat qa-stat--error"
-            :class="{ 'qa-stat--active': severityFilter === 'error' }"
-            @click="setSeverityFilter('error')"
-            >
-              <div class="qa-stat__value">{{ counts.error }}</div>
-              <div class="qa-stat__label">{{ $t('auditQa.errors') }}</div>
-            </div>
-          </div>
-          <div class="col-4">
-            <div
-            class="qa-stat qa-stat--warning"
-            :class="{ 'qa-stat--active': severityFilter === 'warning' }"
-            @click="setSeverityFilter('warning')"
-            >
-              <div class="qa-stat__value">{{ counts.warning }}</div>
-              <div class="qa-stat__label">{{ $t('auditQa.warnings') }}</div>
-            </div>
-          </div>
-          <div class="col-4">
-            <div
-            class="qa-stat qa-stat--total"
-            :class="{ 'qa-stat--active': severityFilter === 'all' }"
-            @click="setSeverityFilter('all')"
-            >
-              <div class="qa-stat__value">{{ counts.total }}</div>
-              <div class="qa-stat__label">{{ $t('auditQa.total') }}</div>
-            </div>
+        <div v-if="previousRunEntries.length" class="qa-run-meta q-mb-md">
+          <div class="qa-run-meta__heading">{{ $t('auditQa.lastRun') }}</div>
+          <div
+          v-for="entry in previousRunEntries"
+          :key="entry.kind"
+          class="qa-run-meta__line"
+          >
+            <q-icon
+            :name="entry.kind === 'ai' ? 'auto_awesome' : 'rule'"
+            size="14px"
+            class="qa-run-meta__icon"
+            />
+            <span class="qa-run-meta__label">{{ entry.label }}</span>
+            <span v-if="entry.date" class="qa-run-meta__date">{{ entry.date }}</span>
           </div>
         </div>
+
+        <div v-if="errorMessage" class="text-negative q-mb-md">
+          {{ errorMessage }}
+        </div>
+
+        <div v-if="hasRunActions" class="column q-gutter-sm q-mb-md">
+          <q-btn
+          v-if="programmaticActionVisible"
+          outline
+          no-caps
+          color="primary"
+          :label="$t('auditQa.runProgrammatic')"
+          :disable="loading"
+          @click="$emit('run', 'programmatic')"
+          />
+          <q-btn
+          v-if="aiActionVisible"
+          outline
+          no-caps
+          color="primary"
+          :label="$t('auditQa.runAi')"
+          :disable="loading"
+          @click="$emit('run', 'ai')"
+          />
+          <q-btn
+          v-if="allActionVisible"
+          unelevated
+          no-caps
+          color="primary"
+          :label="$t('auditQa.runAll')"
+          :disable="loading"
+          @click="$emit('run', 'all')"
+          />
+        </div>
+
+        <template v-if="hasReportData">
+          <div class="row q-col-gutter-sm q-mb-md">
+            <div class="col-4">
+              <div
+              class="qa-stat qa-stat--error"
+              :class="{ 'qa-stat--active': severityFilter === 'error' }"
+              @click="setSeverityFilter('error')"
+              >
+                <div class="qa-stat__value">{{ counts.error }}</div>
+                <div class="qa-stat__label">{{ $t('auditQa.errors') }}</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div
+              class="qa-stat qa-stat--warning"
+              :class="{ 'qa-stat--active': severityFilter === 'warning' }"
+              @click="setSeverityFilter('warning')"
+              >
+                <div class="qa-stat__value">{{ counts.warning }}</div>
+                <div class="qa-stat__label">{{ $t('auditQa.warnings') }}</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div
+              class="qa-stat qa-stat--total"
+              :class="{ 'qa-stat--active': severityFilter === 'all' }"
+              @click="setSeverityFilter('all')"
+              >
+                <div class="qa-stat__value">{{ counts.total }}</div>
+                <div class="qa-stat__label">{{ $t('auditQa.total') }}</div>
+              </div>
+            </div>
+          </div>
+        </template>
       </q-card-section>
 
-      <q-separator />
+      <template v-if="hasReportData">
+        <q-separator />
 
-      <q-card-section class="qa-groups col q-pa-none" @mousedown.prevent>
-        <div v-if="!groupedIssues.length" class="text-center text-grey-6 q-pa-lg">
-          {{ $t('auditQa.noIssues') }}
-        </div>
+        <q-card-section class="qa-groups col q-pa-none" @mousedown.prevent>
+          <div v-if="!groupedIssues.length" class="text-center text-grey-6 q-pa-lg">
+            {{ $t('auditQa.noIssues') }}
+          </div>
 
-        <q-list v-else separator>
-          <q-expansion-item
-          v-for="group in groupedIssues"
-          :key="group.label"
-          default-opened
-          header-class="qa-group__header"
-          expand-icon-class="text-grey-7"
-          >
-            <template v-slot:header>
-              <q-item-section>
-                <q-item-label>{{ group.label }}</q-item-label>
-              </q-item-section>
-              <q-item-section side>
-                <q-badge color="grey-4" text-color="grey-9">{{ group.issues.length }}</q-badge>
-              </q-item-section>
-            </template>
-            <q-card flat bordered class="q-ma-sm">
-              <q-list separator>
-                <q-item
-                v-for="(issue, index) in group.issues"
-                :key="`${issue.location}:${issue.title}:${index}`"
-                class="qa-issue"
-                >
-                  <q-item-section avatar top>
-                    <q-icon :name="severityIcon(issue.severity)" :color="severityColor(issue.severity)" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label class="text-weight-medium">{{ issue.title }}</q-item-label>
-                    <q-item-label caption>{{ issue.message }}</q-item-label>
-                    <q-item-label caption class="q-mt-xs text-grey-7">
-                      {{ categoryLabel(issue.category) }}
-                      <span v-if="issue.source === 'ai'"> · {{ $t('auditQa.aiReview') }}</span>
-                    </q-item-label>
-                  </q-item-section>
-                  <q-item-section v-if="showNavigation" side top>
-                    <q-btn
-                    outline
-                    dense
-                    no-caps
-                    color="primary"
-                    :label="navigationLabel(issue)"
-                    icon-right="chevron_right"
-                    @click="$emit('navigate', issue)"
-                    />
-                  </q-item-section>
-                </q-item>
-              </q-list>
-            </q-card>
-          </q-expansion-item>
-        </q-list>
+          <q-list v-else separator>
+            <q-expansion-item
+            v-for="group in groupedIssues"
+            :key="group.label"
+            default-opened
+            header-class="qa-group__header"
+            expand-icon-class="text-grey-7"
+            >
+              <template v-slot:header>
+                <q-item-section>
+                  <q-item-label>{{ group.label }}</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-badge color="grey-4" text-color="grey-9">{{ group.issues.length }}</q-badge>
+                </q-item-section>
+              </template>
+              <q-card flat bordered class="q-ma-sm">
+                <q-list separator>
+                  <q-item
+                  v-for="(issue, index) in group.issues"
+                  :key="`${issue.location}:${issue.title}:${index}`"
+                  class="qa-issue"
+                  >
+                    <q-item-section avatar top>
+                      <q-icon :name="severityIcon(issue.severity)" :color="severityColor(issue.severity)" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label class="text-weight-medium">{{ issue.title }}</q-item-label>
+                      <q-item-label caption>{{ issue.message }}</q-item-label>
+                      <q-item-label caption class="q-mt-xs text-grey-7">
+                        {{ categoryLabel(issue.category) }}
+                        <span v-if="issue.source === 'ai'"> · {{ $t('auditQa.aiReview') }}</span>
+                      </q-item-label>
+                    </q-item-section>
+                    <q-item-section v-if="showNavigation" side top>
+                      <q-btn
+                      outline
+                      dense
+                      no-caps
+                      color="primary"
+                      :label="navigationLabel(issue)"
+                      icon-right="chevron_right"
+                      @click="$emit('navigate', issue)"
+                      />
+                    </q-item-section>
+                  </q-item>
+                </q-list>
+              </q-card>
+            </q-expansion-item>
+          </q-list>
+        </q-card-section>
+      </template>
+
+      <q-card-section v-else class="text-center text-grey-6 col" @mousedown.prevent>
+        {{ emptyStateLabel }}
       </q-card-section>
     </template>
   </div>
@@ -126,6 +174,8 @@
 
 <script>
 import { $t } from '@/boot/i18n'
+import { hasAnyProgrammaticQaCheckEnabled, hasAnyAiQaCheckEnabled } from '@/services/qa-checks'
+import { buildPreviousRunEntries } from '@/services/qa-display'
 
 export default {
   name: 'QaResultsPanel',
@@ -143,13 +193,37 @@ export default {
       type: String,
       default: ''
     },
+    hasReportData: {
+      type: Boolean,
+      default: false
+    },
+    programmaticRanAt: {
+      type: [String, Number, Date],
+      default: null
+    },
+    aiRanAt: {
+      type: [String, Number, Date],
+      default: null
+    },
+    emptyStateLabel: {
+      type: String,
+      default: () => $t('auditQa.noResultsYet')
+    },
     runningLabel: {
       type: String,
       default: () => $t('auditQa.running')
     },
-    retryLabel: {
-      type: String,
-      default: () => $t('auditQa.retry')
+    showProgrammaticAction: {
+      type: Boolean,
+      default: true
+    },
+    showAiAction: {
+      type: Boolean,
+      default: true
+    },
+    showAllAction: {
+      type: Boolean,
+      default: true
     },
     counts: {
       type: Object,
@@ -168,14 +242,6 @@ export default {
       type: Array,
       default: () => []
     },
-    cached: {
-      type: Boolean,
-      default: false
-    },
-    cachedAtLabel: {
-      type: String,
-      default: ''
-    },
     topBanner: {
       type: String,
       default: ''
@@ -190,7 +256,46 @@ export default {
     }
   },
 
-  emits: ['close', 'retry', 'update:severityFilter', 'navigate'],
+  emits: ['close', 'run', 'update:severityFilter', 'navigate'],
+
+  computed: {
+    qaChecks() {
+      return this.$settings?.ai?.public?.qaChecks || {}
+    },
+
+    programmaticActionVisible() {
+      return this.showProgrammaticAction &&
+        hasAnyProgrammaticQaCheckEnabled(this.qaChecks)
+    },
+
+    aiActionVisible() {
+      return this.showAiAction &&
+        hasAnyAiQaCheckEnabled(this.qaChecks)
+    },
+
+    allActionVisible() {
+      return this.showAllAction &&
+        this.programmaticActionVisible &&
+        this.aiActionVisible
+    },
+
+    previousRunEntries() {
+      if (this.programmaticRanAt || this.aiRanAt) {
+        return buildPreviousRunEntries({
+          programmaticRanAt: this.programmaticRanAt,
+          aiRanAt: this.aiRanAt
+        })
+      }
+
+      return []
+    },
+
+    hasRunActions() {
+      return this.programmaticActionVisible ||
+        this.aiActionVisible ||
+        this.allActionVisible
+    }
+  },
 
   methods: {
     setSeverityFilter(filter) {
@@ -223,6 +328,7 @@ export default {
         imageCaptions: $t('auditQa.category.imageCaptions'),
         duplicates: $t('auditQa.category.duplicates'),
         aiDuplicates: $t('auditQa.category.aiDuplicates'),
+        aiUnlinkedTranslations: $t('auditQa.category.aiUnlinkedTranslations'),
         other: $t('auditQa.category.other')
       }
       return labels[category] || labels.other
@@ -237,6 +343,53 @@ export default {
   height: 100%;
   user-select: none;
   caret-color: transparent;
+}
+
+.qa-run-meta {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #fafafa;
+}
+
+.qa-run-meta__heading {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #424242;
+  margin-bottom: 4px;
+}
+
+.qa-run-meta__line {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #616161;
+}
+
+.qa-run-meta__line + .qa-run-meta__line {
+  margin-top: 2px;
+}
+
+.qa-run-meta__icon {
+  flex-shrink: 0;
+  color: #757575;
+  align-self: center;
+}
+
+.qa-run-meta__label {
+  font-weight: 500;
+  color: #424242;
+}
+
+.qa-run-meta__date {
+  color: #757575;
+}
+
+.qa-run-meta__date::before {
+  content: '·';
+  margin-right: 4px;
 }
 
 .qa-stat {

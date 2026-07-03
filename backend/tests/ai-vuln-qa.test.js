@@ -2,7 +2,8 @@ const {
     runDuplicateChecks,
     runVulnerabilityStructuralChecks,
     getVulnerabilityDetail,
-    formatVulnerabilityLocation
+    formatVulnerabilityLocation,
+    buildVulnerabilitySnapshot
 } = require('../src/lib/ai-vuln-qa');
 
 module.exports = function() {
@@ -55,6 +56,24 @@ module.exports = function() {
             expect(detail.title).toBe('SQL Injection');
         });
 
+        it('should omit workflow status from template QA snapshots', () => {
+            const snapshot = buildVulnerabilitySnapshot({
+                status: 0,
+                details: [{
+                    locale: 'en',
+                    title: 'Template Title',
+                    description: '<p>Description</p>'
+                }]
+            }, {
+                locale: 'en',
+                title: 'Template Title',
+                description: '<p>Description</p>'
+            });
+
+            expect(snapshot.type).toBe('vulnerability_template');
+            expect(snapshot.status).toBeUndefined();
+        });
+
         it('should flag duplicate titles and identical content', () => {
             const issues = runDuplicateChecks({
                 vulnerabilities: sampleVulnerabilities,
@@ -90,7 +109,6 @@ module.exports = function() {
             });
 
             expect(issues.some((issue) => issue.title === 'Missing description')).toBe(true);
-            expect(issues.some((issue) => issue.title === 'Pending vulnerability updates')).toBe(true);
         });
     });
 };

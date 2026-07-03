@@ -28,6 +28,7 @@ module.exports = function(request, app) {
           "imageCaptions": true,
           "duplicates": true,
           "aiDuplicates": true,
+          "aiUnlinkedTranslations": true,
           "redaction": true,
           "customer": true,
           "instructions": true

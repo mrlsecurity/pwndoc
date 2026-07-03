@@ -103,6 +103,75 @@ module.exports = function(request, app) {
             expect(response.body.datas.redactionGuidelines.content).toBe('Secret redaction policy');
             expect(response.body.datas.qaInstructions.content).toBe('Secret QA checklist');
             expect(response.body.datas.qaChecks.redaction).toBe(false);
+            expect(Array.isArray(response.body.datas.globalPrompts)).toBe(true);
+        });
+
+        it('should save and return global prompts for prompt admins', async () => {
+            const globalPrompts = [{
+                id: 'spellcheck',
+                label: 'Spellcheck my document',
+                prompt: 'Review the content for spelling and grammar issues.',
+                enabled: true
+            }, {
+                id: 'translate-fr',
+                label: 'Translate to french',
+                prompt: 'Translate the content to French while preserving technical terms.',
+                enabled: false
+            }];
+
+            let response = await request(app).put('/api/data/ai-integration')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ globalPrompts });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.globalPrompts).toEqual(globalPrompts);
+
+            response = await request(app).get('/api/data/ai-integration')
+                .set('Cookie', [`token=JWT ${adminToken}`]);
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.globalPrompts).toEqual(globalPrompts);
+        });
+
+        it('should run QA on a draft vulnerability template', async () => {
+            await Settings.findOneAndUpdate({}, {
+                $set: {
+                    'ai.public.enabled': true,
+                    'ai.public.qaChecks': {
+                        completeness: true,
+                        references: false,
+                        imageCaptions: false,
+                        duplicates: false,
+                        aiDuplicates: false,
+                        redaction: false,
+                        customer: false,
+                        instructions: false
+                    }
+                }
+            }, { upsert: true });
+
+            const response = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    locale: 'en',
+                    scope: 'all',
+                    vulnerability: {
+                        category: 'Web',
+                        details: [{
+                            locale: 'en',
+                            title: 'Draft Template',
+                            description: '',
+                            observation: '',
+                            remediation: ''
+                        }]
+                    }
+                });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.mode).toBe('single');
+            expect(response.body.datas.cached).toBe(false);
+            expect(Array.isArray(response.body.datas.issues)).toBe(true);
+            expect(response.body.datas.issues.length).toBeGreaterThan(0);
         });
     });
 };

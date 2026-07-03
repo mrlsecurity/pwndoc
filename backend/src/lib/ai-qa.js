@@ -26,7 +26,8 @@ const {
     isQaCheckEnabled,
     hasEnabledAiQaChecks,
     hasEnabledQaChecks,
-    filterAiIssuesByEnabledChecks
+    filterAiIssuesByEnabledChecks,
+    normalizeQaScope
 } = require('./ai-qa-checks');
 
 const pushIssue = (issues, issue, source = 'structural') => {
@@ -185,7 +186,10 @@ const buildSummary = (issues = [], aiSummary = '') => {
     return `${parts.join(', ')}.`;
 };
 
-const runAuditQa = async ({ audit, settings, provider }) => {
+const runAuditQa = async ({ audit, settings, provider, scope = 'all' }) => {
+    const normalizedScope = normalizeQaScope(scope) || 'all';
+    const runProgrammatic = normalizedScope === 'all' || normalizedScope === 'programmatic';
+    const runAi = normalizedScope === 'all' || normalizedScope === 'ai';
     const qaChecks = getQaChecksFromSettings(settings);
 
     if (!hasEnabledQaChecks(qaChecks)) {
@@ -204,12 +208,12 @@ const runAuditQa = async ({ audit, settings, provider }) => {
         };
     }
 
-    const structuralIssues = isQaCheckEnabled(qaChecks, 'completeness') ?
+    const structuralIssues = runProgrammatic && isQaCheckEnabled(qaChecks, 'completeness') ?
         runStructuralChecks(audit) :
         [];
     let referenceLinkIssues = [];
 
-    if (isQaCheckEnabled(qaChecks, 'references')) {
+    if (runProgrammatic && isQaCheckEnabled(qaChecks, 'references')) {
         try {
             referenceLinkIssues = await runReferenceLinkChecks(audit);
         } catch (err) {
@@ -223,7 +227,7 @@ const runAuditQa = async ({ audit, settings, provider }) => {
         }
     }
 
-    const imageCaptionIssues = isQaCheckEnabled(qaChecks, 'imageCaptions') ?
+    const imageCaptionIssues = runProgrammatic && isQaCheckEnabled(qaChecks, 'imageCaptions') ?
         runImageCaptionChecks(audit) :
         [];
 
@@ -242,7 +246,7 @@ const runAuditQa = async ({ audit, settings, provider }) => {
     let aiResult = null;
     let aiSkippedReason = '';
 
-    if (aiChecksEnabled) {
+    if (runAi && aiChecksEnabled) {
         try {
             aiResult = await runQaWithProvider({
                 provider: selectedProvider,
@@ -276,7 +280,7 @@ const runAuditQa = async ({ audit, settings, provider }) => {
     ]));
     const summary = buildSummary(issues, aiResult?.summary || '');
 
-    if (aiChecksEnabled && !aiResult && aiSkippedReason) {
+    if (runAi && aiChecksEnabled && !aiResult && aiSkippedReason) {
         pushIssue(issues, {
             severity: 'info',
             category: 'other',

@@ -32,9 +32,31 @@
         />
         <div
         v-if="message.role === 'assistant' && message.draftPreview"
-        class="q-mt-xs q-pa-sm bg-blue-grey-1 rounded-borders text-body2 ai-chat-draft-preview"
-        v-html="message.draftPreview"
-        />
+        class="q-mt-xs q-pa-sm bg-blue-grey-1 rounded-borders text-body2 ai-chat-assistant-response"
+        >
+          <div class="ai-chat-draft-preview" v-html="message.draftPreview" />
+          <div class="q-mt-sm row q-gutter-sm">
+            <q-btn
+            unelevated
+            dense
+            no-caps
+            :label="isFieldMode ? $t('aiChat.applyField') : $t('aiChat.apply')"
+            color="primary"
+            :disable="loading"
+            @click="applyDraft(message.draft)"
+            />
+            <q-btn
+            v-if="sessionConfig.diffContext"
+            outline
+            dense
+            no-caps
+            :label="$t('aiChat.previewChanges')"
+            color="primary"
+            :disable="loading"
+            @click="previewChanges(message.draft)"
+            />
+          </div>
+        </div>
       </div>
       <div v-if="loading" class="text-center q-pa-sm">
         <q-spinner-dots color="primary" size="2em" />
@@ -51,25 +73,56 @@
       autogrow
       outlined
       dense
+      class="ai-chat-input"
       :placeholder="isFieldMode ? $t('aiChat.defaultPromptPlaceholder') : $t('aiChat.inputPlaceholder')"
       :disable="loading"
       @keydown.ctrl.enter.prevent="sendMessage"
       @keydown.meta.enter.prevent="sendMessage"
-      />
+      >
+        <template #append>
+          <div class="ai-chat-input__actions row items-end no-wrap">
+            <q-btn
+            v-if="showPromptSelect"
+            flat
+            dense
+            round
+            icon="arrow_drop_down"
+            class="ai-chat-input__prompt-toggle"
+            :aria-label="$t('aiChat.promptSelectLabel')"
+            :disable="loading"
+            >
+              <q-menu anchor="top right" self="bottom right">
+                <q-list dense class="ai-chat-prompt-menu">
+                  <q-item
+                  v-for="option in promptOptions"
+                  :key="option.id"
+                  clickable
+                  v-close-popup
+                  :active="selectedPromptId === option.id"
+                  active-class="text-primary"
+                  @click="selectPrompt(option.id)"
+                  >
+                    <q-item-section>{{ option.label }}</q-item-section>
+                  </q-item>
+                </q-list>
+              </q-menu>
+            </q-btn>
+            <q-btn
+            round
+            dense
+            unelevated
+            icon="send"
+            color="primary"
+            :disable="!canSend"
+            :loading="loading"
+            :aria-label="$t('aiChat.send')"
+            @click="sendMessage"
+            />
+          </div>
+        </template>
+      </q-input>
       <div class="text-caption text-grey-6 q-mt-xs">{{ $t('aiChat.sendHint') }}</div>
     </q-card-section>
-
-    <q-card-actions align="right" class="q-px-md q-pb-md col-auto">
-      <q-btn flat :label="$t('btn.cancel')" @click="discardSession" />
-      <q-btn flat :label="$t('aiChat.send')" color="primary" :disable="!canSend" :loading="loading" @click="sendMessage" />
-      <q-btn
-      unelevated
-      :label="isFieldMode ? $t('aiChat.applyField') : $t('aiChat.apply')"
-      color="primary"
-      :disable="!conversation.latestDraft || loading"
-      @click="applyDraft"
-      />
-    </q-card-actions>
   </div>
 </template>
 
@@ -78,11 +131,19 @@ import { Dialog } from 'quasar'
 import { mapState, mapActions } from 'pinia'
 import { useAiGenerationStore } from '@/stores/ai-generation'
 import AiService from '@/services/ai'
+import AiFieldHelper from '@/services/ai-field-helper'
 import Utils from '@/services/utils'
+import DraftRecoveryDialog from '@/components/draft-recovery-dialog.vue'
 import { $t } from '@/boot/i18n'
 
 export default {
   name: 'AiChatDrawer',
+
+  data() {
+    return {
+      selectedPromptId: '__default__'
+    }
+  },
 
   computed: {
     ...mapState(useAiGenerationStore, {
@@ -98,10 +159,48 @@ export default {
 
     canSend() {
       return !this.loading && !!String(this.conversation.userInput || '').trim()
+    },
+
+    promptOptions() {
+      if (!this.isFieldMode)
+        return []
+
+      const options = [{
+        id: '__default__',
+        label: this.$t('aiChat.defaultPromptOption'),
+        prompt: String(this.sessionConfig?.defaultPrompt || '')
+      }]
+
+      const globalPrompts = this.$settings?.ai?.public?.globalPrompts || []
+      globalPrompts.forEach((entry) => {
+        if (entry?.enabled === false)
+          return
+
+        const label = String(entry?.label || '').trim()
+        const prompt = String(entry?.prompt || '').trim()
+        if (!label || !prompt)
+          return
+
+        options.push({
+          id: String(entry.id || label),
+          label,
+          prompt
+        })
+      })
+
+      return options
+    },
+
+    showPromptSelect() {
+      return this.promptOptions.length > 1
     }
   },
 
   watch: {
+    sessionId() {
+      this.selectedPromptId = '__default__'
+    },
+
     'conversation.messages.length'() {
       this.scrollMessagesToBottom()
     },
@@ -147,6 +246,17 @@ export default {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
+    },
+
+    selectPrompt(promptId) {
+      const option = this.promptOptions.find((entry) => entry.id === promptId)
+      if (!option)
+        return
+
+      const store = useAiGenerationStore()
+      this.selectedPromptId = promptId
+      store.conversation.userInput = option.prompt
+      store.conversation.confirmedPromptInstruction = ''
     },
 
     async sendMessage() {
@@ -195,10 +305,10 @@ export default {
         if (draft === null || draft === undefined || (typeof draft === 'string' && !draft.trim()) || (Array.isArray(draft) && draft.length === 0))
           throw new Error(this.$t('aiChat.emptyDraft'))
 
-        store.conversation.latestDraft = draft
         store.conversation.messages.push({
           role: 'assistant',
           content: reply || this.$t('aiChat.updatedDraft'),
+          draft,
           draftPreview: this.formatDraftPreview(draft)
         })
       } catch (err) {
@@ -215,27 +325,31 @@ export default {
       }
     },
 
-    applyDraft() {
-      if (!this.conversation.latestDraft)
+    applyDraft(draft) {
+      if (draft === null || draft === undefined)
         return
-      this.completeSession(this.conversation.latestDraft)
+      this.completeSession(draft)
     },
 
-    discardSession() {
-      if (this.loading) {
-        this.requestClose()
+    previewChanges(draft) {
+      const diffContext = this.sessionConfig?.diffContext
+      if (!diffContext)
         return
-      }
+
+      const draftData = AiFieldHelper.buildAiDiffDraft(diffContext, draft)
+      if (!draftData)
+        return
 
       Dialog.create({
-        title: $t('aiChat.discardAiSessionTitle'),
-        message: $t('aiChat.discardAiSessionMessage'),
-        ok: { label: $t('btn.discard'), color: 'negative' },
-        cancel: { label: $t('btn.stay'), color: 'white' },
-        focus: 'cancel'
-      })
-      .onOk(() => {
-        this.cancelSession({ force: true })
+        component: DraftRecoveryDialog,
+        componentProps: {
+          draft: {
+            data: draftData,
+            updatedAt: Date.now()
+          },
+          current: diffContext.current,
+          languages: diffContext.languages || []
+        }
       })
     },
 
@@ -263,7 +377,12 @@ export default {
 <style scoped>
 .ai-chat-drawer__panel {
   min-width: 0;
+  min-height: 0;
   height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .ai-chat-context {
@@ -275,11 +394,32 @@ export default {
 }
 
 .ai-chat-conversation {
+  flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .ai-chat-draft-preview {
   word-break: break-word;
+}
+
+.ai-chat-input :deep(textarea) {
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.ai-chat-input :deep(.q-field__append) {
+  align-self: flex-end;
+  padding-bottom: 2px;
+}
+
+.ai-chat-input__actions {
+  gap: 2px;
+}
+
+.ai-chat-prompt-menu {
+  min-width: 180px;
+  max-width: 280px;
 }
 </style>

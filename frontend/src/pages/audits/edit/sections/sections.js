@@ -16,6 +16,7 @@ import { useAuditQaStore } from '@/stores/audit-qa';
 import { runAfterAiGenerationCheck } from '@/composables/confirmLeaveIfAiGenerating';
 import { useUserStore } from 'src/stores/user'
 import Utils from '@/services/utils';
+import { hasAnyQaCheckEnabled } from '@/services/qa-checks';
 import { createDraftRecovery } from '@/composables/useDraftRecovery';
 
 import { $t } from '@/boot/i18n'
@@ -205,7 +206,8 @@ export default {
 
         aiQaEnabled: function() {
             return this.$settings?.ai?.public?.enabled !== false &&
-                userStore.isAllowed('audits:ai-qa')
+                userStore.isAllowed('audits:ai-qa') &&
+                hasAnyQaCheckEnabled(this.$settings?.ai?.public?.qaChecks)
         }
     },
 
@@ -396,6 +398,9 @@ export default {
                         selectedText: selection.text,
                         outputType,
                         lockKey,
+                        selection,
+                        getDiffEntity: () => this.section,
+                        entityShape: 'section',
                         requestParams: {
                             ...requestParams,
                             context: {
@@ -436,6 +441,8 @@ export default {
                     defaultPrompt,
                     outputType,
                     lockKey,
+                    getDiffEntity: () => this.section,
+                    entityShape: 'section',
                     requestParams
                 })
 

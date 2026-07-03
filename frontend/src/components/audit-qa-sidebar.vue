@@ -3,15 +3,16 @@
   :title="$t('auditQa.title')"
   :loading="loading"
   :error-message="errorMessage"
+  :has-report-data="hasReport"
+  :programmatic-ran-at="programmaticRanAt"
+  :ai-ran-at="aiRanAt"
   :counts="counts"
   :severity-filter="severityFilter"
   :grouped-issues="groupedIssues"
-  :cached="cached"
-  :cached-at-label="cachedAtLabel"
   show-navigation
   :navigation-label="navigationLabel"
   @close="closeDrawer"
-  @retry="retry"
+  @run="runQaScope"
   @update:severity-filter="setSeverityFilter"
   @navigate="navigateToIssue"
   />
@@ -56,8 +57,9 @@ export default {
     ...mapState(useAuditQaStore, [
       'loading',
       'issues',
-      'cached',
-      'ranAt',
+      'hasReport',
+      'programmaticRanAt',
+      'aiRanAt',
       'errorMessage',
       'severityFilter',
       'counts'
@@ -69,19 +71,6 @@ export default {
 
     groupedIssues() {
       return groupIssuesByLabel(this.filteredIssues, this.formatLocationLabel)
-    },
-
-    cachedAtLabel() {
-      if (!this.ranAt)
-        return this.$t('auditQa.cachedResult')
-
-      const date = new Date(this.ranAt)
-      if (Number.isNaN(date.getTime()))
-        return this.$t('auditQa.cachedResult')
-
-      return this.$t('auditQa.cachedResultAt', {
-        date: date.toLocaleString()
-      })
     }
   },
 
@@ -96,9 +85,9 @@ export default {
       this.closeStore()
     },
 
-    retry() {
+    runQaScope(scope) {
       if (this.auditId)
-        this.runQa(this.auditId)
+        this.runQa(this.auditId, scope)
     },
 
     formatLocationLabel(location) {

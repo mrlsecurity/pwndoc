@@ -187,6 +187,20 @@
                     <span v-else>{{$t('addVulnerability')}} ({{$t('noCategory')}})</span>
                 </div>
                 <draft-recovery-status />
+                <q-separator v-if="aiQaEnabled" vertical color="white" class="q-mx-md" />
+                <q-btn
+                v-if="aiQaEnabled"
+                flat
+                dense
+                icon="fas fa-list-check"
+                :color="vulnQaOpen ? 'primary' : 'white'"
+                :class="{ 'bg-white': vulnQaOpen }"
+                @click="toggleVulnerabilityQaView()"
+                >
+                    <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
+                        {{ $t('tooltip.vulnerabilityQa') }}
+                    </q-tooltip>
+                </q-btn>
                 <q-space />
                 <q-btn dense flat icon="close" data-testid="create-vulnerability-close" @click="$refs.createModal.hide()" />
             </q-bar>
@@ -355,7 +369,17 @@
             </q-expansion-item>
                 </div>
 
-                <div v-if="aiDrawerOpen" class="col-4 vuln-modal-ai">
+                <div v-if="vulnQaOpen" class="col-4 vuln-modal-ai">
+                    <vulnerability-qa-panel
+                    :key="`draft:${currentLanguage}`"
+                    :locale="currentLanguage"
+                    :vulnerability="currentVulnerability"
+                    :title="currentVulnerability.details[currentDetailsIndex].title"
+                    @close="closeVulnQa"
+                    />
+                </div>
+
+                <div v-else-if="aiDrawerOpen" class="col-4 vuln-modal-ai">
                     <ai-chat-drawer />
                 </div>
             </div>
@@ -401,7 +425,7 @@
                 v-if="aiQaEnabled && vulnerabilityId"
                 flat
                 dense
-                icon="auto_awesome"
+                icon="fas fa-list-check"
                 :color="vulnQaOpen ? 'primary' : 'white'"
                 :class="{ 'bg-white': vulnQaOpen }"
                 @click="toggleVulnerabilityQaView()"

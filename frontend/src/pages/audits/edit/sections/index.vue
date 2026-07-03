@@ -26,7 +26,7 @@
         :flat="!qaDrawerOpen"
         :outline="qaDrawerOpen"
         :class="{'bg-grey-3': qaDrawerOpen}"
-        icon="auto_awesome"
+        icon="fas fa-list-check"
         :ripple="false"
         @click="toggleQaView()"
         class="q-mr-sm">
@@ -126,6 +126,15 @@
 
 .sidebar-ai {
     height: calc(100vh - 104px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.sidebar-ai :deep(.ai-chat-drawer__panel) {
+    flex: 1 1 0;
+    min-height: 0;
 }
 
 .content {

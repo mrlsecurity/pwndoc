@@ -14,7 +14,7 @@
             :flat="!qaDrawerOpen"
             :outline="qaDrawerOpen"
             :class="{'bg-grey-3': qaDrawerOpen}"
-            icon="auto_awesome"
+            icon="fas fa-list-check"
             :ripple="false"
             @click="toggleQaView()"
             class="q-mr-sm"

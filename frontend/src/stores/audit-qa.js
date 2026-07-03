@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import AiService from '@/services/ai'
 import { useAiGenerationStore } from '@/stores/ai-generation'
+import { buildQaReportViewModel } from '@/services/qa-display'
 import { $t } from '@/boot/i18n'
+
+const emptyCounts = () => ({
+  total: 0,
+  error: 0,
+  warning: 0,
+  info: 0
+})
 
 export const useAuditQaStore = defineStore('auditQa', {
   state: () => ({
@@ -11,15 +19,14 @@ export const useAuditQaStore = defineStore('auditQa', {
     summary: '',
     issues: [],
     cached: false,
+    outdated: false,
     ranAt: null,
+    programmaticRanAt: null,
+    aiRanAt: null,
+    hasReport: false,
     errorMessage: '',
     severityFilter: 'all',
-    counts: {
-      total: 0,
-      error: 0,
-      warning: 0,
-      info: 0
-    }
+    counts: emptyCounts()
   }),
 
   getters: {
@@ -37,43 +44,56 @@ export const useAuditQaStore = defineStore('auditQa', {
       if (aiStore.drawerOpen)
         aiStore.closeDrawer()
 
-      const sameAudit = this.auditId === auditId && this.issues.length && !this.errorMessage
       this.auditId = auditId
       this.drawerOpen = true
       this.severityFilter = 'all'
-
-      if (!sameAudit)
-        this.runQa(auditId)
+      this.errorMessage = ''
+      this.loadQa(auditId)
     },
 
     close() {
       this.drawerOpen = false
     },
 
-    runQa(auditId) {
+    applyReport(data = {}) {
+      Object.assign(this, buildQaReportViewModel(data))
+    },
+
+    loadQa(auditId) {
       this.loading = true
       this.errorMessage = ''
       this.auditId = auditId
 
-      return AiService.runAuditQa(auditId)
+      return AiService.runAuditQa(auditId, { loadOnly: true })
       .then((response) => {
-        const data = response.data.datas || {}
-        this.summary = String(data.summary || '')
-        this.issues = Array.isArray(data.issues) ? data.issues : []
-        this.cached = Boolean(data.cached)
-        this.ranAt = data.ranAt || null
-        this.counts = data.counts || {
-          total: this.issues.length,
-          error: this.issues.filter((issue) => issue.severity === 'error').length,
-          warning: this.issues.filter((issue) => issue.severity === 'warning').length,
-          info: this.issues.filter((issue) => issue.severity === 'info').length
-        }
+        this.applyReport(response.data.datas || {})
       })
       .catch((err) => {
         this.errorMessage = err.response?.data?.datas || $t('auditQa.failed')
         this.summary = ''
         this.issues = []
-        this.counts = { total: 0, error: 0, warning: 0, info: 0 }
+        this.hasReport = false
+        this.counts = emptyCounts()
+      })
+      .finally(() => {
+        this.loading = false
+      })
+    },
+
+    runQa(auditId, scope = 'all') {
+      this.loading = true
+      this.errorMessage = ''
+      this.auditId = auditId
+      this.severityFilter = 'all'
+
+      return AiService.runAuditQa(auditId, { scope })
+      .then((response) => {
+        this.applyReport(response.data.datas || {})
+        this.cached = false
+        this.outdated = false
+      })
+      .catch((err) => {
+        this.errorMessage = err.response?.data?.datas || $t('auditQa.failed')
       })
       .finally(() => {
         this.loading = false

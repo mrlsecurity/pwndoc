@@ -104,8 +104,15 @@ module.exports = function() {
 
             const result = await validateReferenceUrl('https://example.com/redirect');
             expect(result.valid).toBe(false);
-            expect(result.message).toContain('not allowed');
+            expect(result.message).toContain('private or local address');
             expect(global.fetch).toHaveBeenCalledTimes(1);
+        });
+
+        it('should report unresolved hostnames clearly', async () => {
+            const result = await validateReferenceUrl('https://developpper.mozilla.org/docs');
+            expect(result.valid).toBe(false);
+            expect(result.severity).toBe('warning');
+            expect(result.message).toBe('Reference URL hostname could not be resolved.');
         });
 
         it('should create issues for invalid finding reference links', async () => {

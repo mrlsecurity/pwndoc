@@ -115,9 +115,31 @@ const getCachedAllVulnerabilitiesQaReport = (settings = {}, vulnerabilities = []
     });
 };
 
-const buildVulnerabilityQaReportCache = (fingerprint, result = {}, meta = {}) => {
+const getLatestVulnerabilityQaReport = (vulnerability = {}, locale = '') => {
+    const stored = normalizeLocaleQaReport(vulnerability.qaReports, locale);
+    if (!stored)
+        return null;
+
+    return formatVulnerabilityQaReportResponse(stored, {
+        cached: true,
+        outdated: !isVulnerabilityQaReportCurrent(vulnerability, locale)
+    });
+};
+
+const getLatestAllVulnerabilitiesQaReport = (settings = {}, vulnerabilities = [], locale = '') => {
+    const stored = getStoredAllVulnerabilitiesQaReport(settings, locale);
+    if (!stored)
+        return null;
+
+    return formatVulnerabilityQaReportResponse(stored, {
+        cached: true,
+        outdated: !isAllVulnerabilitiesQaReportCurrent(settings, vulnerabilities, locale)
+    });
+};
+
+const buildVulnerabilityQaReportCache = (fingerprint, result = {}, meta = {}, options = {}) => {
     return {
-        ...buildQaReportCache(fingerprint, result),
+        ...buildQaReportCache(fingerprint, result, options),
         locale: String(meta.locale || '').trim(),
         mode: meta.mode || 'single',
         vulnerabilityId: meta.vulnerabilityId || null,
@@ -131,6 +153,8 @@ module.exports = {
     computeAllVulnerabilitiesQaFingerprint,
     getCachedVulnerabilityQaReport,
     getCachedAllVulnerabilitiesQaReport,
+    getLatestVulnerabilityQaReport,
+    getLatestAllVulnerabilitiesQaReport,
     buildVulnerabilityQaReportCache,
     formatVulnerabilityQaReportResponse
 };

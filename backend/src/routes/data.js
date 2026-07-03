@@ -32,6 +32,11 @@ module.exports = function(app) {
         validateQaChecksPayload,
         buildQaChecksSettingsUpdate
     } = require('../lib/ai-qa-checks');
+    const {
+        normalizeGlobalPrompts,
+        validateGlobalPromptsPayload,
+        buildGlobalPromptsSettingsUpdate
+    } = require('../lib/ai-global-prompts');
 
     var _ = require('lodash')
 
@@ -57,6 +62,7 @@ module.exports = function(app) {
             const fieldCatalog = buildAiFieldCatalog(customFields);
             const promptRows = await AiPrompt.find({}).select('entityType fieldKey fieldLabel outputType enabled prompt customFieldId').lean();
             payload.promptMappings = buildPromptMappings(fieldCatalog, promptRows);
+            payload.globalPrompts = normalizeGlobalPrompts(settings?.ai?.public?.globalPrompts || []);
         }
 
         if (!access || access.readGuidelines)
@@ -88,16 +94,17 @@ module.exports = function(app) {
         try {
             const access = getAiIntegrationAccess(req.decodedToken.roles);
             const hasPromptMappings = Array.isArray(req.body.promptMappings);
+            const hasGlobalPrompts = req.body.globalPrompts !== undefined;
             const hasRedactionGuidelines = req.body.redactionGuidelines !== undefined;
             const hasQaInstructions = req.body.qaInstructions !== undefined;
             const hasQaChecks = req.body.qaChecks !== undefined;
 
-            if (!hasPromptMappings && !hasRedactionGuidelines && !hasQaInstructions && !hasQaChecks) {
-                Response.BadParameters(res, 'Missing promptMappings, redactionGuidelines, qaInstructions, or qaChecks payload');
+            if (!hasPromptMappings && !hasGlobalPrompts && !hasRedactionGuidelines && !hasQaInstructions && !hasQaChecks) {
+                Response.BadParameters(res, 'Missing promptMappings, globalPrompts, redactionGuidelines, qaInstructions, or qaChecks payload');
                 return;
             }
 
-            if (hasPromptMappings && !access.updatePrompts)
+            if ((hasPromptMappings || hasGlobalPrompts) && !access.updatePrompts)
                 return Response.Forbidden(res, 'Insufficient privileges');
             if (hasRedactionGuidelines && !access.updateGuidelines)
                 return Response.Forbidden(res, 'Insufficient privileges');
@@ -171,6 +178,22 @@ module.exports = function(app) {
                 .map((row) => row._id);
                 if (staleIds.length > 0)
                     await AiPrompt.deleteMany({_id: {$in: staleIds}});
+            }
+
+            if (hasGlobalPrompts) {
+                const validation = validateGlobalPromptsPayload(req.body.globalPrompts);
+                if (!validation.valid) {
+                    Response.BadParameters(res, validation.message);
+                    return;
+                }
+
+                currentSettings = await Settings.findOneAndUpdate({}, {
+                    $set: buildGlobalPromptsSettingsUpdate(req.body.globalPrompts)
+                }, {
+                    new: true,
+                    runValidators: true,
+                    upsert: true
+                });
             }
 
             if (hasRedactionGuidelines) {

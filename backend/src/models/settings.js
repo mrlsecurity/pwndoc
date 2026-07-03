@@ -91,10 +91,18 @@ const SettingSchema = new Schema({
                 imageCaptions: {type: Boolean, default: true},
                 duplicates: {type: Boolean, default: true},
                 aiDuplicates: {type: Boolean, default: true},
+                aiUnlinkedTranslations: {type: Boolean, default: true},
                 redaction: {type: Boolean, default: true},
                 customer: {type: Boolean, default: true},
                 instructions: {type: Boolean, default: true}
-            }
+            },
+            globalPrompts: [{
+                _id: false,
+                id: {type: String, required: true},
+                label: {type: String, default: ''},
+                prompt: {type: String, default: ''},
+                enabled: {type: Boolean, default: true}
+            }]
         },
         private: {
             openaiApiKey: {type: String, default: ''},
@@ -141,7 +149,7 @@ SettingSchema.statics.getAll = () => {
 SettingSchema.statics.getPublic = () => {
     return new Promise((resolve, reject) => {
         const query = Settings.findOne({});
-        query.select('-_id report.enabled report.public reviews.enabled reviews.public ai.public.enabled');
+        query.select('-_id report.enabled report.public reviews.enabled reviews.public ai.public.enabled ai.public.qaChecks ai.public.globalPrompts');
         query.exec()
             .then(settings => resolve(settings))
             .catch(err => reject(err));

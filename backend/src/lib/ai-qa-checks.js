@@ -1,4 +1,7 @@
-const QA_CHECK_KEYS = ['completeness', 'references', 'imageCaptions', 'duplicates', 'aiDuplicates', 'redaction', 'customer', 'instructions'];
+const QA_CHECK_KEYS = ['completeness', 'references', 'imageCaptions', 'duplicates', 'aiDuplicates', 'aiUnlinkedTranslations', 'redaction', 'customer', 'instructions'];
+const QA_PROGRAMMATIC_CHECK_KEYS = ['completeness', 'references', 'imageCaptions', 'duplicates'];
+const QA_AI_CHECK_KEYS = ['aiDuplicates', 'aiUnlinkedTranslations', 'redaction', 'customer', 'instructions'];
+const QA_SCOPES = ['programmatic', 'ai', 'all'];
 
 const defaultQaChecks = () => ({
     completeness: true,
@@ -6,6 +9,7 @@ const defaultQaChecks = () => ({
     imageCaptions: true,
     duplicates: true,
     aiDuplicates: true,
+    aiUnlinkedTranslations: true,
     redaction: true,
     customer: true,
     instructions: true
@@ -89,8 +93,58 @@ const filterAiIssuesByEnabledChecks = (issues = [], qaChecks = {}) => {
     });
 };
 
+const normalizeQaScope = (value) => {
+    const scope = String(value || '').trim().toLowerCase();
+    return QA_SCOPES.includes(scope) ? scope : null;
+};
+
+const isAiQaIssue = (issue = {}) => issue.source === 'ai';
+
+const mergeQaIssues = (existingIssues = [], newIssues = [], scope = 'all') => {
+    if (scope === 'all')
+        return Array.isArray(newIssues) ? newIssues : [];
+
+    const existing = Array.isArray(existingIssues) ? existingIssues : [];
+    const incoming = Array.isArray(newIssues) ? newIssues : [];
+
+    if (scope === 'programmatic')
+        return [...existing.filter(isAiQaIssue), ...incoming.filter((issue) => !isAiQaIssue(issue))];
+
+    return [...existing.filter((issue) => !isAiQaIssue(issue)), ...incoming.filter(isAiQaIssue)];
+};
+
+const emptyQaCounts = () => ({
+    total: 0,
+    error: 0,
+    warning: 0,
+    info: 0
+});
+
+const buildIssueCounts = (issues = []) => ({
+    total: issues.length,
+    error: issues.filter((issue) => issue.severity === 'error').length,
+    warning: issues.filter((issue) => issue.severity === 'warning').length,
+    info: issues.filter((issue) => issue.severity === 'info').length
+});
+
+const finalizeMergedQaResult = (existingStored = {}, partialResult = {}, mergedIssues = []) => ({
+    summary: partialResult.summary || existingStored.summary || '',
+    issues: mergedIssues,
+    aiAnalysis: Boolean(
+        partialResult.aiAnalysis ||
+        existingStored.aiAnalysis ||
+        mergedIssues.some(isAiQaIssue)
+    ),
+    provider: partialResult.provider || existingStored.provider || null,
+    model: partialResult.model || existingStored.model || null,
+    counts: buildIssueCounts(mergedIssues)
+});
+
 module.exports = {
     QA_CHECK_KEYS,
+    QA_PROGRAMMATIC_CHECK_KEYS,
+    QA_AI_CHECK_KEYS,
+    QA_SCOPES,
     defaultQaChecks,
     normalizeQaChecks,
     getQaChecksFromSettings,
@@ -100,5 +154,11 @@ module.exports = {
     validateQaChecksPayload,
     buildQaChecksSettingsUpdate,
     buildEnabledQaChecksPrompt,
-    filterAiIssuesByEnabledChecks
+    filterAiIssuesByEnabledChecks,
+    normalizeQaScope,
+    isAiQaIssue,
+    mergeQaIssues,
+    emptyQaCounts,
+    buildIssueCounts,
+    finalizeMergedQaResult
 };

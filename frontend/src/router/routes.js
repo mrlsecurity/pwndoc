@@ -22,7 +22,9 @@ export default [
       {path: 'templates', component: () => import('pages/data/templates')},
       {path: 'spellcheck', component: () => import('pages/data/spellcheck')},
       {path: 'languagetool-rules', component: () => import('pages/data/languagetool-rules')},
-      {path: 'ai-integration', component: () => import('pages/data/ai-integration')},
+      {path: 'assisted-writing', component: () => import('pages/data/ai-integration'), props: { section: 'writing' }},
+      {path: 'quality-assurance', component: () => import('pages/data/ai-integration'), props: { section: 'qa' }},
+      {path: 'ai-integration', redirect: '/data/assisted-writing'},
       {path: 'dump', component: () => import('pages/data/dump')},
       {path: 'custom', component: () => import('pages/data/custom')}
     ]},

@@ -137,7 +137,72 @@ export const groupIssuesByLabel = (issues = [], formatLocationLabel) => {
 
 export const filterIssuesBySeverity = (issues = [], severityFilter = 'all') => {
   if (severityFilter === 'all')
-    return issues;
+    return issues
 
-  return issues.filter((issue) => issue.severity === severityFilter);
-};
+  return issues.filter((issue) => issue.severity === severityFilter)
+}
+
+export const buildQaReportViewModel = (data = {}) => {
+  const issues = Array.isArray(data.issues) ? data.issues : []
+
+  return {
+    summary: String(data.summary || ''),
+    issues,
+    cached: Boolean(data.cached),
+    outdated: Boolean(data.outdated),
+    ranAt: data.ranAt || null,
+    programmaticRanAt: data.programmaticRanAt || null,
+    aiRanAt: data.aiRanAt || null,
+    hasReport: Boolean(data.hasReport) || issues.length > 0 || Boolean(data.ranAt),
+    counts: data.counts || {
+      total: issues.length,
+      error: issues.filter((issue) => issue.severity === 'error').length,
+      warning: issues.filter((issue) => issue.severity === 'warning').length,
+      info: issues.filter((issue) => issue.severity === 'info').length
+    }
+  }
+}
+
+const formatQaRunDate = (value) => {
+  if (!value)
+    return null
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime()))
+    return null
+
+  return date.toLocaleString()
+}
+
+export const buildPreviousRunEntries = ({ programmaticRanAt, aiRanAt } = {}) => {
+  const entries = []
+  const programmaticDate = formatQaRunDate(programmaticRanAt)
+
+  if (programmaticDate || programmaticRanAt) {
+    entries.push({
+      kind: 'programmatic',
+      label: $t('auditQa.runSourceProgrammatic'),
+      date: programmaticDate
+    })
+  }
+
+  const aiDate = formatQaRunDate(aiRanAt)
+
+  if (aiDate || aiRanAt) {
+    entries.push({
+      kind: 'ai',
+      label: $t('auditQa.runSourceAi'),
+      date: aiDate
+    })
+  }
+
+  return entries
+}
+
+export const buildPreviousRunLabels = ({ programmaticRanAt, aiRanAt } = {}) => (
+  buildPreviousRunEntries({ programmaticRanAt, aiRanAt }).map((entry) => (
+    entry.date
+      ? $t(entry.kind === 'ai' ? 'auditQa.previousAiRunAt' : 'auditQa.previousProgrammaticRunAt', { date: entry.date })
+      : $t(entry.kind === 'ai' ? 'auditQa.previousAiRun' : 'auditQa.previousProgrammaticRun')
+  ))
+)

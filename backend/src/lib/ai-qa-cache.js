@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { buildAuditSnapshot } = require('./ai-qa');
+const { isAiQaIssue } = require('./ai-qa-checks');
 
 const computeAuditQaFingerprint = (audit = {}) => {
     const snapshot = buildAuditSnapshot(audit);
@@ -20,9 +21,38 @@ const normalizeStoredQaReport = (audit = {}) => {
     return raw;
 };
 
+const seedLegacyRunTimestamps = (stored = {}) => {
+    const legacy = stored.ranAt || null;
+    const issues = Array.isArray(stored.issues) ? stored.issues : [];
+
+    return {
+        programmaticRanAt: stored.programmaticRanAt ||
+            (issues.some((issue) => !isAiQaIssue(issue)) ? legacy : null),
+        aiRanAt: stored.aiRanAt ||
+            (issues.some(isAiQaIssue) ? legacy : null)
+    };
+};
+
+const resolveQaRunTimestamps = (stored = {}) => {
+    const seeded = seedLegacyRunTimestamps(stored);
+
+    return {
+        ranAt: stored.ranAt || seeded.programmaticRanAt || seeded.aiRanAt || null,
+        programmaticRanAt: seeded.programmaticRanAt,
+        aiRanAt: seeded.aiRanAt
+    };
+};
+
+const hasStoredQaRun = (stored = {}) => {
+    const timestamps = resolveQaRunTimestamps(stored);
+    return Boolean(timestamps.ranAt || timestamps.programmaticRanAt || timestamps.aiRanAt);
+};
+
 const formatQaReportResponse = (stored = {}, options = {}) => {
-    if (!stored?.fingerprint || !stored?.ranAt)
+    if (!stored?.fingerprint || !hasStoredQaRun(stored))
         return null;
+
+    const timestamps = resolveQaRunTimestamps(stored);
 
     return {
         summary: String(stored.summary || ''),
@@ -38,7 +68,9 @@ const formatQaReportResponse = (stored = {}, options = {}) => {
         },
         cached: Boolean(options.cached),
         outdated: Boolean(options.outdated),
-        ranAt: stored.ranAt
+        ranAt: timestamps.ranAt,
+        programmaticRanAt: timestamps.programmaticRanAt,
+        aiRanAt: timestamps.aiRanAt
     };
 };
 
@@ -89,10 +121,25 @@ const getOutdatedQaReport = (audit = {}) => {
     });
 };
 
-const buildQaReportCache = (fingerprint, result = {}) => {
+const buildQaReportCache = (fingerprint, result = {}, options = {}) => {
+    const now = new Date();
+    const existing = options.existing || {};
+    const scope = options.scope || 'all';
+    const seeded = seedLegacyRunTimestamps(existing);
+
+    let programmaticRanAt = seeded.programmaticRanAt;
+    let aiRanAt = seeded.aiRanAt;
+
+    if (scope === 'all' || scope === 'programmatic')
+        programmaticRanAt = now;
+    if (scope === 'all' || scope === 'ai')
+        aiRanAt = now;
+
     return {
         fingerprint: fingerprint,
-        ranAt: new Date(),
+        ranAt: now,
+        programmaticRanAt: programmaticRanAt || null,
+        aiRanAt: aiRanAt || null,
         summary: String(result.summary || ''),
         issues: Array.isArray(result.issues) ? result.issues : [],
         aiAnalysis: Boolean(result.aiAnalysis),
@@ -110,6 +157,7 @@ const buildQaReportCache = (fingerprint, result = {}) => {
 module.exports = {
     computeAuditQaFingerprint,
     normalizeStoredQaReport,
+    resolveQaRunTimestamps,
     getLatestQaReport,
     isQaReportCurrent,
     getCachedQaReport,

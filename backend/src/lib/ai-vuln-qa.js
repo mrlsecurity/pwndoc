@@ -1,4 +1,4 @@
-const { runQaWithProvider } = require('./ai-client');
+const { runVulnerabilityTemplateQaWithProvider } = require('./ai-client');
 const {
     stripHtml,
     summarizeCustomFields,
@@ -9,7 +9,9 @@ const {
     isQaCheckEnabled,
     hasEnabledAiQaChecks,
     hasEnabledQaChecks,
-    filterAiIssuesByEnabledChecks
+    filterAiIssuesByEnabledChecks,
+    buildIssueCounts,
+    normalizeQaScope
 } = require('./ai-qa-checks');
 const {
     resolveRedactionGuidelinesForRequest,
@@ -86,7 +88,6 @@ const buildVulnerabilitySnapshot = (vulnerability = {}, detail = {}) => {
         type: 'vulnerability_template',
         language: String(detail.locale || '').trim(),
         category: String(vulnerability.category || '').trim(),
-        status: vulnerability.status === 1 ? 'new' : (vulnerability.status === 2 ? 'updated' : 'validated'),
         cvssv3: finding.cvssv3,
         cvssv4: finding.cvssv4,
         priority: vulnerability.priority || null,
@@ -289,26 +290,6 @@ const runVulnerabilityStructuralChecks = (vulnerability = {}, detail = {}) => {
         });
     }
 
-    if (vulnerability.status === 1) {
-        pushIssue(issues, {
-            severity: 'info',
-            category: 'completeness',
-            title: 'Vulnerability awaiting approval',
-            message: `"${finding.title || 'Untitled vulnerability'}" is marked as new and has not been validated yet.`,
-            location: location
-        });
-    }
-
-    if (vulnerability.status === 2) {
-        pushIssue(issues, {
-            severity: 'warning',
-            category: 'completeness',
-            title: 'Pending vulnerability updates',
-            message: `"${finding.title || 'Untitled vulnerability'}" has pending updates waiting for review.`,
-            location: location
-        });
-    }
-
     return issues;
 };
 
@@ -358,15 +339,6 @@ const buildSummary = (issues = [], aiSummary = '', vulnerabilityCount = 1) => {
     return `${parts.join(', ')}.`;
 };
 
-const buildIssueCounts = (issues = []) => {
-    return {
-        total: issues.length,
-        error: issues.filter((issue) => issue.severity === 'error').length,
-        warning: issues.filter((issue) => issue.severity === 'warning').length,
-        info: issues.filter((issue) => issue.severity === 'info').length
-    };
-};
-
 const runSingleVulnerabilityQa = async ({
     vulnerability,
     detail,
@@ -374,15 +346,20 @@ const runSingleVulnerabilityQa = async ({
     provider,
     allVulnerabilities = [],
     qaChecks,
-    includeAiDuplicates = true
+    scope = 'all',
+    includeAiDuplicates = true,
+    includeAiUnlinkedTranslations = true
 }) => {
+    const normalizedScope = normalizeQaScope(scope) || 'all';
+    const runProgrammatic = normalizedScope === 'all' || normalizedScope === 'programmatic';
+    const runAi = normalizedScope === 'all' || normalizedScope === 'ai';
     const pseudoAudit = vulnerabilityToPseudoAudit(vulnerability, detail);
-    const structuralIssues = isQaCheckEnabled(qaChecks, 'completeness') ?
+    const structuralIssues = runProgrammatic && isQaCheckEnabled(qaChecks, 'completeness') ?
         runVulnerabilityStructuralChecks(vulnerability, detail) :
         [];
     let referenceLinkIssues = [];
 
-    if (isQaCheckEnabled(qaChecks, 'references')) {
+    if (runProgrammatic && isQaCheckEnabled(qaChecks, 'references')) {
         try {
             referenceLinkIssues = await runReferenceLinkChecks(pseudoAudit);
         } catch (err) {
@@ -396,14 +373,14 @@ const runSingleVulnerabilityQa = async ({
         }
     }
 
-    const imageCaptionIssues = isQaCheckEnabled(qaChecks, 'imageCaptions') ?
+    const imageCaptionIssues = runProgrammatic && isQaCheckEnabled(qaChecks, 'imageCaptions') ?
         runImageCaptionChecks(pseudoAudit).map((issue) => ({
             ...issue,
             location: issue.location.replace(/^finding:/, 'vulnerability:')
         })) :
         [];
 
-    const duplicateIssues = isQaCheckEnabled(qaChecks, 'duplicates') ?
+    const duplicateIssues = runProgrammatic && isQaCheckEnabled(qaChecks, 'duplicates') ?
         runDuplicateChecks({
             vulnerabilities: allVulnerabilities,
             locale: detail.locale,
@@ -415,7 +392,7 @@ const runSingleVulnerabilityQa = async ({
     let aiDuplicateResult = null;
     let aiDuplicateSkippedReason = '';
 
-    if (includeAiDuplicates && isQaCheckEnabled(qaChecks, 'aiDuplicates')) {
+    if (runAi && includeAiDuplicates && isQaCheckEnabled(qaChecks, 'aiDuplicates')) {
         try {
             const { runAiDuplicateChecks } = require('./ai-vuln-duplicate-ai');
             aiDuplicateResult = await runAiDuplicateChecks({
@@ -428,6 +405,25 @@ const runSingleVulnerabilityQa = async ({
             aiDuplicateIssues = aiDuplicateResult.issues || [];
         } catch (err) {
             aiDuplicateSkippedReason = err?.message || String(err);
+        }
+    }
+
+    let aiUnlinkedTranslationIssues = [];
+    let aiUnlinkedTranslationResult = null;
+    let aiUnlinkedTranslationSkippedReason = '';
+
+    if (runAi && includeAiUnlinkedTranslations && isQaCheckEnabled(qaChecks, 'aiUnlinkedTranslations')) {
+        try {
+            const { runAiUnlinkedTranslationChecks } = require('./ai-vuln-translation-ai');
+            aiUnlinkedTranslationResult = await runAiUnlinkedTranslationChecks({
+                vulnerabilities: allVulnerabilities,
+                targetVulnerabilityId: vulnerability._id || vulnerability.id,
+                settings: settings,
+                provider: provider
+            });
+            aiUnlinkedTranslationIssues = aiUnlinkedTranslationResult.issues || [];
+        } catch (err) {
+            aiUnlinkedTranslationSkippedReason = err?.message || String(err);
         }
     }
 
@@ -446,12 +442,12 @@ const runSingleVulnerabilityQa = async ({
     let aiResult = null;
     let aiSkippedReason = '';
 
-    if (aiChecksEnabled) {
+    if (runAi && aiChecksEnabled) {
         try {
-            aiResult = await runQaWithProvider({
+            aiResult = await runVulnerabilityTemplateQaWithProvider({
                 provider: selectedProvider,
                 settings: settings,
-                auditSnapshot: snapshot,
+                templateSnapshot: snapshot,
                 qaChecks: qaChecks,
                 redactionGuidelines: redactionGuidelines,
                 redactionGuidelinesText: redactionGuidelinesText,
@@ -466,10 +462,13 @@ const runSingleVulnerabilityQa = async ({
     const aiIssues = filterAiIssuesByEnabledChecks(
         (aiResult?.issues || []).map((issue) => normalizeIssue({
             ...issue,
-            location: normalizeAiIssueLocation(issue.location, {
-                entityPrefix: 'vulnerability',
-                defaultTitle: detail.title
-            })
+            location: normalizeAiIssueLocation(
+                String(issue.location || '').replace(/^finding:/i, 'vulnerability:'),
+                {
+                    entityPrefix: 'vulnerability',
+                    defaultTitle: detail.title
+                }
+            )
         }, 'ai')),
         qaChecks
     );
@@ -483,10 +482,11 @@ const runSingleVulnerabilityQa = async ({
         ...imageCaptionIssues,
         ...duplicateIssues,
         ...aiDuplicateIssues,
+        ...aiUnlinkedTranslationIssues,
         ...aiIssues
     ]));
 
-    if (aiChecksEnabled && !aiResult && aiSkippedReason) {
+    if (runAi && aiChecksEnabled && !aiResult && aiSkippedReason) {
         pushIssue(issues, {
             severity: 'info',
             category: 'other',
@@ -496,12 +496,22 @@ const runSingleVulnerabilityQa = async ({
         }, 'structural');
     }
 
-    if (includeAiDuplicates && isQaCheckEnabled(qaChecks, 'aiDuplicates') && !aiDuplicateResult && aiDuplicateSkippedReason) {
+    if (runAi && includeAiDuplicates && isQaCheckEnabled(qaChecks, 'aiDuplicates') && !aiDuplicateResult && aiDuplicateSkippedReason) {
         pushIssue(issues, {
             severity: 'info',
             category: 'other',
             title: 'AI duplicate review skipped',
             message: `AI duplicate detection could not run: ${aiDuplicateSkippedReason}`,
+            location: formatVulnerabilityLocation(detail.title)
+        }, 'structural');
+    }
+
+    if (runAi && includeAiUnlinkedTranslations && isQaCheckEnabled(qaChecks, 'aiUnlinkedTranslations') && !aiUnlinkedTranslationResult && aiUnlinkedTranslationSkippedReason) {
+        pushIssue(issues, {
+            severity: 'info',
+            category: 'other',
+            title: 'AI translation link review skipped',
+            message: `AI unlinked translation detection could not run: ${aiUnlinkedTranslationSkippedReason}`,
             location: formatVulnerabilityLocation(detail.title)
         }, 'structural');
     }
@@ -512,10 +522,10 @@ const runSingleVulnerabilityQa = async ({
         vulnerabilityId: String(vulnerability._id || vulnerability.id || ''),
         title: String(detail.title || '').trim(),
         issues: finalIssues,
-        summary: buildSummary(finalIssues, aiResult?.summary || aiDuplicateResult?.summary || ''),
-        aiAnalysis: Boolean(aiResult || aiDuplicateResult),
-        provider: aiResult ? selectedProvider : (aiDuplicateResult?.provider || null),
-        model: aiResult?.model || aiDuplicateResult?.model || null,
+        summary: buildSummary(finalIssues, aiResult?.summary || aiDuplicateResult?.summary || aiUnlinkedTranslationResult?.summary || ''),
+        aiAnalysis: Boolean(aiResult || aiDuplicateResult || aiUnlinkedTranslationResult),
+        provider: aiResult ? selectedProvider : (aiDuplicateResult?.provider || aiUnlinkedTranslationResult?.provider || null),
+        model: aiResult?.model || aiDuplicateResult?.model || aiUnlinkedTranslationResult?.model || null,
         counts: buildIssueCounts(finalIssues)
     };
 };
@@ -525,7 +535,8 @@ const runVulnerabilityQa = async ({
     locale,
     settings,
     provider,
-    allVulnerabilities = []
+    allVulnerabilities = [],
+    scope = 'all'
 }) => {
     const qaChecks = getQaChecksFromSettings(settings);
 
@@ -562,7 +573,8 @@ const runVulnerabilityQa = async ({
         settings: settings,
         provider: provider,
         allVulnerabilities: allVulnerabilities,
-        qaChecks: qaChecks
+        qaChecks: qaChecks,
+        scope: scope
     });
 
     return {
@@ -583,7 +595,8 @@ const runAllVulnerabilitiesQa = async ({
     vulnerabilities = [],
     locale,
     settings,
-    provider
+    provider,
+    scope = 'all'
 }) => {
     const qaChecks = getQaChecksFromSettings(settings);
 
@@ -601,6 +614,10 @@ const runAllVulnerabilitiesQa = async ({
         };
     }
 
+    const normalizedScope = normalizeQaScope(scope) || 'all';
+    const runProgrammatic = normalizedScope === 'all' || normalizedScope === 'programmatic';
+    const runAi = normalizedScope === 'all' || normalizedScope === 'ai';
+
     const targets = vulnerabilities
         .map((vulnerability) => ({
             vulnerability: vulnerability,
@@ -617,7 +634,9 @@ const runAllVulnerabilitiesQa = async ({
             provider: provider,
             allVulnerabilities: vulnerabilities,
             qaChecks: qaChecks,
-            includeAiDuplicates: false
+            scope: normalizedScope,
+            includeAiDuplicates: false,
+            includeAiUnlinkedTranslations: false
         }));
     }
 
@@ -625,7 +644,7 @@ const runAllVulnerabilitiesQa = async ({
     let aiDuplicateResult = null;
     let aiDuplicateSkippedReason = '';
 
-    if (isQaCheckEnabled(qaChecks, 'aiDuplicates')) {
+    if (runAi && isQaCheckEnabled(qaChecks, 'aiDuplicates')) {
         try {
             const { runAiDuplicateChecks } = require('./ai-vuln-duplicate-ai');
             aiDuplicateResult = await runAiDuplicateChecks({
@@ -640,12 +659,31 @@ const runAllVulnerabilitiesQa = async ({
         }
     }
 
+    let aiUnlinkedTranslationIssues = [];
+    let aiUnlinkedTranslationResult = null;
+    let aiUnlinkedTranslationSkippedReason = '';
+
+    if (runAi && isQaCheckEnabled(qaChecks, 'aiUnlinkedTranslations')) {
+        try {
+            const { runAiUnlinkedTranslationChecks } = require('./ai-vuln-translation-ai');
+            aiUnlinkedTranslationResult = await runAiUnlinkedTranslationChecks({
+                vulnerabilities: vulnerabilities,
+                settings: settings,
+                provider: provider
+            });
+            aiUnlinkedTranslationIssues = aiUnlinkedTranslationResult.issues || [];
+        } catch (err) {
+            aiUnlinkedTranslationSkippedReason = err?.message || String(err);
+        }
+    }
+
     const issues = sortIssues(dedupeIssues([
         ...results.flatMap((result) => result.issues),
-        ...aiDuplicateIssues
+        ...aiDuplicateIssues,
+        ...aiUnlinkedTranslationIssues
     ]));
 
-    if (isQaCheckEnabled(qaChecks, 'aiDuplicates') && !aiDuplicateResult && aiDuplicateSkippedReason) {
+    if (runAi && isQaCheckEnabled(qaChecks, 'aiDuplicates') && !aiDuplicateResult && aiDuplicateSkippedReason) {
         pushIssue(issues, {
             severity: 'info',
             category: 'other',
@@ -655,12 +693,26 @@ const runAllVulnerabilitiesQa = async ({
         }, 'structural');
     }
 
-    const aiAnalysis = results.some((result) => result.aiAnalysis) || Boolean(aiDuplicateResult);
+    if (runAi && isQaCheckEnabled(qaChecks, 'aiUnlinkedTranslations') && !aiUnlinkedTranslationResult && aiUnlinkedTranslationSkippedReason) {
+        pushIssue(issues, {
+            severity: 'info',
+            category: 'other',
+            title: 'AI translation link review skipped',
+            message: `AI unlinked translation detection could not run: ${aiUnlinkedTranslationSkippedReason}`,
+            location: 'vulnerability database'
+        }, 'structural');
+    }
+
+    const aiAnalysis = results.some((result) => result.aiAnalysis) ||
+        Boolean(aiDuplicateResult) ||
+        Boolean(aiUnlinkedTranslationResult);
     const providerUsed = results.find((result) => result.provider)?.provider ||
         aiDuplicateResult?.provider ||
+        aiUnlinkedTranslationResult?.provider ||
         null;
     const modelUsed = results.find((result) => result.model)?.model ||
         aiDuplicateResult?.model ||
+        aiUnlinkedTranslationResult?.model ||
         null;
 
     return {

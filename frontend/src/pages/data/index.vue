@@ -49,11 +49,17 @@
                 </q-item-section>
                 <q-item-section>{{$t('languageToolRules')}}</q-item-section>
             </q-item>
-            <q-item v-if="showAiIntegration" to='/data/ai-integration'>
+            <q-item v-if="showAssistedWriting" to='/data/assisted-writing'>
                 <q-item-section avatar>
                     <q-icon name="auto_awesome" />
                 </q-item-section>
-                <q-item-section>AI Integration</q-item-section>
+                <q-item-section>Assisted Writing</q-item-section>
+            </q-item>
+            <q-item v-if="showQualityAssurance" to='/data/quality-assurance'>
+                <q-item-section avatar>
+                    <q-icon name="fas fa-list-check" />
+                </q-item-section>
+                <q-item-section>Quality Assurance</q-item-section>
             </q-item>
 
             <q-separator spaced />
@@ -94,12 +100,16 @@ export default {
     },
 
     computed: {
-        showAiIntegration() {
+        showAssistedWriting() {
             return this.$settings?.ai?.public?.enabled !== false && (
                 userStore.isAllowed('ai:prompts:read') ||
-                userStore.isAllowed('ai:redaction-guidelines:read') ||
-                userStore.isAllowed('ai:qa-instructions:read')
+                userStore.isAllowed('ai:redaction-guidelines:read')
             )
+        },
+
+        showQualityAssurance() {
+            return this.$settings?.ai?.public?.enabled !== false &&
+                userStore.isAllowed('ai:qa-instructions:read')
         },
 
         isDesktop() {

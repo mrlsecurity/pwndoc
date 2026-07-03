@@ -115,22 +115,32 @@ const parseReferenceUrl = (rawUrl = '') => {
     }
 };
 
-const isBlockedReferenceUrl = (rawUrl = '') => {
+const REFERENCE_URL_ERRORS = {
+    malformed: 'Reference URL is malformed.',
+    unsupportedScheme: 'Only HTTP(S) reference URLs can be validated automatically.',
+    embeddedCredentials: 'Reference URLs with embedded credentials cannot be validated automatically.',
+    localOrPrivateHost: 'Reference URL points to a private or local address and cannot be validated automatically.',
+    unresolvedHost: 'Reference URL hostname could not be resolved.'
+};
+
+const getStaticReferenceUrlError = (rawUrl = '') => {
     const parsed = parseReferenceUrl(rawUrl);
     if (!parsed)
-        return true;
+        return REFERENCE_URL_ERRORS.malformed;
 
     if (!['http:', 'https:'].includes(parsed.protocol))
-        return true;
+        return REFERENCE_URL_ERRORS.unsupportedScheme;
 
     if (parsed.username || parsed.password)
-        return true;
+        return REFERENCE_URL_ERRORS.embeddedCredentials;
 
     if (isBlockedHostname(parsed.hostname))
-        return true;
+        return REFERENCE_URL_ERRORS.localOrPrivateHost;
 
-    return false;
+    return null;
 };
+
+const isBlockedReferenceUrl = (rawUrl = '') => Boolean(getStaticReferenceUrlError(rawUrl));
 
 const resolveHostname = async (hostname = '') => {
     const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
@@ -146,24 +156,30 @@ const resolveHostname = async (hostname = '') => {
     return (results || []).map((entry) => entry.address).filter(Boolean);
 };
 
-const isAllowedReferenceUrl = async (rawUrl = '') => {
-    if (isBlockedReferenceUrl(rawUrl))
-        return false;
+const getReferenceUrlValidationError = async (rawUrl = '') => {
+    const staticError = getStaticReferenceUrlError(rawUrl);
+    if (staticError)
+        return staticError;
 
     const parsed = parseReferenceUrl(rawUrl);
     if (!parsed)
-        return false;
+        return REFERENCE_URL_ERRORS.malformed;
 
     try {
         const addresses = await resolveHostname(parsed.hostname);
         if (!addresses.length)
-            return false;
+            return REFERENCE_URL_ERRORS.unresolvedHost;
 
-        return addresses.every((address) => !isBlockedIpAddress(address));
+        if (!addresses.every((address) => !isBlockedIpAddress(address)))
+            return REFERENCE_URL_ERRORS.localOrPrivateHost;
+
+        return null;
     } catch (_) {
-        return false;
+        return REFERENCE_URL_ERRORS.unresolvedHost;
     }
 };
+
+const isAllowedReferenceUrl = async (rawUrl = '') => !(await getReferenceUrlValidationError(rawUrl));
 
 const classifyHttpStatus = (status) => {
     if (status >= 200 && status < 400)
@@ -194,8 +210,9 @@ const requestReferenceUrl = async (url, method = 'HEAD') => {
     let currentUrl = url;
 
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-        if (!(await isAllowedReferenceUrl(currentUrl)))
-            throw new Error('Reference URL is not allowed for automated validation.');
+        const validationError = await getReferenceUrlValidationError(currentUrl);
+        if (validationError)
+            throw new Error(validationError);
 
         const response = await fetch(currentUrl, {
             method: method,
@@ -223,13 +240,14 @@ const requestReferenceUrl = async (url, method = 'HEAD') => {
 
 const validateReferenceUrl = async (rawUrl = '') => {
     const url = trimUrlTrailing(rawUrl);
+    const validationError = await getReferenceUrlValidationError(url);
 
-    if (!(await isAllowedReferenceUrl(url))) {
+    if (validationError) {
         return {
             url: url,
             valid: false,
             severity: 'warning',
-            message: 'Reference URL is not allowed for automated validation.'
+            message: validationError
         };
     }
 
@@ -251,19 +269,13 @@ const validateReferenceUrl = async (rawUrl = '') => {
             'request timed out' :
             (err?.message || String(err));
 
-        if (detail.includes('not allowed'))
-            return {
-                url: url,
-                valid: false,
-                severity: 'warning',
-                message: detail
-            };
-
         return {
             url: url,
             valid: false,
-            severity: 'error',
-            message: `Reference URL could not be reached (${detail}).`
+            severity: detail.includes('timed out') ? 'warning' : 'error',
+            message: Object.values(REFERENCE_URL_ERRORS).includes(detail) ?
+                detail :
+                `Reference URL could not be reached (${detail}).`
         };
     }
 };
@@ -346,6 +358,7 @@ module.exports = {
     extractUrlsFromText,
     extractUrlsFromReferences,
     isBlockedReferenceUrl,
+    getReferenceUrlValidationError,
     isAllowedReferenceUrl,
     validateReferenceUrl,
     runReferenceLinkChecks

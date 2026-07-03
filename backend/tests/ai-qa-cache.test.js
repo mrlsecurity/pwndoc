@@ -4,7 +4,8 @@ const {
     getLatestQaReport,
     getOutdatedQaReport,
     isQaReportCurrent,
-    buildQaReportCache
+    buildQaReportCache,
+    formatQaReportResponse
 } = require('../src/lib/ai-qa-cache');
 
 module.exports = function() {
@@ -121,6 +122,49 @@ module.exports = function() {
             });
 
             expect(latest.summary).toBe('Latest report');
+        });
+
+        it('should track separate run timestamps by QA scope', () => {
+            const fingerprint = computeAuditQaFingerprint(baseAudit);
+            const programmaticOnly = buildQaReportCache(fingerprint, {
+                summary: 'Programmatic',
+                issues: [{
+                    severity: 'warning',
+                    category: 'completeness',
+                    title: 'Structural issue',
+                    message: 'Missing field',
+                    location: 'report',
+                    source: 'structural'
+                }],
+                counts: { total: 1, error: 0, warning: 1, info: 0 }
+            }, { scope: 'programmatic' });
+
+            const merged = buildQaReportCache(fingerprint, {
+                summary: 'Merged',
+                issues: [
+                    ...programmaticOnly.issues,
+                    {
+                        severity: 'warning',
+                        category: 'redaction',
+                        title: 'AI issue',
+                        message: 'Sensitive data',
+                        location: 'report',
+                        source: 'ai'
+                    }
+                ],
+                aiAnalysis: true,
+                counts: { total: 2, error: 0, warning: 2, info: 0 }
+            }, {
+                existing: programmaticOnly,
+                scope: 'ai'
+            });
+
+            expect(merged.programmaticRanAt).toEqual(programmaticOnly.programmaticRanAt);
+            expect(merged.aiRanAt).not.toEqual(programmaticOnly.programmaticRanAt);
+
+            const response = formatQaReportResponse(merged);
+            expect(response.programmaticRanAt).toEqual(programmaticOnly.programmaticRanAt);
+            expect(response.aiRanAt).toEqual(merged.aiRanAt);
         });
 
         it('should not return cached or outdated QA results when no report exists', () => {

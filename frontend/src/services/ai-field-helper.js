@@ -100,6 +100,115 @@ const getInputSelection = (inputRef) => {
   }
 }
 
+const CUSTOM_FIELD_PREFIX = 'custom-field:'
+
+const cloneData = (data) => JSON.parse(JSON.stringify(data))
+
+const parseFieldKey = (fieldKey) => {
+  const key = String(fieldKey || '')
+  if (key.startsWith(CUSTOM_FIELD_PREFIX)) {
+    return {
+      kind: 'custom',
+      customFieldId: key.slice(CUSTOM_FIELD_PREFIX.length)
+    }
+  }
+
+  return { kind: 'standard', field: key }
+}
+
+const findCustomField = (container, customFieldId) => {
+  const fields = container?.customFields
+  if (!Array.isArray(fields))
+    return null
+
+  return fields.find((entry) => {
+    const id = entry?.customField?._id || entry?.customField
+    return String(id) === String(customFieldId)
+  })
+}
+
+const getFieldContainer = (entity, entityShape, locale) => {
+  if (entityShape === 'vulnerability') {
+    const details = entity?.details
+    if (!Array.isArray(details))
+      return null
+    return details.find((detail) => detail.locale === locale) || details[0]
+  }
+
+  if (entityShape === 'finding' || entityShape === 'section')
+    return entity
+
+  return entity
+}
+
+const getFieldValue = (entity, entityShape, fieldKey, locale) => {
+  const container = getFieldContainer(entity, entityShape, locale)
+  if (!container)
+    return undefined
+
+  const parsed = parseFieldKey(fieldKey)
+  if (parsed.kind === 'custom')
+    return findCustomField(container, parsed.customFieldId)?.text
+
+  return container[parsed.field]
+}
+
+const setFieldValue = (entity, entityShape, fieldKey, locale, value) => {
+  const result = cloneData(entity)
+  const container = getFieldContainer(result, entityShape, locale)
+  if (!container)
+    return result
+
+  const parsed = parseFieldKey(fieldKey)
+  if (parsed.kind === 'custom') {
+    const customField = findCustomField(container, parsed.customFieldId)
+    if (customField)
+      customField.text = value
+  } else {
+    container[parsed.field] = value
+  }
+
+  return result
+}
+
+const applySelectionToValue = (value, selection, replacement, outputType) => {
+  const repl = Array.isArray(replacement) ?
+    replacement.join('\n') :
+    String(replacement || '')
+
+  if (outputType === 'array') {
+    const text = Array.isArray(value) ? value.join('\n') : String(value || '')
+    const next = text.substring(0, selection.start) + repl + text.substring(selection.end)
+    return next
+      .split('\n')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  }
+
+  const text = String(value || '')
+  return text.substring(0, selection.start) + repl + text.substring(selection.end)
+}
+
+const createDiffContext = ({
+  getDiffEntity,
+  entityShape,
+  fieldKey,
+  locale,
+  outputType,
+  mode,
+  selection = null,
+  languages = []
+}) => ({
+  current: cloneData(getDiffEntity()),
+  entityShape,
+  fieldKey,
+  locale,
+  outputType,
+  mode,
+  selection: selection ? { ...selection } : null,
+  languages: languages || []
+})
+
 const replaceInputSelection = (inputRef, selection, content) => {
   const el = inputRef?.$el?.querySelector('textarea, input')
   if (!el || !selection)
@@ -146,21 +255,61 @@ export default {
     return text
   },
 
+  buildAiDiffDraft(diffContext, draft) {
+    if (!diffContext?.current)
+      return null
+
+    const {
+      current,
+      entityShape,
+      fieldKey,
+      locale,
+      outputType,
+      mode,
+      selection
+    } = diffContext
+    const normalized = normalizeDraftForApply(draft, outputType)
+
+    if (mode === 'selection' && selection) {
+      const currentValue = getFieldValue(current, entityShape, fieldKey, locale)
+      const nextValue = applySelectionToValue(currentValue, selection, normalized, outputType)
+      return setFieldValue(current, entityShape, fieldKey, locale, nextValue)
+    }
+
+    return setFieldValue(current, entityShape, fieldKey, locale, normalized)
+  },
+
   async runFieldAiChat({
     title,
     defaultPrompt,
     outputType,
     requestParams,
     lockKey = null,
-    onCancel
+    onCancel,
+    getDiffEntity = null,
+    entityShape = null,
+    languages = []
   }) {
+    const diffContext = (typeof getDiffEntity === 'function' && entityShape) ?
+      createDiffContext({
+        getDiffEntity,
+        entityShape,
+        fieldKey: requestParams.field,
+        locale: requestParams.locale,
+        outputType,
+        mode: 'field',
+        languages
+      }) :
+      null
+
     try {
       return await useAiGenerationStore().openSession({
         title,
         defaultPrompt,
         outputType,
         requestParams,
-        lockKey
+        lockKey,
+        diffContext
       })
     } catch (err) {
       if (err?.message === 'cancelled') {
@@ -186,15 +335,33 @@ export default {
     outputType,
     requestParams,
     lockKey = null,
-    onCancel
+    onCancel,
+    selection = null,
+    getDiffEntity = null,
+    entityShape = null,
+    languages = []
   }) {
+    const diffContext = (typeof getDiffEntity === 'function' && entityShape && selection) ?
+      createDiffContext({
+        getDiffEntity,
+        entityShape,
+        fieldKey: requestParams.field,
+        locale: requestParams.locale,
+        outputType,
+        mode: 'selection',
+        selection,
+        languages
+      }) :
+      null
+
     try {
       return await useAiGenerationStore().openSession({
         title,
         selectedText,
         outputType,
         requestParams,
-        lockKey
+        lockKey,
+        diffContext
       })
     } catch (err) {
       if (err?.message === 'cancelled') {

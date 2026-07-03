@@ -19,6 +19,7 @@ import { createDraftRecovery } from '@/composables/useDraftRecovery'
 import DraftRecoveryService from '@/services/draft-recovery'
 import VulnerabilityQaPanel from '@/components/vulnerability-qa-panel.vue'
 import AiChatDrawer from '@/components/ai-chat-drawer.vue'
+import { hasAnyQaCheckEnabled } from '@/services/qa-checks'
 
 import { $t } from 'boot/i18n'
 
@@ -185,12 +186,14 @@ export default {
 
         aiQaEnabled: function() {
             return this.$settings?.ai?.public?.enabled !== false &&
-                userStore.isAllowed('vulnerabilities:ai-qa')
+                userStore.isAllowed('vulnerabilities:ai-qa') &&
+                hasAnyQaCheckEnabled(this.$settings?.ai?.public?.qaChecks)
         },
 
         aiQaAllEnabled: function() {
             return this.$settings?.ai?.public?.enabled !== false &&
-                userStore.isAllowed('vulnerabilities:ai-qa-all');
+                userStore.isAllowed('vulnerabilities:ai-qa-all') &&
+                hasAnyQaCheckEnabled(this.$settings?.ai?.public?.qaChecks)
         },
 
         vulnerabilityQaCount: function() {
@@ -683,6 +686,7 @@ export default {
                 return
             }
 
+            Utils.syncEditors(this.$refs)
             this.prepareSidePanelForModal('qa')
             this.vulnQaOpen = true
         },
@@ -862,6 +866,10 @@ export default {
                         selectedText: selection.text,
                         outputType,
                         lockKey,
+                        selection,
+                        getDiffEntity: () => this.currentVulnerability,
+                        entityShape: 'vulnerability',
+                        languages: this.languages,
                         requestParams: {
                             ...requestParams,
                             context: {
@@ -902,6 +910,9 @@ export default {
                     defaultPrompt,
                     outputType,
                     lockKey,
+                    getDiffEntity: () => this.currentVulnerability,
+                    entityShape: 'vulnerability',
+                    languages: this.languages,
                     requestParams
                 })
 

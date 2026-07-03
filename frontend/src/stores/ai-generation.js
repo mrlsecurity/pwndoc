@@ -4,7 +4,6 @@ import { useAuditQaStore } from '@/stores/audit-qa'
 const emptyConversation = () => ({
   messages: [],
   userInput: '',
-  latestDraft: null,
   confirmedPromptInstruction: ''
 })
 
@@ -86,7 +85,8 @@ export const useAiGenerationStore = defineStore('aiGeneration', {
           selectedText: config.selectedText || '',
           defaultPrompt: config.defaultPrompt || '',
           outputType: config.outputType || 'html',
-          requestParams: config.requestParams || {}
+          requestParams: config.requestParams || {},
+          diffContext: config.diffContext || null
         }
         this.loading = false
         this.clearConversation()

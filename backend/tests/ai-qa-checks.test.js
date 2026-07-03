@@ -4,7 +4,10 @@ const {
     hasEnabledAiQaChecks,
     hasEnabledQaChecks,
     validateQaChecksPayload,
-    filterAiIssuesByEnabledChecks
+    filterAiIssuesByEnabledChecks,
+    mergeQaIssues,
+    finalizeMergedQaResult,
+    normalizeQaScope
 } = require('../src/lib/ai-qa-checks');
 
 module.exports = function() {
@@ -16,6 +19,7 @@ module.exports = function() {
             expect(checks.imageCaptions).toBe(true);
             expect(checks.duplicates).toBe(true);
             expect(checks.aiDuplicates).toBe(true);
+            expect(checks.aiUnlinkedTranslations).toBe(true);
             expect(checks.redaction).toBe(true);
             expect(checks.customer).toBe(true);
             expect(checks.instructions).toBe(true);
@@ -72,11 +76,60 @@ module.exports = function() {
                 imageCaptions: false,
                 duplicates: false,
                 aiDuplicates: false,
+                aiUnlinkedTranslations: false,
                 redaction: false,
                 customer: false,
                 instructions: false
             })).toBe(false);
             expect(isQaCheckEnabled({ completeness: false }, 'completeness')).toBe(false);
+        });
+
+        it('should normalize supported QA scopes', () => {
+            expect(normalizeQaScope('programmatic')).toBe('programmatic');
+            expect(normalizeQaScope('AI')).toBe('ai');
+            expect(normalizeQaScope('invalid')).toBeNull();
+        });
+
+        it('should merge programmatic issues while keeping AI issues', () => {
+            const existing = [
+                { title: 'Old AI', source: 'ai', severity: 'warning', category: 'redaction', message: 'x', location: 'report' },
+                { title: 'Old structural', source: 'structural', severity: 'error', category: 'completeness', message: 'y', location: 'report' }
+            ];
+            const incoming = [
+                { title: 'New structural', source: 'structural', severity: 'warning', category: 'references', message: 'z', location: 'report' }
+            ];
+
+            const merged = mergeQaIssues(existing, incoming, 'programmatic');
+            expect(merged).toHaveLength(2);
+            expect(merged.map((issue) => issue.title)).toEqual(['Old AI', 'New structural']);
+        });
+
+        it('should keep programmatic issues when merging AI results', () => {
+            const existing = [
+                { title: 'Old structural', source: 'structural', severity: 'error', category: 'completeness', message: 'y', location: 'report' }
+            ];
+            const incoming = [
+                { title: 'New AI', source: 'ai', severity: 'warning', category: 'redaction', message: 'x', location: 'report' }
+            ];
+
+            const merged = mergeQaIssues(existing, incoming, 'ai');
+            expect(merged).toHaveLength(2);
+            expect(merged.map((issue) => issue.title)).toEqual(['Old structural', 'New AI']);
+        });
+
+        it('should finalize merged QA results with updated counts', () => {
+            const merged = finalizeMergedQaResult({}, {
+                summary: 'Updated',
+                aiAnalysis: true,
+                provider: 'openai',
+                model: 'gpt-test'
+            }, [
+                { title: 'Issue', source: 'structural', severity: 'error', category: 'completeness', message: 'x', location: 'report' }
+            ]);
+
+            expect(merged.summary).toBe('Updated');
+            expect(merged.counts.total).toBe(1);
+            expect(merged.aiAnalysis).toBe(true);
         });
     });
 };
