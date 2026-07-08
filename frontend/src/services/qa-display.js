@@ -142,6 +142,15 @@ export const filterIssuesBySeverity = (issues = [], severityFilter = 'all') => {
   return issues.filter((issue) => issue.severity === severityFilter)
 }
 
+const AI_UNAVAILABLE_TITLE = /^AI .* skipped$/
+
+export const isAiUnavailableIssue = (issue = {}) => AI_UNAVAILABLE_TITLE.test(String(issue.title || ''))
+
+export const splitAiUnavailableIssues = (issues = []) => ({
+  aiUnavailableIssues: issues.filter(isAiUnavailableIssue),
+  remainingIssues: issues.filter((issue) => !isAiUnavailableIssue(issue))
+})
+
 export const buildQaReportViewModel = (data = {}) => {
   const issues = Array.isArray(data.issues) ? data.issues : []
 

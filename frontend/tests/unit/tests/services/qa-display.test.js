@@ -9,7 +9,7 @@ vi.mock('@/services/audit-qa-navigation', async (importOriginal) => {
   return actual
 })
 
-import { groupIssuesByLabel, filterIssuesBySeverity, formatQaLocationLabel, buildQaReportViewModel, buildPreviousRunEntries, buildPreviousRunLabels } from '@/services/qa-display'
+import { groupIssuesByLabel, filterIssuesBySeverity, formatQaLocationLabel, buildQaReportViewModel, buildPreviousRunEntries, buildPreviousRunLabels, isAiUnavailableIssue, splitAiUnavailableIssues } from '@/services/qa-display'
 
 describe('qa-display', () => {
   const issues = [
@@ -29,6 +29,28 @@ describe('qa-display', () => {
     expect(filterIssuesBySeverity(issues, 'all')).toHaveLength(3)
     expect(filterIssuesBySeverity(issues, 'error')).toHaveLength(2)
     expect(filterIssuesBySeverity(issues, 'warning')).toHaveLength(1)
+  })
+
+  it('identifies AI-unavailable issues by their skipped title', () => {
+    expect(isAiUnavailableIssue({ title: 'AI review skipped' })).toBe(true)
+    expect(isAiUnavailableIssue({ title: 'AI duplicate review skipped' })).toBe(true)
+    expect(isAiUnavailableIssue({ title: 'AI translation link review skipped' })).toBe(true)
+    expect(isAiUnavailableIssue({ title: 'Reference link check skipped' })).toBe(false)
+    expect(isAiUnavailableIssue({ title: 'Missing audit name' })).toBe(false)
+  })
+
+  it('splits AI-unavailable issues out from the remaining issues', () => {
+    const withSkipped = [
+      ...issues,
+      { location: 'report', severity: 'info', title: 'AI review skipped', message: 'Automated content review could not run: provider not configured' }
+    ]
+
+    const { aiUnavailableIssues, remainingIssues } = splitAiUnavailableIssues(withSkipped)
+
+    expect(aiUnavailableIssues).toHaveLength(1)
+    expect(aiUnavailableIssues[0].message).toContain('provider not configured')
+    expect(remainingIssues).toHaveLength(3)
+    expect(remainingIssues).toEqual(issues)
   })
 
   it('formats canonical vulnerability locations with field labels', () => {

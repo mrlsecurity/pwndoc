@@ -11,6 +11,7 @@
   :grouped-issues="groupedIssues"
   :outdated="outdated"
   :summary="summary"
+  :ai-unavailable-messages="aiUnavailableMessages"
   show-navigation
   :navigation-label="navigationLabel"
   @close="closeDrawer"
@@ -24,7 +25,7 @@
 import { mapState, mapActions } from 'pinia'
 import { useAuditQaStore } from '@/stores/audit-qa'
 import QaResultsPanel from '@/components/qa-results-panel.vue'
-import { groupIssuesByLabel, formatQaLocationLabel } from '@/services/qa-display'
+import { groupIssuesByLabel, formatQaLocationLabel, splitAiUnavailableIssues } from '@/services/qa-display'
 import {
   parseIssueLocation,
   buildIssueRoute,
@@ -73,8 +74,13 @@ export default {
       return useAuditQaStore().filteredIssues
     },
 
+    aiUnavailableMessages() {
+      return splitAiUnavailableIssues(this.issues).aiUnavailableIssues.map((issue) => issue.message)
+    },
+
     groupedIssues() {
-      return groupIssuesByLabel(this.filteredIssues, this.formatLocationLabel)
+      const { remainingIssues } = splitAiUnavailableIssues(this.filteredIssues)
+      return groupIssuesByLabel(remainingIssues, this.formatLocationLabel)
     }
   },
 

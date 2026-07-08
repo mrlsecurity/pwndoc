@@ -12,6 +12,7 @@ const messages = {
       outdatedBanner: 'These results are out of date — content changed since the last run. Re-run recommended.',
       errors: 'Errors',
       warnings: 'Warnings',
+      infos: 'Notes',
       total: 'Total',
       lastRun: 'Last run',
       noIssues: 'No issues flagged',
@@ -131,5 +132,38 @@ describe('QaResultsPanel summary', () => {
     const wrapper = createWrapper({ summary: '' })
 
     expect(wrapper.find('.qa-summary').exists()).toBe(false)
+  })
+})
+
+describe('QaResultsPanel info tile', () => {
+  it('renders an info stat tile alongside errors, warnings, and total', () => {
+    const wrapper = createWrapper({ counts: { total: 4, error: 1, warning: 1, info: 2 } })
+
+    expect(wrapper.find('.qa-stat--info .qa-stat__value').text()).toBe('2')
+  })
+
+  it('filters to info severity when the info tile is clicked', async () => {
+    const wrapper = createWrapper({ counts: { total: 4, error: 1, warning: 1, info: 2 } })
+
+    await wrapper.find('.qa-stat--info').trigger('click')
+
+    expect(wrapper.emitted('update:severityFilter')).toEqual([['info']])
+  })
+})
+
+describe('QaResultsPanel AI-unavailable banner', () => {
+  it('promotes AI-unavailable messages to a banner instead of a buried row', () => {
+    const wrapper = createWrapper({
+      aiUnavailableMessages: ['Automated content review could not run: provider not configured']
+    })
+
+    expect(wrapper.find('.qa-ai-unavailable-banner').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Automated content review could not run: provider not configured')
+  })
+
+  it('does not render the banner when there are no AI-unavailable messages', () => {
+    const wrapper = createWrapper({ aiUnavailableMessages: [] })
+
+    expect(wrapper.find('.qa-ai-unavailable-banner').exists()).toBe(false)
   })
 })

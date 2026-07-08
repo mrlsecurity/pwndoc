@@ -38,6 +38,20 @@
           {{ errorMessage }}
         </div>
 
+        <q-banner
+        v-if="aiUnavailableMessages.length"
+        dense
+        rounded
+        class="bg-orange-1 text-orange-10 q-mb-md qa-ai-unavailable-banner"
+        >
+          <div
+          v-for="(message, index) in aiUnavailableMessages"
+          :key="index"
+          >
+            {{ message }}
+          </div>
+        </q-banner>
+
         <div v-if="hasRunActions" class="column q-gutter-sm q-mb-md">
           <q-btn
           v-if="programmaticActionVisible"
@@ -82,7 +96,7 @@
           </q-banner>
 
           <div class="row q-col-gutter-sm q-mb-md">
-            <div class="col-4">
+            <div class="col-3">
               <div
               class="qa-stat qa-stat--error"
               :class="{ 'qa-stat--active': severityFilter === 'error' }"
@@ -92,7 +106,7 @@
                 <div class="qa-stat__label">{{ $t('auditQa.errors') }}</div>
               </div>
             </div>
-            <div class="col-4">
+            <div class="col-3">
               <div
               class="qa-stat qa-stat--warning"
               :class="{ 'qa-stat--active': severityFilter === 'warning' }"
@@ -102,7 +116,17 @@
                 <div class="qa-stat__label">{{ $t('auditQa.warnings') }}</div>
               </div>
             </div>
-            <div class="col-4">
+            <div class="col-3">
+              <div
+              class="qa-stat qa-stat--info"
+              :class="{ 'qa-stat--active': severityFilter === 'info' }"
+              @click="setSeverityFilter('info')"
+              >
+                <div class="qa-stat__value">{{ counts.info }}</div>
+                <div class="qa-stat__label">{{ $t('auditQa.infos') }}</div>
+              </div>
+            </div>
+            <div class="col-3">
               <div
               class="qa-stat qa-stat--total"
               :class="{ 'qa-stat--active': severityFilter === 'all' }"
@@ -267,6 +291,10 @@ export default {
     summary: {
       type: String,
       default: ''
+    },
+    aiUnavailableMessages: {
+      type: Array,
+      default: () => []
     },
     showNavigation: {
       type: Boolean,
@@ -468,6 +496,10 @@ export default {
   border-color: #f2c037;
 }
 
+.qa-stat--info.qa-stat--active {
+  border-color: #31ccec;
+}
+
 .qa-stat--total.qa-stat--active {
   border-color: #1976d2;
 }
@@ -490,6 +522,10 @@ export default {
 
 .qa-stat--warning .qa-stat__value {
   color: #f2c037;
+}
+
+.qa-stat--info .qa-stat__value {
+  color: #31ccec;
 }
 
 .qa-stat--total .qa-stat__value {
