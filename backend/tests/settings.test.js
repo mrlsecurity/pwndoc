@@ -2,7 +2,7 @@ module.exports = function(request, app) {
     describe('Application settings', () => {
       var userToken = '';
       var Settings = require('mongoose').model('Settings')
-      const { sanitizeSettingsForClient } = require('../src/lib/settings-secrets')
+      const { sanitizeSettingsForClient, MASKED_SECRET } = require('../src/lib/settings-secrets')
       beforeAll(async () => {
         var response = await request(app).post('/api/users/token').send({username: 'admin', password: 'Admin123'})
         userToken = response.body.datas.token
@@ -362,7 +362,42 @@ module.exports = function(request, app) {
       expect(JSON.stringify(response.body.datas)).not.toContain('super-secret-lt-key');
     })
 
-    it('Preserves stored API keys when clients submit empty values', async () => {
+    it('Preserves stored API keys when clients submit the masked sentinel', async () => {
+      await Settings.update({
+        ai: {
+          private: {
+            ...defaultAiPrivateSettings,
+            openaiApiKey: 'persisted-openai-key'
+          },
+          public: defaultAiPublicSettings
+        },
+        report: defaultSettings.report,
+        reviews: defaultSettings.reviews
+      });
+
+      const response = await request(app).put('/api/settings')
+        .set('Cookie', [
+          `token=JWT ${userToken}`
+        ])
+        .send({
+          ai: {
+            private: {
+              ...defaultAiPrivateSettings,
+              openaiApiKey: MASKED_SECRET
+            },
+            public: defaultAiPublicSettings
+          },
+          report: defaultSettings.report,
+          reviews: defaultSettings.reviews
+        });
+
+      expect(response.status).toBe(200);
+
+      const stored = await Settings.getAll();
+      expect(stored.ai.private.openaiApiKey).toBe('persisted-openai-key');
+    })
+
+    it('Clears stored API keys when clients submit an empty value', async () => {
       await Settings.update({
         ai: {
           private: {
@@ -394,7 +429,7 @@ module.exports = function(request, app) {
       expect(response.status).toBe(200);
 
       const stored = await Settings.getAll();
-      expect(stored.ai.private.openaiApiKey).toBe('persisted-openai-key');
+      expect(stored.ai.private.openaiApiKey).toBe('');
     })
 
     it('Returns internal error when loading full settings fails', async () => {

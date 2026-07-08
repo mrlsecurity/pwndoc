@@ -40,10 +40,13 @@ const mergeSettingsSecrets = (incoming, existing) => {
         if (!_.has(merged, parentPath)) return;
 
         const incomingValue = String(_.get(merged, path) || '').trim();
-        const existingValue = String(_.get(existingObj, path) || '').trim();
 
-        if (!incomingValue || incomingValue === MASKED_SECRET)
+        if (incomingValue === MASKED_SECRET) {
+            const existingValue = String(_.get(existingObj, path) || '').trim();
             _.set(merged, path, existingValue);
+        } else {
+            _.set(merged, path, incomingValue);
+        }
     });
 
     return merged;

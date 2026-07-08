@@ -299,8 +299,10 @@ export default {
                 return
             }
 
-            if (value === MASKED_SECRET)
+            if (value === MASKED_SECRET) {
+                this.settings.ai.private[field] = MASKED_SECRET
                 return
+            }
 
             this.settings.ai.private[field] = value.trim()
         },
