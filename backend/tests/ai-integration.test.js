@@ -40,6 +40,7 @@ module.exports = function(request, app) {
 
             await Settings.findOneAndUpdate({}, {
                 $set: {
+                    'ai.public.enabled': true,
                     'ai.public.redactionGuidelines.content': 'Secret redaction policy',
                     'ai.public.qaInstructions.content': 'Secret QA checklist',
                     'ai.public.qaChecks.redaction': false
@@ -50,6 +51,7 @@ module.exports = function(request, app) {
         beforeEach(async () => {
             await Settings.findOneAndUpdate({}, {
                 $set: {
+                    'ai.public.enabled': true,
                     'ai.public.redactionGuidelines.content': 'Secret redaction policy',
                     'ai.public.qaInstructions.content': 'Secret QA checklist',
                     'ai.public.qaChecks.redaction': false

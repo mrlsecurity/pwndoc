@@ -18,7 +18,7 @@ module.exports = function(request, app) {
       })
 
       const defaultAiPublicSettings = {
-        "enabled": true,
+        "enabled": false,
         "defaultProvider": "openai",
         "redactionGuidelines": defaultAiDeliverySettings(),
         "qaInstructions": defaultAiDeliverySettings(),
@@ -60,7 +60,7 @@ module.exports = function(request, app) {
       const defaultPublicSettings = {
         "ai": {
           "public": {
-            "enabled": true
+            "enabled": false
           },
         },
         "report": {
