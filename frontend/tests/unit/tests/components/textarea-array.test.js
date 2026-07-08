@@ -103,6 +103,13 @@ describe('TextareaArray Component', () => {
       const wrapper = createWrapper({ props: { showAiButton: true, readonly: false } })
       expect(wrapper.find('.bg-grey-4').exists()).toBe(true)
     })
+
+    it('should right-align the AI button and use the primary color', () => {
+      const wrapper = createWrapper({ props: { showAiButton: true, readonly: false } })
+      const bar = wrapper.find('.bg-grey-4')
+      expect(bar.classes()).toContain('justify-end')
+      expect(bar.find('q-btn').attributes('color')).toBe('primary')
+    })
   })
 
   describe('watcher: modelValue', () => {

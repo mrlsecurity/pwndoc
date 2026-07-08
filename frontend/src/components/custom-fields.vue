@@ -73,6 +73,7 @@
                         flat
                         size="sm"
                         dense
+                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldLocked(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -112,6 +113,7 @@
                         flat
                         size="sm"
                         dense
+                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldLocked(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -163,6 +165,7 @@
                         flat
                         size="sm"
                         dense
+                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldLocked(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -211,6 +214,7 @@
                         flat
                         size="sm"
                         dense
+                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldLocked(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -263,6 +267,7 @@
                         flat
                         size="sm"
                         dense
+                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldLocked(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -312,6 +317,7 @@
                         flat
                         size="sm"
                         dense
+                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldLocked(field)"
                         @click.stop="triggerGenerateAi(field)"

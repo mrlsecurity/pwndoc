@@ -1,7 +1,7 @@
 <template>
     <div>
-    <div v-if="showAiButton && !readonly" class="bg-grey-4 row items-center q-px-sm q-py-xs">
-        <q-btn flat size="sm" dense
+    <div v-if="showAiButton && !readonly" class="bg-grey-4 row items-center justify-end q-px-sm q-py-xs">
+        <q-btn flat size="sm" dense color="primary"
         :loading="aiLoading"
         :disable="aiLoading || readonly"
         @click="$emit('ai-click')"

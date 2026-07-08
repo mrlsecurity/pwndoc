@@ -538,7 +538,8 @@ describe('CustomFields Component', () => {
         aiEnabled: true,
         canGenerateAiForField: () => true,
         ...overrides.props
-      }
+      },
+      stubs: overrides.stubs
     })
 
     it('should hide the AI button for select fields', () => {
@@ -561,6 +562,15 @@ describe('CustomFields Component', () => {
     it('should show the AI button for editable supported fields', () => {
       const wrapper = createAiWrapper()
       expect(wrapper.vm.showAiButton(aiField)).toBe(true)
+    })
+
+    it('should render the AI button with the primary color', () => {
+      const wrapper = createAiWrapper({
+        stubs: {
+          'q-input': { template: '<div><slot name="append" /></div>' }
+        }
+      })
+      expect(wrapper.find('q-btn').attributes('color')).toBe('primary')
     })
   })
 })

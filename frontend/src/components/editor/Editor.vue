@@ -185,18 +185,6 @@
                 </div>
                 <q-separator vertical class="q-mx-sm" v-if="toolbar.indexOf('caption') !== -1" />
 
-                <template v-if="showAiButton && editable">
-                    <q-btn flat size="sm" dense
-                    :loading="aiLoading"
-                    :disable="aiLoading || aiLocked"
-                    @click="$emit('ai-click')"
-                    >
-                        <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
-                        <q-icon name="auto_awesome" />
-                    </q-btn>
-                    <q-separator vertical class="q-mx-sm" />
-                </template>
-
                 <q-btn flat size="sm" dense
                 @click="editor.commands.undo"
                 >
@@ -258,6 +246,19 @@
                     >
                         <q-tooltip :delay="500" class="text-bold">Add Comment</q-tooltip>
                         <q-icon name="add_comment" />
+                    </q-btn>
+                </template>
+
+                <template v-if="showAiButton && editable">
+                    <q-space />
+                    <q-separator vertical class="q-mx-sm" />
+                    <q-btn flat size="sm" dense color="primary"
+                    :loading="aiLoading"
+                    :disable="aiLoading || aiLocked"
+                    @click="$emit('ai-click')"
+                    >
+                        <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
+                        <q-icon name="auto_awesome" />
                     </q-btn>
                 </template>
             </q-toolbar>
