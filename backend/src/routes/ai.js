@@ -26,8 +26,9 @@ const normalizeDraftVulnerability = (raw = {}) => {
 };
 const {
     computeAuditQaFingerprint,
-    getLatestQaReport,
     normalizeStoredQaReport,
+    getCachedQaReport,
+    getOutdatedQaReport,
     buildQaReportCache,
     formatQaReportResponse
 } = require('../lib/ai-qa-cache');
@@ -235,7 +236,7 @@ const handleAiQa = async function(req, res) {
         const auditObject = typeof audit.toObject === 'function' ? audit.toObject() : audit;
 
         if (req.body.loadOnly) {
-            const report = getLatestQaReport(auditObject);
+            const report = getCachedQaReport(auditObject) || getOutdatedQaReport(auditObject);
             Response.Ok(res, {
                 auditId: auditId,
                 hasReport: Boolean(report),

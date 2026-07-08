@@ -9,6 +9,7 @@
   :counts="counts"
   :severity-filter="severityFilter"
   :grouped-issues="groupedIssues"
+  :outdated="outdated"
   show-navigation
   :navigation-label="navigationLabel"
   @close="closeDrawer"
@@ -62,7 +63,8 @@ export default {
       'aiRanAt',
       'errorMessage',
       'severityFilter',
-      'counts'
+      'counts',
+      'outdated'
     ]),
 
     filteredIssues() {

@@ -69,6 +69,18 @@
         </div>
 
         <template v-if="hasReportData">
+          <q-banner
+          v-if="showOutdatedBanner"
+          dense
+          rounded
+          class="bg-orange-1 text-orange-10 q-mb-md qa-outdated-banner"
+          >
+            {{ $t('auditQa.outdatedBanner') }}
+            <template v-slot:action>
+              <q-btn flat dense round icon="close" @click="dismissOutdated" />
+            </template>
+          </q-banner>
+
           <div class="row q-col-gutter-sm q-mb-md">
             <div class="col-4">
               <div
@@ -246,6 +258,10 @@ export default {
       type: String,
       default: ''
     },
+    outdated: {
+      type: Boolean,
+      default: false
+    },
     showNavigation: {
       type: Boolean,
       default: false
@@ -258,7 +274,24 @@ export default {
 
   emits: ['close', 'run', 'update:severityFilter', 'navigate'],
 
+  data() {
+    return {
+      dismissedOutdated: false
+    }
+  },
+
+  watch: {
+    loading(isLoading, wasLoading) {
+      if (wasLoading && !isLoading)
+        this.dismissedOutdated = false
+    }
+  },
+
   computed: {
+    showOutdatedBanner() {
+      return this.outdated && !this.dismissedOutdated
+    },
+
     qaChecks() {
       return this.$settings?.ai?.public?.qaChecks || {}
     },
@@ -298,6 +331,10 @@ export default {
   },
 
   methods: {
+    dismissOutdated() {
+      this.dismissedOutdated = true
+    },
+
     setSeverityFilter(filter) {
       this.$emit('update:severityFilter', filter)
     },

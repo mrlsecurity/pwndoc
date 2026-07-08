@@ -954,6 +954,7 @@ export default {
         runSourceAi: 'AI checks',
         lastRun: 'Last run',
         noResultsYet: 'No QA results yet. Choose a run option above.',
+        outdatedBanner: 'These results are out of date — content changed since the last run. Re-run recommended.',
         runProgrammatic: 'Run Programmatical Checks',
         runAi: 'Run AI Checks',
         runAll: 'Run All',

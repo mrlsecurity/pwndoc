@@ -172,5 +172,33 @@ module.exports = function() {
             expect(getOutdatedQaReport(baseAudit)).toBeNull();
             expect(getLatestQaReport(baseAudit)).toBeNull();
         });
+
+        it('should resolve the loadOnly report as current when the fingerprint matches (route composition)', () => {
+            const audit = { ...baseAudit, qaReport: buildStoredReport(baseAudit) };
+            const report = getCachedQaReport(audit) || getOutdatedQaReport(audit);
+
+            expect(report).toEqual(expect.objectContaining({
+                outdated: false,
+                summary: 'Cached summary'
+            }));
+        });
+
+        it('should resolve the loadOnly report as outdated when audit content changed since the last run (route composition)', () => {
+            const audit = {
+                ...baseAudit,
+                findings: [{
+                    identifier: 1,
+                    title: 'SQL Injection',
+                    description: '<p>Changed after QA</p>'
+                }],
+                qaReport: buildStoredReport(baseAudit)
+            };
+            const report = getCachedQaReport(audit) || getOutdatedQaReport(audit);
+
+            expect(report).toEqual(expect.objectContaining({
+                outdated: true,
+                summary: 'Cached summary'
+            }));
+        });
     });
 };
