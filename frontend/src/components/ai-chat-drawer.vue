@@ -423,3 +423,10 @@ export default {
   max-width: 280px;
 }
 </style>
+
+<style>
+.body--dark .ai-chat-context {
+  border-color: #444;
+  background: #2a2a2a;
+}
+</style>

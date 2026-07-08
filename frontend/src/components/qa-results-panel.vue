@@ -545,3 +545,48 @@ export default {
   align-items: flex-start;
 }
 </style>
+
+<style>
+.body--dark .qa-run-meta {
+  border-color: #444;
+  background: #2a2a2a;
+}
+
+.body--dark .qa-run-meta__heading,
+.body--dark .qa-run-meta__label {
+  color: #e0e0e0;
+}
+
+.body--dark .qa-run-meta__line {
+  color: #bdbdbd;
+}
+
+.body--dark .qa-run-meta__icon,
+.body--dark .qa-run-meta__date {
+  color: #9e9e9e;
+}
+
+.body--dark .qa-stat {
+  background: #2a2a2a;
+}
+
+.body--dark .qa-stat:hover {
+  background: #333333;
+}
+
+.body--dark .qa-stat--active {
+  background: #1d1d1d;
+}
+
+.body--dark .qa-stat__label {
+  color: #bdbdbd;
+}
+
+.body--dark .qa-group__header {
+  background: #262626;
+}
+
+.body--dark .qa-summary {
+  color: #e0e0e0;
+}
+</style>
