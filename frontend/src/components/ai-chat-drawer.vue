@@ -34,7 +34,7 @@
         v-if="message.role === 'assistant' && message.draftPreview"
         class="q-mt-xs q-pa-sm bg-blue-grey-1 rounded-borders text-body2 ai-chat-assistant-response"
         >
-          <div class="ai-chat-draft-preview" v-html="message.draftPreview" />
+          <div class="ProseMirror draft-rendered-diff ai-chat-draft-preview" v-html="message.draftPreview" />
           <div class="q-mt-sm row q-gutter-sm">
             <q-btn
             unelevated
@@ -132,7 +132,7 @@ import { mapState, mapActions } from 'pinia'
 import { useAiGenerationStore } from '@/stores/ai-generation'
 import AiService from '@/services/ai'
 import AiFieldHelper from '@/services/ai-field-helper'
-import Utils from '@/services/utils'
+import { normalizeEditorHtml } from '@/services/editor-html-renderer'
 import DraftRecoveryDialog from '@/components/draft-recovery-dialog.vue'
 import { $t } from '@/boot/i18n'
 
@@ -240,7 +240,7 @@ export default {
       }
 
       if (outputType === 'html')
-        return Utils.htmlEncode(String(draft || ''))
+        return normalizeEditorHtml(draft)
 
       return String(draft || '')
         .replace(/&/g, '&amp;')
@@ -400,8 +400,71 @@ export default {
   scrollbar-gutter: stable;
 }
 
-.ai-chat-draft-preview {
+.ai-chat-conversation :deep(.q-message-text),
+.ai-chat-conversation :deep(.q-message-text-content) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.ai-chat-draft-preview {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ai-chat-assistant-response {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ai-chat-draft-preview :deep(pre) {
+  background: black;
+  border-radius: 0.5rem;
+  color: white;
+  font-family: 'JetBrainsMono', monospace;
+  margin: 1rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-chat-draft-preview :deep(pre code) {
+  background: none;
+  color: inherit;
+  font-size: 0.8rem;
+  padding: 0;
+  white-space: inherit;
+}
+
+.ai-chat-draft-preview :deep(pre:last-child) {
+  margin-bottom: 1rem;
+}
+
+.ai-chat-draft-preview :deep(.draft-image) {
+  margin: 8px 0;
+  text-align: center;
+}
+
+.ai-chat-draft-preview :deep(.draft-image img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.ai-chat-draft-preview :deep(.draft-image figcaption),
+.ai-chat-draft-preview :deep(legend) {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  text-align: center;
+  font-style: italic;
 }
 
 .ai-chat-input :deep(textarea) {

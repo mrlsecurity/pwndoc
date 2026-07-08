@@ -43,6 +43,37 @@ describe('AiChatDrawer formatDraftPreview', () => {
     expect(preview).not.toContain('&lt;')
   })
 
+  it('normalizes editor image ids to downloadable image URLs with captions', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    const imageId = '0123456789abcdef01234567'
+    store.sessionConfig = { title: 'AI', outputType: 'html', requestParams: {} }
+
+    const preview = wrapper.vm.formatDraftPreview(`<p>Before</p><img src="${imageId}" alt="Figure caption"><p>After</p>`)
+
+    expect(preview).toContain(`src="/api/images/download/${imageId}"`)
+    expect(preview).toContain('<figure class="draft-image">')
+    expect(preview).toContain('<figcaption>Figure caption</figcaption>')
+    expect(preview).toContain('<p>After</p>')
+  })
+
+  it('renders editor HTML previews with the editor-style wrapper classes', async () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'html', requestParams: {} }
+    store.conversation.messages.push({
+      role: 'assistant',
+      content: 'Updated',
+      draft: '<pre><code class="language-js">const value = 1</code></pre>',
+      draftPreview: '<pre><code class="language-js">const value = 1</code></pre>'
+    })
+    await wrapper.vm.$nextTick()
+
+    const preview = wrapper.find('.ai-chat-draft-preview')
+    expect(preview.classes()).toEqual(expect.arrayContaining(['ProseMirror', 'draft-rendered-diff']))
+    expect(preview.find('pre code.language-js').exists()).toBe(true)
+  })
+
   it('strips disallowed tags from an HTML draft (no script injection)', () => {
     const wrapper = createWrapper()
     const store = useAiGenerationStore()

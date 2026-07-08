@@ -153,6 +153,21 @@ const getFieldValue = (entity, entityShape, fieldKey, locale) => {
   return container[parsed.field]
 }
 
+const getContextFieldValue = (context, fieldKey) => {
+  const parsed = parseFieldKey(fieldKey)
+  if (parsed.kind === 'custom')
+    return context?.customFieldValue || ''
+
+  return context?.[parsed.field] || ''
+}
+
+const withCurrentFieldContext = (context, fieldKey, fieldLabel) => ({
+  ...(context || {}),
+  currentFieldKey: fieldKey,
+  currentFieldLabel: fieldLabel || fieldKey,
+  currentFieldValue: getContextFieldValue(context || {}, fieldKey)
+})
+
 const setFieldValue = (entity, entityShape, fieldKey, locale, value) => {
   const result = cloneData(entity)
   const container = getFieldContainer(result, entityShape, locale)
@@ -284,6 +299,7 @@ export default {
     defaultPrompt,
     outputType,
     requestParams,
+    fieldLabel = null,
     lockKey = null,
     onCancel,
     getDiffEntity = null,
@@ -303,11 +319,20 @@ export default {
       null
 
     try {
+      const scopedRequestParams = {
+        ...requestParams,
+        context: withCurrentFieldContext(
+          requestParams?.context || {},
+          requestParams?.field,
+          fieldLabel || title
+        )
+      }
+
       return await useAiGenerationStore().openSession({
         title,
         defaultPrompt,
         outputType,
-        requestParams,
+        requestParams: scopedRequestParams,
         lockKey,
         diffContext
       })

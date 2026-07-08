@@ -440,6 +440,7 @@ export default {
                     title: `AI - ${fieldLabel}`,
                     defaultPrompt,
                     outputType,
+                    fieldLabel,
                     lockKey,
                     getDiffEntity: () => this.section,
                     entityShape: 'section',

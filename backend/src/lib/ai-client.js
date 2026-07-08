@@ -125,6 +125,8 @@ const getSystemPrompt = (outputType, { selectionMode = false } = {}) => {
     if (outputType === 'array') {
         return [
             'You are an assistant writing pentest report content.',
+            'If context.currentFieldValue is provided, rewrite ONLY that value and use other context only as supporting reference.',
+            'Do not include content from other fields unless it is already present in context.currentFieldValue or explicitly requested.',
             'Return ONLY valid JSON with one key: "draft" as an array of concise strings.'
         ].join(' ');
     }
@@ -132,12 +134,16 @@ const getSystemPrompt = (outputType, { selectionMode = false } = {}) => {
     if (outputType === 'text') {
         return [
             'You are an assistant writing pentest report content.',
+            'If context.currentFieldValue is provided, rewrite ONLY that value and use other context only as supporting reference.',
+            'Do not include content from other fields unless it is already present in context.currentFieldValue or explicitly requested.',
             'Return ONLY valid JSON with one key: "draft" as plain text without markdown fences.'
         ].join(' ');
     }
 
     return [
         'You are an assistant writing pentest report content.',
+        'If context.currentFieldValue is provided, rewrite ONLY that value and use other context only as supporting reference.',
+        'Do not include content from other fields unless it is already present in context.currentFieldValue or explicitly requested.',
         'Return ONLY valid JSON with one key: "draft" as HTML paragraphs using <p>...</p> without markdown fences.'
     ].join(' ');
 };
