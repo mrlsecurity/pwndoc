@@ -960,7 +960,7 @@ export default {
         runAll: 'Run All',
         errors: 'Errors',
         warnings: 'Warnings',
-        infos: 'Notes',
+        infos: 'Infos',
         total: 'Total',
         filterAll: 'All',
         noIssues: 'No issues flagged',
@@ -1096,7 +1096,7 @@ export default {
         tabProgrammaticChecks: 'Programmatic Checks',
         tabAiChecks: 'AI Checks',
         prompts: {
-            description: 'Configure global and field-specific generation prompts. Provider and model settings are managed in Settings. Placeholders supported: title, vulnType, description, observation, remediation, references, poc, customFieldLabel, customFieldValue — wrap each name in curly braces to use it.',
+            description: "Configure global and field-specific generation prompts. Provider and model settings are managed in Settings. Placeholders supported: {'{title}'}, {'{vulnType}'}, {'{description}'}, {'{observation}'}, {'{remediation}'}, {'{references}'}, {'{poc}'}, {'{customFieldLabel}'}, {'{customFieldValue}'}.",
             readOnly: 'Read-only: you do not have permission to update prompts.',
             globalLabel: 'Global',
             globalCaption: 'Reusable prompts available across the report (spellcheck, translation, style rewrites, etc.)',

@@ -163,7 +163,7 @@
                   <q-item-label>{{ group.label }}</q-item-label>
                 </q-item-section>
                 <q-item-section side>
-                  <q-badge color="grey-4" text-color="grey-9">{{ group.issues.length }}</q-badge>
+                  <q-badge class="qa-group__count" color="grey-4" text-color="grey-9">{{ group.issues.length }}</q-badge>
                 </q-item-section>
               </template>
               <q-card flat bordered class="q-ma-sm">
@@ -584,6 +584,11 @@ export default {
 
 .body--dark .qa-group__header {
   background: #262626;
+}
+
+.body--dark .qa-group__count {
+  background: #424242 !important;
+  color: #ffffff !important;
 }
 
 .body--dark .qa-summary {

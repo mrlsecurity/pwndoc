@@ -12,7 +12,7 @@ const messages = {
       outdatedBanner: 'These results are out of date — content changed since the last run. Re-run recommended.',
       errors: 'Errors',
       warnings: 'Warnings',
-      infos: 'Notes',
+      infos: 'Infos',
       total: 'Total',
       lastRun: 'Last run',
       noIssues: 'No issues flagged',

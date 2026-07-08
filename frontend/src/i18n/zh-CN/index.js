@@ -612,6 +612,9 @@ export default {
     addRoles: 'Add Roles',
     removeRoles: 'Remove Roles',
     bulkActionsSelected: 'Bulk actions selected',
+    auditQa: {
+        infos: 'Infos'
+    },
     aiIntegration: {
         pageTitleWriting: 'Assisted Writing',
         pageTitleQa: 'Quality Assurance',
@@ -623,7 +626,7 @@ export default {
         tabProgrammaticChecks: 'Programmatic Checks',
         tabAiChecks: 'AI Checks',
         prompts: {
-            description: 'Configure global and field-specific generation prompts. Provider and model settings are managed in Settings. Placeholders supported: title, vulnType, description, observation, remediation, references, poc, customFieldLabel, customFieldValue — wrap each name in curly braces to use it.',
+            description: "Configure global and field-specific generation prompts. Provider and model settings are managed in Settings. Placeholders supported: {'{title}'}, {'{vulnType}'}, {'{description}'}, {'{observation}'}, {'{remediation}'}, {'{references}'}, {'{poc}'}, {'{customFieldLabel}'}, {'{customFieldValue}'}.",
             readOnly: 'Read-only: you do not have permission to update prompts.',
             globalLabel: 'Global',
             globalCaption: 'Reusable prompts available across the report (spellcheck, translation, style rewrites, etc.)',
