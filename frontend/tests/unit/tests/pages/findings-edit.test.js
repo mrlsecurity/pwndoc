@@ -615,6 +615,33 @@ describe('Findings Edit Page', () => {
       expect(wrapper.vm.unsavedChanges()).toBe(true)
     })
 
+    it('should bind the editable Proofs editor to finding.poc via v-model', async () => {
+      const wrapper = createWrapper({
+        stubs: {
+          'q-tab-panels': { template: '<div><slot /></div>' },
+          'q-tab-panel': { template: '<div><slot /></div>' },
+          'q-card': { template: '<div><slot /></div>' },
+          'q-card-section': { template: '<div><slot /></div>' },
+          'q-field': { template: '<div><slot /></div>' }
+        }
+      })
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      wrapper.vm.selectedTab = 'proofs'
+      await wrapper.vm.$nextTick()
+
+      const pocEditor = wrapper.findComponent({ ref: 'basiceditor_poc' })
+      expect(pocEditor.exists()).toBe(true)
+      expect(pocEditor.props('modelValue')).toBe(wrapper.vm.finding.poc)
+
+      pocEditor.vm.$emit('update:modelValue', '<p>Typed in Proofs</p>')
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.finding.poc).toBe('<p>Typed in Proofs</p>')
+    })
+
     it('should return true when remediation is changed', async () => {
       const wrapper = createWrapper()
       await wrapper.vm.$nextTick()

@@ -297,6 +297,7 @@
                                     <basic-editor
                                     ref="basiceditor_poc"
                                     noSync
+                                    v-model="finding.poc"
                                     :editable="isFieldEditable('poc')"
                                     fieldName="pocField"
                                     :commentMode="commentMode && canCreateComment"
