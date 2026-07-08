@@ -265,6 +265,12 @@ Click the delete icon on any row and confirm. Rules are reloaded into LanguageTo
 
 Requires `proofing-rules:read` permission to view rules and supported languages, `proofing-rules:create` permission to create rules, `proofing-rules:delete` permission to delete rules, and `proofing-rules:update` permission to reload rules or restart the proofing service.
 
+## AI Integration
+
+AI Integration lets you configure prompts and providers used by PwnDoc's AI-assisted writing and AI QA review features. AI must be enabled and a provider configured in [Settings](settings.md) before these features are available.
+
+> AI QA review is advisory. Audit and finding content — including text imported from external sources — is sent to the configured AI provider as part of the review request. Untrusted or crafted content in a finding could attempt to influence the AI's output. Always verify AI-sourced QA findings and AI-generated drafts before acting on them.
+
 ## Dump
 
 The Dump page provides bulk import and export of vulnerability data.

@@ -19,7 +19,8 @@ const messages = {
       running: 'Running...',
       runProgrammatic: 'Run Programmatical Checks',
       runAi: 'Run AI Checks',
-      runAll: 'Run All'
+      runAll: 'Run All',
+      aiReview: 'AI review — verify before acting'
     }
   }
 }
@@ -75,5 +76,46 @@ describe('QaResultsPanel outdated banner', () => {
     await wrapper.setProps({ loading: false, outdated: true })
 
     expect(wrapper.text()).toContain('These results are out of date')
+  })
+})
+
+describe('QaResultsPanel AI-sourced issue caption', () => {
+  const groupedIssues = [{
+    label: 'General',
+    issues: [
+      {
+        severity: 'warning',
+        category: 'completeness',
+        title: 'Structural issue',
+        message: 'Missing field',
+        location: 'report',
+        source: 'structural'
+      },
+      {
+        severity: 'warning',
+        category: 'redaction',
+        title: 'AI issue',
+        message: 'Sensitive data found',
+        location: 'report',
+        source: 'ai'
+      }
+    ]
+  }]
+
+  it('shows the AI review caption only on AI-sourced issues', () => {
+    const wrapper = createWrapper({ groupedIssues })
+
+    expect(wrapper.text()).toContain('AI review — verify before acting')
+  })
+
+  it('does not show the AI review caption when there are no AI-sourced issues', () => {
+    const wrapper = createWrapper({
+      groupedIssues: [{
+        label: 'General',
+        issues: [groupedIssues[0].issues[0]]
+      }]
+    })
+
+    expect(wrapper.text()).not.toContain('AI review — verify before acting')
   })
 })

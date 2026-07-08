@@ -966,7 +966,7 @@ export default {
         noIssues: 'No issues flagged',
         goToField: 'Go to field',
         goToSection: 'Go to section',
-        aiReview: 'AI review',
+        aiReview: 'AI review — verify before acting',
         category: {
             completeness: 'Completeness',
             redaction: 'Redaction',
