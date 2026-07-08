@@ -746,33 +746,47 @@ export default {
 
         // *** Comments Handling ***
 
-        prepareSidePanel: function(except) {
-            if (except !== 'comments' && this.commentMode) {
-                this.commentMode = false
-                this.focusedComment = ''
-                this.fieldHighlighted = null
+        prepareSidePanel: function(except, callback) {
+            const proceed = () => {
+                if (except !== 'comments' && this.commentMode) {
+                    this.commentMode = false
+                    this.focusedComment = ''
+                    this.fieldHighlighted = null
+                }
+                if (except !== 'qa')
+                    useAuditQaStore().close()
+                if (except !== 'ai') {
+                    const aiStore = useAiGenerationStore()
+                    if (aiStore.isActive)
+                        aiStore.cancelSession({ force: true })
+                }
+                if (callback)
+                    callback()
             }
-            if (except !== 'qa')
-                useAuditQaStore().close()
-            if (except !== 'ai') {
-                const aiStore = useAiGenerationStore()
-                if (aiStore.isActive)
-                    aiStore.cancelSession({ force: true })
+
+            if (except === 'ai') {
+                proceed()
+                return
             }
+
+            runAfterAiGenerationCheck(proceed)
         },
 
         toggleCommentView: function() {
             Utils.syncEditors(this.$refs)
-            if (!this.commentMode)
-                this.prepareSidePanel('comments')
 
-            this.commentMode = !this.commentMode
-            if (!this.commentMode) {
+            if (this.commentMode) {
+                this.commentMode = false
                 this.focusedComment = ""
                 this.fieldHighlighted = null
+                return
             }
-            if (this.commentMode && this.retestSplitView)
-                this.toggleSplitView()
+
+            this.prepareSidePanel('comments', () => {
+                this.commentMode = true
+                if (this.retestSplitView)
+                    this.toggleSplitView()
+            })
         },
 
         toggleQaView: function() {
@@ -782,8 +796,9 @@ export default {
                 return
             }
 
-            this.prepareSidePanel('qa')
-            qaStore.open(this.auditParent._id)
+            this.prepareSidePanel('qa', () => {
+                qaStore.open(this.auditParent._id)
+            })
         },
 
         highlightQaField: function(fieldName) {

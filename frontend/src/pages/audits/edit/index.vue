@@ -373,6 +373,7 @@
 import { Dialog, Notify, QSpinnerGears, LocalStorage } from 'quasar';
 import { useAuditQaStore } from '@/stores/audit-qa'
 import { useAiGenerationStore } from '@/stores/ai-generation'
+import { confirmRouterLeaveIfAiGenerating } from '@/composables/confirmLeaveIfAiGenerating'
 import { computed, ref } from 'vue';
 import draggable from 'vuedraggable'
 import CommentsList from 'components/comments-list'
@@ -493,6 +494,33 @@ export default {
 		fieldHighlightedR.value = null
 	},
 
+	beforeRouteUpdate(to, from, next) {
+		const onReportPage = /\/audits\/[^/]+\/(findings\/[^/]+|sections\/[^/]+)/.test(to.path)
+		if (onReportPage) {
+			next()
+			return
+		}
+
+		confirmRouterLeaveIfAiGenerating((result) => {
+			if (result !== false)
+				useAuditQaStore().close()
+			next(result)
+		})
+	},
+
+	beforeRouteLeave(to, from, next) {
+		if (to.name === '404' || to.name === '403') {
+			next()
+			return
+		}
+
+		confirmRouterLeaveIfAiGenerating((result) => {
+			if (result !== false)
+				useAuditQaStore().close()
+			next(result)
+		})
+	},
+
 	watch: {
 		'$q.screen.gt.sm': function(isWide, wasWide) {
 			if (isWide && !wasWide) {
@@ -550,15 +578,6 @@ export default {
 		},
 		draftRecoveryRevision: function() {
 			this.refreshAuditDrafts()
-		},
-		'$route.path': function(path) {
-			const onReportPage = /\/audits\/[^/]+\/(findings\/[^/]+|sections\/[^/]+)/.test(path)
-			if (!onReportPage) {
-				useAuditQaStore().close()
-				const aiStore = useAiGenerationStore()
-				if (aiStore.isActive)
-					aiStore.cancelSession({ force: true })
-			}
 		}
 	},
 

@@ -87,6 +87,8 @@ import AiService from '@/services/ai'
 import VulnService from '@/services/vulnerability'
 import Utils from '@/services/utils'
 import { Notify, Dialog } from 'quasar'
+import { useAiGenerationStore } from '@/stores/ai-generation'
+import { useAuditQaStore } from '@/stores/audit-qa'
 
 describe('Findings Edit Page', () => {
   let router, pinia, i18n
@@ -816,6 +818,41 @@ describe('Findings Edit Page', () => {
       const wrapper = createWrapper()
       wrapper.vm.toggleCommentView()
       expect(Utils.syncEditors).toHaveBeenCalled()
+    })
+
+    it('should confirm before discarding an active AI session when opening comments', () => {
+      const wrapper = createWrapper()
+      wrapper.vm.commentMode = false
+      const aiStore = useAiGenerationStore()
+      aiStore.sessionConfig = { lockKey: 'pocField' }
+      aiStore.drawerOpen = true
+
+      wrapper.vm.toggleCommentView()
+
+      expect(Dialog.create).toHaveBeenCalled()
+      expect(wrapper.vm.commentMode).toBe(false)
+      expect(aiStore.isActive).toBe(true)
+
+      Dialog._lastOnOk()
+
+      expect(wrapper.vm.commentMode).toBe(true)
+      expect(aiStore.isActive).toBe(false)
+    })
+  })
+
+  describe('toggleQaView', () => {
+    it('should confirm before discarding an active AI session when opening QA', () => {
+      const wrapper = createWrapper()
+      const aiStore = useAiGenerationStore()
+      const qaStore = useAuditQaStore()
+      aiStore.sessionConfig = { lockKey: 'pocField' }
+      aiStore.drawerOpen = true
+
+      wrapper.vm.toggleQaView()
+
+      expect(Dialog.create).toHaveBeenCalled()
+      expect(aiStore.isActive).toBe(true)
+      expect(qaStore.drawerOpen).toBe(false)
     })
   })
 

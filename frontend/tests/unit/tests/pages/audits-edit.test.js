@@ -142,6 +142,7 @@ import DataService from '@/services/data'
 import DraftRecoveryService from '@/services/draft-recovery'
 import AuditEditPage from '@/pages/audits/edit/index.vue'
 import { Dialog, Notify } from 'quasar'
+import { useAiGenerationStore } from '@/stores/ai-generation'
 
 // Mock lodash globally (component uses _ globally)
 globalThis._ = {
@@ -1388,6 +1389,63 @@ describe('Audit Edit Page', () => {
 
       const noCategory = wrapper.vm.findingList.find(f => f.category === 'No Category')
       expect(noCategory).toBeDefined()
+    })
+  })
+
+  describe('AI session confirm on in-audit route change', () => {
+    it('confirms before leaving a report page with an active AI session', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const aiStore = useAiGenerationStore()
+      aiStore.sessionConfig = { lockKey: 'pocField' }
+      aiStore.drawerOpen = true
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/general' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(Dialog.create).toHaveBeenCalled()
+      expect(next).not.toHaveBeenCalled()
+    })
+
+    it('navigates away immediately when there is no active AI session', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/general' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(Dialog.create).not.toHaveBeenCalled()
+      expect(next).toHaveBeenCalled()
+      expect(next.mock.calls[0][0]).not.toBe(false)
+    })
+
+    it('does not confirm when navigating between report pages', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const aiStore = useAiGenerationStore()
+      aiStore.sessionConfig = { lockKey: 'pocField' }
+      aiStore.drawerOpen = true
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/findings/f2' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(Dialog.create).not.toHaveBeenCalled()
+      expect(next).toHaveBeenCalled()
+      expect(next.mock.calls[0][0]).not.toBe(false)
     })
   })
 })
