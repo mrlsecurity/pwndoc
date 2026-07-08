@@ -21,4 +21,8 @@ export default {
   runVulnerabilityQa: function(params = {}) {
     return api.post('ai/vulnerabilities/qa', params)
   },
+
+  testProvider: function(params = {}) {
+    return api.post('ai/test', params)
+  },
 }

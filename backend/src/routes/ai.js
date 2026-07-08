@@ -5,7 +5,8 @@ const Audit = require('mongoose').model('Audit');
 const Vulnerability = require('mongoose').model('Vulnerability');
 const CustomField = require('mongoose').model('CustomField');
 const AiPrompt = require('mongoose').model('AiPrompt');
-const { generateWithProvider } = require('../lib/ai-client');
+const { generateWithProvider, testProviderConnection } = require('../lib/ai-client');
+const { MASKED_SECRET } = require('../lib/settings-secrets');
 const { runAuditQa } = require('../lib/ai-qa');
 const {
     runVulnerabilityQa,
@@ -516,6 +517,64 @@ const handleAiEnabledFields = async (req, res) => {
     }
 };
 
+const AI_TEST_OVERRIDE_FIELDS = {
+    openai: ['openaiApiKey', 'openaiBaseUrl', 'openaiModel'],
+    anthropic: ['anthropicApiKey', 'anthropicBaseUrl', 'anthropicModel', 'anthropicVersion'],
+    deepseek: ['deepseekApiKey', 'deepseekBaseUrl', 'deepseekModel'],
+    ollama: ['ollamaApiKey', 'ollamaBaseUrl', 'ollamaModel'],
+    bedrock: [
+        'bedrockApiKey',
+        'bedrockAccessKeyId',
+        'bedrockSecretAccessKey',
+        'bedrockSessionToken',
+        'bedrockRegion',
+        'bedrockModel'
+    ]
+};
+
+const buildAiTestOverrides = (provider, body = {}) => {
+    const fields = AI_TEST_OVERRIDE_FIELDS[provider] || [];
+    const overrides = {};
+
+    fields.forEach((field) => {
+        const value = body[field];
+        if (value === undefined || value === null || value === MASKED_SECRET)
+            return;
+        overrides[field] = value;
+    });
+
+    return overrides;
+};
+
+const handleAiTestConnection = async function(req, res) {
+    try {
+        const provider = normalizeProvider(req.body.provider);
+        if (!provider || !AI_PROVIDERS.includes(provider)) {
+            Response.BadParameters(res, 'Unsupported provider');
+            return;
+        }
+
+        const settings = await Settings.getAll();
+        const settingsObject = typeof settings.toObject === 'function' ? settings.toObject() : settings;
+        const overrides = buildAiTestOverrides(provider, req.body);
+        const testSettings = {
+            ...settingsObject,
+            ai: {
+                ...settingsObject.ai,
+                private: {
+                    ...settingsObject.ai?.private,
+                    ...overrides
+                }
+            }
+        };
+
+        const result = await testProviderConnection(provider, testSettings);
+        Response.Ok(res, result);
+    } catch (err) {
+        Response.Internal(res, err);
+    }
+};
+
 const requireAiGeneratePermission = function(req, res, next) {
     if (acl.isAllowedToken(req.decodedToken, 'audits:ai-generate') ||
         acl.isAllowedToken(req.decodedToken, 'vulnerabilities:ai-generate'))
@@ -543,4 +602,5 @@ module.exports = function(app) {
     app.post('/api/ai/generate', acl.hasPermission('validtoken'), requireAiGeneratePermission, handleAiGenerate);
     app.post('/api/ai/qa', acl.hasPermission('audits:ai-qa'), handleAiQa);
     app.post('/api/ai/vulnerabilities/qa', acl.hasPermission('validtoken'), requireVulnerabilityQaPermission, handleVulnerabilityQa);
+    app.post('/api/ai/test', acl.hasPermission('settings:update'), handleAiTestConnection);
 };

@@ -40,6 +40,20 @@
                 />
             </template>
         </q-input>
+        <div>
+            <q-btn
+            outline
+            no-caps
+            color="primary"
+            label="Test connection"
+            :loading="testingProvider === 'openai'"
+            :disable="testingProvider !== null"
+            @click="testConnection('openai')"
+            />
+            <div v-if="testResults.openai" :class="testResults.openai.ok ? 'text-positive' : 'text-negative'" class="q-mt-xs">
+                {{ testResults.openai.message }}
+            </div>
+        </div>
     </q-card-section>
 
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'anthropic'" class="q-gutter-md q-px-none">
@@ -61,6 +75,20 @@
                 />
             </template>
         </q-input>
+        <div>
+            <q-btn
+            outline
+            no-caps
+            color="primary"
+            label="Test connection"
+            :loading="testingProvider === 'anthropic'"
+            :disable="testingProvider !== null"
+            @click="testConnection('anthropic')"
+            />
+            <div v-if="testResults.anthropic" :class="testResults.anthropic.ok ? 'text-positive' : 'text-negative'" class="q-mt-xs">
+                {{ testResults.anthropic.message }}
+            </div>
+        </div>
     </q-card-section>
 
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'deepseek'" class="q-gutter-md q-px-none">
@@ -81,6 +109,20 @@
                 />
             </template>
         </q-input>
+        <div>
+            <q-btn
+            outline
+            no-caps
+            color="primary"
+            label="Test connection"
+            :loading="testingProvider === 'deepseek'"
+            :disable="testingProvider !== null"
+            @click="testConnection('deepseek')"
+            />
+            <div v-if="testResults.deepseek" :class="testResults.deepseek.ok ? 'text-positive' : 'text-negative'" class="q-mt-xs">
+                {{ testResults.deepseek.message }}
+            </div>
+        </div>
     </q-card-section>
 
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'ollama'" class="q-gutter-md q-px-none">
@@ -101,6 +143,20 @@
                 />
             </template>
         </q-input>
+        <div>
+            <q-btn
+            outline
+            no-caps
+            color="primary"
+            label="Test connection"
+            :loading="testingProvider === 'ollama'"
+            :disable="testingProvider !== null"
+            @click="testConnection('ollama')"
+            />
+            <div v-if="testResults.ollama" :class="testResults.ollama.ok ? 'text-positive' : 'text-negative'" class="q-mt-xs">
+                {{ testResults.ollama.message }}
+            </div>
+        </div>
     </q-card-section>
 
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'bedrock'" class="q-gutter-md q-px-none">
@@ -169,11 +225,27 @@
                 />
             </template>
         </q-input>
+        <div>
+            <q-btn
+            outline
+            no-caps
+            color="primary"
+            label="Test connection"
+            :loading="testingProvider === 'bedrock'"
+            :disable="testingProvider !== null"
+            @click="testConnection('bedrock')"
+            />
+            <div v-if="testResults.bedrock" :class="testResults.bedrock.ok ? 'text-positive' : 'text-negative'" class="q-mt-xs">
+                {{ testResults.bedrock.message }}
+            </div>
+        </div>
     </q-card-section>
 </div>
 </template>
 
 <script>
+import AiService from '@/services/ai'
+
 const MASKED_SECRET = '••••••••••••••••'
 
 export default {
@@ -214,7 +286,9 @@ export default {
             bedrockSecretAccessKeyInput: '',
             showBedrockSecretAccessKey: false,
             bedrockSessionTokenInput: '',
-            showBedrockSessionToken: false
+            showBedrockSessionToken: false,
+            testingProvider: null,
+            testResults: {}
         }
     },
 
@@ -309,6 +383,66 @@ export default {
 
         resetKeyInputs() {
             this.initializeSecretFields()
+        },
+
+        buildTestPayload(provider) {
+            const payloads = {
+                openai: () => ({
+                    openaiApiKey: this.openaiApiKeyInput,
+                    openaiBaseUrl: this.settings.ai.private.openaiBaseUrl,
+                    openaiModel: this.settings.ai.private.openaiModel
+                }),
+                anthropic: () => ({
+                    anthropicApiKey: this.anthropicApiKeyInput,
+                    anthropicBaseUrl: this.settings.ai.private.anthropicBaseUrl,
+                    anthropicModel: this.settings.ai.private.anthropicModel,
+                    anthropicVersion: this.settings.ai.private.anthropicVersion
+                }),
+                deepseek: () => ({
+                    deepseekApiKey: this.deepseekApiKeyInput,
+                    deepseekBaseUrl: this.settings.ai.private.deepseekBaseUrl,
+                    deepseekModel: this.settings.ai.private.deepseekModel
+                }),
+                ollama: () => ({
+                    ollamaApiKey: this.ollamaApiKeyInput,
+                    ollamaBaseUrl: this.settings.ai.private.ollamaBaseUrl,
+                    ollamaModel: this.settings.ai.private.ollamaModel
+                }),
+                bedrock: () => ({
+                    bedrockApiKey: this.bedrockApiKeyInput,
+                    bedrockAccessKeyId: this.bedrockAccessKeyIdInput,
+                    bedrockSecretAccessKey: this.bedrockSecretAccessKeyInput,
+                    bedrockSessionToken: this.bedrockSessionTokenInput,
+                    bedrockRegion: this.settings.ai.private.bedrockRegion,
+                    bedrockModel: this.settings.ai.private.bedrockModel
+                })
+            }
+
+            return payloads[provider] ? payloads[provider]() : {}
+        },
+
+        async testConnection(provider) {
+            this.testingProvider = provider
+            this.testResults = { ...this.testResults, [provider]: null }
+
+            try {
+                const response = await AiService.testProvider({
+                    provider,
+                    ...this.buildTestPayload(provider)
+                })
+                const model = response.data?.datas?.model
+                this.testResults = {
+                    ...this.testResults,
+                    [provider]: { ok: true, message: model ? `Connection successful (model: ${model})` : 'Connection successful' }
+                }
+            } catch (err) {
+                this.testResults = {
+                    ...this.testResults,
+                    [provider]: { ok: false, message: err.response?.data?.datas || 'Connection failed' }
+                }
+            } finally {
+                this.testingProvider = null
+            }
         }
     }
 }

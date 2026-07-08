@@ -930,10 +930,76 @@ const runVulnerabilityDuplicateQaWithProvider = async ({
     };
 };
 
+const testProviderConnection = async (provider, settings = {}) => {
+    const providerLabel = PROVIDER_LABELS[provider] || provider;
+    const providerConfig = resolveProviderConfig(provider, settings);
+
+    if (!providerConfig) {
+        throw({
+            fn: 'BadParameters',
+            message: `Unsupported provider "${provider}"`
+        });
+    }
+
+    if (providerConfig.requireCredentials && !providerConfig.hasCredentials) {
+        throw({
+            fn: 'BadParameters',
+            message: `${providerLabel} provider is not configured. Set API key or IAM credentials.`
+        });
+    }
+
+    if (providerConfig.requireApiKey && !providerConfig.apiKey) {
+        throw({
+            fn: 'BadParameters',
+            message: `${providerLabel} provider is not configured. Set API key.`
+        });
+    }
+
+    const { createLLM } = await loadNodeLlm();
+    const llm = createLLM(buildLlmConfig(provider, providerConfig));
+
+    let chat = configureChatTemperature(llm.chat(providerConfig.model, {
+        systemPrompt: 'Reply with the single word OK and nothing else.'
+    }), provider, 0);
+
+    const requestHeaders = {};
+    if (provider === 'anthropic' && providerConfig.version)
+        requestHeaders['anthropic-version'] = providerConfig.version;
+    if (provider === 'ollama' && providerConfig.apiKey)
+        requestHeaders.Authorization = `Bearer ${providerConfig.apiKey}`;
+    if (Object.keys(requestHeaders).length > 0)
+        chat = chat.withRequestOptions({ headers: requestHeaders });
+
+    const testTimeoutMs = Math.min(providerConfig.timeoutMs, 15000);
+    let response = null;
+    try {
+        response = await chat.ask('Reply with OK.', {
+            requestTimeout: testTimeoutMs
+        });
+    } catch (err) {
+        throw mapLlmError(err, providerLabel, testTimeoutMs);
+    }
+
+    const content = String(response?.content || response || '').trim();
+    if (!content) {
+        throw({
+            fn: 'BadRequest',
+            message: `${providerLabel} returned an empty response.`
+        });
+    }
+
+    return {
+        ok: true,
+        provider: provider,
+        model: response?.model || providerConfig.model
+    };
+};
+
 module.exports = {
     generateWithProvider,
     runQaWithProvider,
     runVulnerabilityTemplateQaWithProvider,
     runVulnerabilityUnlinkedTranslationQaWithProvider,
-    runVulnerabilityDuplicateQaWithProvider
+    runVulnerabilityDuplicateQaWithProvider,
+    testProviderConnection
 };
