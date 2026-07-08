@@ -119,3 +119,17 @@ describe('QaResultsPanel AI-sourced issue caption', () => {
     expect(wrapper.text()).not.toContain('AI review — verify before acting')
   })
 })
+
+describe('QaResultsPanel summary', () => {
+  it('renders the summary text when present', () => {
+    const wrapper = createWrapper({ summary: 'Overall, the report is well-structured with two minor issues.' })
+
+    expect(wrapper.text()).toContain('Overall, the report is well-structured with two minor issues.')
+  })
+
+  it('does not render a summary block when summary is empty', () => {
+    const wrapper = createWrapper({ summary: '' })
+
+    expect(wrapper.find('.qa-summary').exists()).toBe(false)
+  })
+})

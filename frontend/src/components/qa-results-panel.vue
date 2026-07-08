@@ -113,6 +113,8 @@
               </div>
             </div>
           </div>
+
+          <div v-if="summary" class="qa-summary q-mb-md">{{ summary }}</div>
         </template>
       </q-card-section>
 
@@ -262,6 +264,10 @@ export default {
       type: Boolean,
       default: false
     },
+    summary: {
+      type: String,
+      default: ''
+    },
     showNavigation: {
       type: Boolean,
       default: false
@@ -380,6 +386,12 @@ export default {
   height: 100%;
   user-select: none;
   caret-color: transparent;
+}
+
+.qa-summary {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #424242;
 }
 
 .qa-run-meta {

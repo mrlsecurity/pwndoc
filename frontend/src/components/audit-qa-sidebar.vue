@@ -10,6 +10,7 @@
   :severity-filter="severityFilter"
   :grouped-issues="groupedIssues"
   :outdated="outdated"
+  :summary="summary"
   show-navigation
   :navigation-label="navigationLabel"
   @close="closeDrawer"
@@ -64,7 +65,8 @@ export default {
       'errorMessage',
       'severityFilter',
       'counts',
-      'outdated'
+      'outdated',
+      'summary'
     ]),
 
     filteredIssues() {
