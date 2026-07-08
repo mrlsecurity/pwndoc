@@ -81,6 +81,14 @@ const normalizeProvider = (provider) => {
     return provider.toLowerCase().trim();
 };
 
+const resolveProvider = (req, settings) => {
+    const provider = normalizeProvider(req.body.provider) ||
+        normalizeProvider(settings?.ai?.public?.defaultProvider) ||
+        AI_DEFAULT_PROVIDER;
+
+    return AI_PROVIDERS.includes(provider) ? provider : null;
+};
+
 const isAllowedEntityType = (entityType) => {
     return ALLOWED_ENTITY_TYPES.includes(entityType);
 };
@@ -135,11 +143,8 @@ const handleAiGenerate = async function(req, res) {
         const promptTemplate = normalizePromptValue(promptDoc?.prompt) || fieldConfig.defaultPrompt;
         let promptInstruction = renderPromptTemplate(promptTemplate, req.body.context || {});
 
-        const provider = normalizeProvider(req.body.provider) ||
-            normalizeProvider(settings?.ai?.public?.defaultProvider) ||
-            AI_DEFAULT_PROVIDER;
-
-        if (!AI_PROVIDERS.includes(provider)) {
+        const provider = resolveProvider(req, settings);
+        if (!provider) {
             Response.BadParameters(res, 'Unsupported provider');
             return;
         }
@@ -252,11 +257,8 @@ const handleAiQa = async function(req, res) {
             return;
         }
 
-        const provider = normalizeProvider(req.body.provider) ||
-            normalizeProvider(settings?.ai?.public?.defaultProvider) ||
-            AI_DEFAULT_PROVIDER;
-
-        if (!AI_PROVIDERS.includes(provider)) {
+        const provider = resolveProvider(req, settings);
+        if (!provider) {
             Response.BadParameters(res, 'Unsupported provider');
             return;
         }
@@ -372,11 +374,8 @@ const handleVulnerabilityQa = async function(req, res) {
             return;
         }
 
-        const provider = normalizeProvider(req.body.provider) ||
-            normalizeProvider(settings?.ai?.public?.defaultProvider) ||
-            AI_DEFAULT_PROVIDER;
-
-        if (!AI_PROVIDERS.includes(provider)) {
+        const provider = resolveProvider(req, settings);
+        if (!provider) {
             Response.BadParameters(res, 'Unsupported provider');
             return;
         }

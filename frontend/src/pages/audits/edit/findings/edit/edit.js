@@ -142,13 +142,13 @@ export default {
         }
 
         runAfterAiGenerationCheck(() => {
-            this.continueRouteLeave(to, from, next)
+            this.continueRoute(to, from, next)
         })
     },
 
     beforeRouteUpdate (to, from , next) {
         runAfterAiGenerationCheck(() => {
-            this.continueRouteUpdate(to, from, next)
+            this.continueRoute(to, from, next)
         })
     },
 
@@ -238,44 +238,7 @@ export default {
     },
 
     methods: {
-        continueRouteLeave: function(to, from, next) {
-            Utils.syncEditors(this.$refs)
-
-            var displayHighlightWarning = this.displayHighlightWarning()
-
-            if (this.unsavedChanges()) {
-                Dialog.create({
-                title: $t('msg.thereAreUnsavedChanges'),
-                message: $t('msg.doYouWantToLeave'),
-                ok: {label: $t('btn.confirm'), color: 'negative'},
-                cancel: {label: $t('btn.cancel'), color: 'white'},
-                focus: 'cancel'
-                })
-                .onOk(async () => {
-                    if (this.draftRecovery)
-                        await this.draftRecovery.flushPendingWrite()
-                    next()
-                })
-            }
-            else if (!this.commentMode && displayHighlightWarning) {
-                Dialog.create({
-                    title: $t('msg.highlightWarningTitle'),
-                    message: `${displayHighlightWarning}</mark>`,
-                    html: true,
-                    ok: {label: $t('btn.leave'), color: 'negative'},
-                    cancel: {label: $t('btn.stay'), color: 'white'},
-                })
-                .onOk(async () => {
-                    if (this.draftRecovery)
-                        await this.draftRecovery.flushPendingWrite()
-                    next()
-                })
-            }
-            else
-                next()
-        },
-
-        continueRouteUpdate: function(to, from, next) {
+        continueRoute: function(to, from, next) {
             Utils.syncEditors(this.$refs)
 
             var displayHighlightWarning = this.displayHighlightWarning()
