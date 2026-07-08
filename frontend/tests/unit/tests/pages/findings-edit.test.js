@@ -35,6 +35,18 @@ vi.mock('@/services/vulnerability', () => ({
   }
 }))
 
+vi.mock('@/services/ai-field-helper', () => ({
+  default: {
+    getOutputType: vi.fn(() => 'html'),
+    getFieldLabel: vi.fn(() => 'Proofs'),
+    buildFindingAiContext: vi.fn(() => ({})),
+    getDefaultPrompt: vi.fn(() => ''),
+    runFieldAiChat: vi.fn(() => Promise.resolve('<p>New draft</p>')),
+    applyFieldDraft: vi.fn(({ setValue, draft }) => setValue(draft)),
+    appliedFieldMessage: vi.fn(() => 'Applied')
+  }
+}))
+
 vi.mock('@/services/utils', () => ({
   default: {
     syncEditors: vi.fn(),
@@ -86,6 +98,7 @@ import DataService from '@/services/data'
 import AiService from '@/services/ai'
 import VulnService from '@/services/vulnerability'
 import Utils from '@/services/utils'
+import AiFieldHelper from '@/services/ai-field-helper'
 import { Notify, Dialog } from 'quasar'
 import { useAiGenerationStore } from '@/stores/ai-generation'
 import { useAuditQaStore } from '@/stores/audit-qa'
@@ -853,6 +866,63 @@ describe('Findings Edit Page', () => {
       expect(Dialog.create).toHaveBeenCalled()
       expect(aiStore.isActive).toBe(true)
       expect(qaStore.drawerOpen).toBe(false)
+    })
+  })
+
+  describe('generateFieldDraftAI active session conflict', () => {
+    it('offers to discard and start when a different field already has an active AI session', async () => {
+      const wrapper = createWrapper({ mocks: { $settings: { ai: { public: { enabled: true } } } } })
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 50))
+      wrapper.vm.aiPromptFieldKeys = ['poc']
+
+      const aiStore = useAiGenerationStore()
+      aiStore.sessionConfig = { title: 'AI - Description' }
+      aiStore.lockKey = 'finding:audit123:finding1:description'
+      aiStore.drawerOpen = true
+
+      await wrapper.vm.generateFieldDraftAI('poc')
+
+      expect(Dialog.create).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'aiChat.discardAiSessionTitle',
+        message: 'aiChat.discardAiSessionMessage',
+        ok: expect.objectContaining({ label: 'aiChat.discardAndStart' })
+      }))
+      expect(AiFieldHelper.runFieldAiChat).not.toHaveBeenCalled()
+    })
+
+    it('discards the current session and generates for the new field on confirm', async () => {
+      const wrapper = createWrapper({ mocks: { $settings: { ai: { public: { enabled: true } } } } })
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 50))
+      wrapper.vm.aiPromptFieldKeys = ['poc']
+
+      const aiStore = useAiGenerationStore()
+      aiStore.sessionConfig = { title: 'AI - Description' }
+      aiStore.lockKey = 'finding:audit123:finding1:description'
+      aiStore.drawerOpen = true
+
+      await wrapper.vm.generateFieldDraftAI('poc')
+      Dialog._lastOnOk()
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(AiFieldHelper.runFieldAiChat).toHaveBeenCalled()
+      expect(wrapper.vm.finding.poc).toBe('<p>New draft</p>')
+    })
+
+    it('generates immediately with no confirm when there is no conflicting session', async () => {
+      const wrapper = createWrapper({ mocks: { $settings: { ai: { public: { enabled: true } } } } })
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 50))
+      wrapper.vm.aiPromptFieldKeys = ['poc']
+
+      await wrapper.vm.generateFieldDraftAI('poc')
+
+      expect(Dialog.create).not.toHaveBeenCalled()
+      expect(AiFieldHelper.runFieldAiChat).toHaveBeenCalled()
     })
   })
 

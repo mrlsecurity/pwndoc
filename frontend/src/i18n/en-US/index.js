@@ -1026,6 +1026,7 @@ export default {
         closeWhileGeneratingMessage: 'Content is still being generated. Close the AI panel anyway?',
         discardAiSessionTitle: 'Discard AI session?',
         discardAiSessionMessage: 'The field will be unlocked and the current AI conversation will be lost.',
+        discardAndStart: 'Discard & start new',
         leaveWhileAiSessionMessage: 'This field is locked for an active AI session. Leaving now will discard it.',
         activeSession: 'Finish or close the current AI session before starting another one.',
         generatingSession: 'AI session in progress',

@@ -601,16 +601,23 @@ export default {
 
             const lockKey = this.buildAiLockKey(fieldKey)
             const aiStore = useAiGenerationStore()
+
             if (aiStore.drawerOpen && aiStore.isActive && aiStore.lockKey !== lockKey) {
-                Notify.create({
-                    message: $t('aiChat.activeSession'),
-                    color: 'warning',
-                    textColor: 'dark',
-                    position: 'top-right'
-                })
+                runAfterAiGenerationCheck(
+                    () => this.runFieldDraftGeneration(field, customField, fieldKey, lockKey),
+                    {
+                        title: $t('aiChat.discardAiSessionTitle'),
+                        message: $t('aiChat.discardAiSessionMessage'),
+                        okLabel: $t('aiChat.discardAndStart')
+                    }
+                )
                 return
             }
 
+            await this.runFieldDraftGeneration(field, customField, fieldKey, lockKey)
+        },
+
+        runFieldDraftGeneration: async function(field, customField, fieldKey, lockKey) {
             Utils.syncEditors(this.$refs)
 
             const selectionTarget = this.getAiSelectionTarget(field, customField)

@@ -6,7 +6,7 @@ function shouldConfirmLeave(store) {
   return store.isGenerating || (store.drawerOpen && store.isActive)
 }
 
-function confirmLeaveAiSession({ onLeave, onStay }) {
+function confirmLeaveAiSession({ onLeave, onStay, dialog = {} }) {
   const store = useAiGenerationStore()
 
   if (!shouldConfirmLeave(store)) {
@@ -15,12 +15,12 @@ function confirmLeaveAiSession({ onLeave, onStay }) {
   }
 
   Dialog.create({
-    title: $t('aiChat.leaveWhileGeneratingTitle'),
-    message: store.isGenerating ?
+    title: dialog.title || $t('aiChat.leaveWhileGeneratingTitle'),
+    message: dialog.message || (store.isGenerating ?
       $t('aiChat.leaveWhileGeneratingMessage') :
-      $t('aiChat.leaveWhileAiSessionMessage'),
-    ok: { label: $t('btn.leave'), color: 'negative' },
-    cancel: { label: $t('btn.stay'), color: 'white' },
+      $t('aiChat.leaveWhileAiSessionMessage')),
+    ok: { label: dialog.okLabel || $t('btn.leave'), color: 'negative' },
+    cancel: { label: dialog.cancelLabel || $t('btn.stay'), color: 'white' },
     focus: 'cancel'
   })
   .onOk(() => {
@@ -33,8 +33,8 @@ function confirmLeaveAiSession({ onLeave, onStay }) {
   })
 }
 
-export function runAfterAiGenerationCheck(callback) {
-  confirmLeaveAiSession({ onLeave: callback })
+export function runAfterAiGenerationCheck(callback, dialog) {
+  confirmLeaveAiSession({ onLeave: callback, dialog })
 }
 
 export function confirmRouterLeaveIfAiGenerating(next) {
