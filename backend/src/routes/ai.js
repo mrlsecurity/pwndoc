@@ -336,22 +336,19 @@ const handleVulnerabilityQa = async function(req, res) {
             return;
         }
 
-        const allVulnerabilities = await Vulnerability.getAll();
         const vulnerabilityId = String(req.body.vulnerabilityId || '').trim();
-        const vulnerabilityObjects = allVulnerabilities.map((entry) => {
-            return typeof entry.toObject === 'function' ? entry.toObject() : entry;
-        });
         const settingsObject = typeof settings.toObject === 'function' ? settings.toObject() : settings;
         const draftVulnerability = normalizeDraftVulnerability(req.body.vulnerability);
-        const mode = vulnerabilityId || draftVulnerability ? 'single' : 'all';
 
         if (req.body.loadOnly) {
             if (vulnerabilityId) {
-                const vulnerability = vulnerabilityObjects.find((entry) => String(entry._id) === vulnerabilityId);
-                if (!vulnerability) {
+                const vulnerabilityDoc = await Vulnerability.findById(vulnerabilityId);
+                if (!vulnerabilityDoc) {
                     Response.NotFound(res, 'Vulnerability not found');
                     return;
                 }
+                const vulnerability = typeof vulnerabilityDoc.toObject === 'function' ?
+                    vulnerabilityDoc.toObject() : vulnerabilityDoc;
 
                 const report = getLatestVulnerabilityQaReport(vulnerability, locale);
                 Response.Ok(res, respondVulnerabilityQaReport(report, { mode: 'single' }));
@@ -363,6 +360,10 @@ const handleVulnerabilityQa = async function(req, res) {
                 return;
             }
 
+            const allVulnerabilities = await Vulnerability.getAll();
+            const vulnerabilityObjects = allVulnerabilities.map((entry) => {
+                return typeof entry.toObject === 'function' ? entry.toObject() : entry;
+            });
             const report = getLatestAllVulnerabilitiesQaReport(settingsObject, vulnerabilityObjects, locale);
             Response.Ok(res, respondVulnerabilityQaReport(report, { mode: 'all' }));
             return;
@@ -379,6 +380,11 @@ const handleVulnerabilityQa = async function(req, res) {
             Response.BadParameters(res, 'Unsupported provider');
             return;
         }
+
+        const allVulnerabilities = await Vulnerability.getAll();
+        const vulnerabilityObjects = allVulnerabilities.map((entry) => {
+            return typeof entry.toObject === 'function' ? entry.toObject() : entry;
+        });
 
         if (vulnerabilityId) {
             const vulnerability = vulnerabilityObjects.find((entry) => String(entry._id) === vulnerabilityId);

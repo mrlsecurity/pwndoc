@@ -1,6 +1,7 @@
 module.exports = function(request, app) {
     describe('AI integration API', () => {
         const Settings = require('mongoose').model('Settings');
+        const Vulnerability = require('mongoose').model('Vulnerability');
         let adminToken = '';
         let userToken = '';
         let noAiToken = '';
@@ -174,6 +175,64 @@ module.exports = function(request, app) {
             expect(response.body.datas.cached).toBe(false);
             expect(Array.isArray(response.body.datas.issues)).toBe(true);
             expect(response.body.datas.issues.length).toBeGreaterThan(0);
+        });
+
+        it('should load a single vulnerability QA report without fetching the entire vulnerability database', async () => {
+            await request(app).post('/api/vulnerabilities')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send([{
+                    category: 'Web',
+                    details: [{
+                        locale: 'en',
+                        title: 'Single Load Target',
+                        vulnType: 'Web',
+                        description: '',
+                        observation: '',
+                        remediation: ''
+                    }]
+                }]);
+
+            const listResponse = await request(app).get('/api/vulnerabilities')
+                .set('Cookie', [`token=JWT ${adminToken}`]);
+            const created = listResponse.body.datas.find((entry) => entry.details[0]?.title === 'Single Load Target');
+            expect(created).toBeDefined();
+
+            const getAllSpy = jest.spyOn(Vulnerability, 'getAll');
+
+            const response = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    locale: 'en',
+                    loadOnly: true,
+                    vulnerabilityId: created._id
+                });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.mode).toBe('single');
+            expect(getAllSpy).not.toHaveBeenCalled();
+
+            getAllSpy.mockRestore();
+        });
+
+        it('should not query the database at all for a draft vulnerability loadOnly request', async () => {
+            const getAllSpy = jest.spyOn(Vulnerability, 'getAll');
+
+            const response = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    locale: 'en',
+                    loadOnly: true,
+                    vulnerability: {
+                        category: 'Web',
+                        details: [{ locale: 'en', title: 'Unsaved Draft' }]
+                    }
+                });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.hasReport).toBe(false);
+            expect(getAllSpy).not.toHaveBeenCalled();
+
+            getAllSpy.mockRestore();
         });
     });
 };
