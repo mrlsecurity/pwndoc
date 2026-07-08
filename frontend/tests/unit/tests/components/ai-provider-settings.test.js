@@ -49,8 +49,26 @@ function buildSettings() {
   }
 }
 
+const messages = {
+  'en-US': {
+    aiIntegration: {
+      provider: {
+        defaultProviderLabel: 'Default Provider',
+        openaiBaseUrl: 'OpenAI Base URL',
+        openaiModel: 'OpenAI Model',
+        openaiApiKey: 'OpenAI API Key',
+        testConnection: 'Test connection',
+        testSuccess: 'Connection successful',
+        testSuccessWithModel: 'Connection successful (model: {model})',
+        testFailed: 'Connection failed'
+      }
+    }
+  }
+}
+
 function createWrapper(settings = buildSettings()) {
   return createTestWrapper(AiProviderSettings, {
+    messages,
     props: {
       settings,
       canEdit: true

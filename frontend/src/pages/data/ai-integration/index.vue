@@ -13,7 +13,7 @@
                 <template v-else-if="!aiEnabled">
                     <q-card-section>
                         <q-banner dense class="bg-orange-1 text-orange-10">
-                            AI integration is disabled in organization settings. Enable it from <b>Settings</b> to manage assisted writing and quality assurance.
+                            {{ $t('aiIntegration.disabledBanner') }}
                         </q-banner>
                     </q-card-section>
                 </template>
@@ -21,7 +21,7 @@
                 <template v-else-if="!canViewPage">
                     <q-card-section>
                         <q-banner dense class="bg-orange-1 text-orange-10">
-                            You do not have permission to view {{ pageTitle }} settings.
+                            {{ $t('aiIntegration.noPermissionBanner', { page: pageTitle }) }}
                         </q-banner>
                     </q-card-section>
                 </template>
@@ -36,8 +36,8 @@
                     indicator-color="primary"
                     align="left"
                     >
-                        <q-tab v-if="canReadPrompts" name="prompts" label="Prompts" />
-                        <q-tab v-if="canReadGuidelines" name="guidelines" label="Redaction Guidelines" />
+                        <q-tab v-if="canReadPrompts" name="prompts" :label="$t('aiIntegration.tabPrompts')" />
+                        <q-tab v-if="canReadGuidelines" name="guidelines" :label="$t('aiIntegration.tabGuidelines')" />
                     </q-tabs>
 
                     <q-separator v-if="canReadPrompts || canReadGuidelines" />
@@ -50,14 +50,10 @@
                         <q-tab-panel v-if="canReadPrompts" name="prompts" class="q-pa-none">
                             <q-card-section>
                                 <div class="text-grey-8">
-                                    Configure global and field-specific generation prompts.
-                                    Provider and model settings are managed in <b>Settings</b>.
-                                    Placeholders supported: <code>{title}</code>, <code>{vulnType}</code>,
-                                    <code>{description}</code>, <code>{observation}</code>, <code>{remediation}</code>,
-                                    <code>{references}</code>, <code>{poc}</code>, <code>{customFieldLabel}</code>, <code>{customFieldValue}</code>.
+                                    {{ $t('aiIntegration.prompts.description') }}
                                 </div>
                                 <div v-if="!canEditPrompts" class="text-orange q-mt-sm">
-                                    Read-only: you do not have permission to update prompts.
+                                    {{ $t('aiIntegration.prompts.readOnly') }}
                                 </div>
                             </q-card-section>
 
@@ -69,12 +65,12 @@
                                     default-opened
                                     expand-separator
                                     icon="public"
-                                    label="Global"
-                                    caption="Reusable prompts available across the report (spellcheck, translation, style rewrites, etc.)"
+                                    :label="$t('aiIntegration.prompts.globalLabel')"
+                                    :caption="$t('aiIntegration.prompts.globalCaption')"
                                     >
                                         <q-card-section class="q-gutter-md">
                                             <div v-if="globalPrompts.length === 0" class="text-grey-7">
-                                                No global prompts yet. Add one to expose document-wide actions in the AI drawer.
+                                                {{ $t('aiIntegration.prompts.noGlobalPrompts') }}
                                             </div>
 
                                             <q-card
@@ -89,16 +85,16 @@
                                                         <q-input
                                                         outlined
                                                         dense
-                                                        label="Label"
+                                                        :label="$t('aiIntegration.prompts.label')"
                                                         v-model="entry.label"
                                                         :readonly="!canEditPrompts"
-                                                        hint="Shown in the AI drawer (e.g. Spellcheck my document)"
+                                                        :hint="$t('aiIntegration.prompts.labelHint')"
                                                         />
                                                     </div>
                                                     <div class="col-auto">
                                                         <q-toggle
                                                         v-model="entry.enabled"
-                                                        label="Enabled"
+                                                        :label="$t('aiIntegration.prompts.enabled')"
                                                         :disable="!canEditPrompts"
                                                         />
                                                     </div>
@@ -109,7 +105,7 @@
                                                         dense
                                                         color="negative"
                                                         icon="delete"
-                                                        aria-label="Remove global prompt"
+                                                        :aria-label="$t('aiIntegration.prompts.removeGlobalPrompt')"
                                                         @click="removeGlobalPrompt(index)"
                                                         />
                                                     </div>
@@ -118,7 +114,7 @@
                                                 outlined
                                                 type="textarea"
                                                 autogrow
-                                                label="Prompt"
+                                                :label="$t('aiIntegration.prompts.prompt')"
                                                 v-model="entry.prompt"
                                                 :readonly="!canEditPrompts"
                                                 :disable="!entry.enabled"
@@ -131,7 +127,7 @@
                                                 color="primary"
                                                 no-caps
                                                 icon="add"
-                                                label="Add global prompt"
+                                                :label="$t('aiIntegration.prompts.addGlobalPrompt')"
                                                 @click="addGlobalPrompt()"
                                                 />
                                             </div>
@@ -144,7 +140,7 @@
                                     expand-separator
                                     icon="article"
                                     :label="group.label"
-                                    :caption="`${group.mappings.length} field prompt${group.mappings.length === 1 ? '' : 's'}`"
+                                    :caption="$t('aiIntegration.prompts.fieldPromptCount', { count: group.mappings.length })"
                                     >
                                         <q-card-section class="q-gutter-md">
                                             <q-card
@@ -164,7 +160,7 @@
                                                     <div class="col-auto">
                                                         <q-toggle
                                                         v-model="mapping.enabled"
-                                                        label="Enable AI"
+                                                        :label="$t('aiIntegration.prompts.enableAi')"
                                                         :disable="!canEditPrompts"
                                                         />
                                                     </div>
@@ -173,7 +169,7 @@
                                                 outlined
                                                 type="textarea"
                                                 autogrow
-                                                :label="`${mapping.fieldLabel} Prompt`"
+                                                :label="$t('aiIntegration.prompts.fieldPromptLabel', { field: mapping.fieldLabel })"
                                                 v-model="mapping.prompt"
                                                 :readonly="!canEditPrompts"
                                                 :disable="!mapping.enabled"
@@ -189,7 +185,7 @@
                                 color="secondary"
                                 unelevated
                                 no-caps
-                                label="Save prompts"
+                                :label="$t('aiIntegration.prompts.save')"
                                 :disable="!canEditPrompts || !hasPromptChanges"
                                 :loading="savingPrompts"
                                 @click="savePrompts()"
@@ -200,11 +196,10 @@
                         <q-tab-panel v-if="canReadGuidelines" name="guidelines" class="q-pa-none">
                             <q-card-section>
                                 <div class="text-grey-8">
-                                    Organization-wide redaction and writing rules provided to every AI request as additional context.
-                                    Use plain text or Markdown (similar to a <code>CLAUDE.md</code> project guide).
+                                    {{ $t('aiIntegration.guidelines.description') }}
                                 </div>
                                 <div v-if="!canEditGuidelines" class="text-orange q-mt-sm">
-                                    Read-only: you do not have permission to update redaction guidelines.
+                                    {{ $t('aiIntegration.guidelines.readOnly') }}
                                 </div>
                             </q-card-section>
 
@@ -216,18 +211,18 @@
                                 type="textarea"
                                 class="redaction-guidelines-editor"
                                 :input-style="{ fontFamily: 'monospace', minHeight: '360px' }"
-                                label="Redaction guidelines"
+                                :label="$t('aiIntegration.guidelines.label')"
                                 v-model="redactionGuidelines.content"
                                 :readonly="!canEditGuidelines || redactionGuidelines.delivery !== 'inline'"
-                                hint="Examples: tone, terminology, data redaction rules, forbidden disclosures, report structure conventions."
+                                :hint="$t('aiIntegration.guidelines.hint')"
                                 />
                                 <q-banner
                                 v-if="redactionGuidelines.delivery === 'bedrock_prompt_cache'"
                                 dense
                                 class="bg-blue-1 text-blue-10"
                                 >
-                                    Delivery is configured as AWS Bedrock prompt cache.
-                                    Cache reference: <code>{{ redactionGuidelines.bedrockPromptCache.cacheReference || 'not set' }}</code>
+                                    {{ $t('aiIntegration.guidelines.bedrockDelivery') }}
+                                    {{ $t('aiIntegration.guidelines.cacheReference') }}: <code>{{ redactionGuidelines.bedrockPromptCache.cacheReference || $t('aiIntegration.guidelines.notSet') }}</code>
                                     <span v-if="redactionGuidelines.bedrockPromptCache.region">
                                         ({{ redactionGuidelines.bedrockPromptCache.region }})
                                     </span>
@@ -239,7 +234,7 @@
                                 color="secondary"
                                 unelevated
                                 no-caps
-                                label="Save guidelines"
+                                :label="$t('aiIntegration.guidelines.save')"
                                 :disable="!canEditGuidelines || !hasGuidelineChanges || redactionGuidelines.delivery !== 'inline'"
                                 :loading="savingGuidelines"
                                 @click="saveRedactionGuidelines()"
@@ -252,10 +247,10 @@
                 <template v-else-if="section === 'qa'">
                     <q-card-section>
                         <div class="text-grey-8">
-                            Configure which automated checks run when validating audit reports and vulnerability templates.
+                            {{ $t('aiIntegration.qa.description') }}
                         </div>
                         <div v-if="!canEditQa" class="text-orange q-mt-sm">
-                            Read-only: you do not have permission to update QA settings.
+                            {{ $t('aiIntegration.qa.readOnly') }}
                         </div>
                     </q-card-section>
 
@@ -267,8 +262,8 @@
                     indicator-color="primary"
                     align="left"
                     >
-                        <q-tab name="programmatic" label="Programmatical Checks" />
-                        <q-tab name="ai" label="AI Checks" />
+                        <q-tab name="programmatic" :label="$t('aiIntegration.tabProgrammaticChecks')" />
+                        <q-tab name="ai" :label="$t('aiIntegration.tabAiChecks')" />
                     </q-tabs>
 
                     <q-separator />
@@ -291,7 +286,7 @@
                                         <div class="col-auto">
                                             <q-toggle
                                             v-model="qaChecks[check.key]"
-                                            label="Enabled"
+                                            :label="$t('aiIntegration.prompts.enabled')"
                                             :disable="!canEditQa"
                                             />
                                         </div>
@@ -317,7 +312,7 @@
                                         <div class="col-auto">
                                             <q-toggle
                                             v-model="qaChecks[check.key]"
-                                            label="Enabled"
+                                            :label="$t('aiIntegration.prompts.enabled')"
                                             :disable="!canEditQa"
                                             />
                                         </div>
@@ -328,10 +323,9 @@
                             <q-separator />
 
                             <q-card-section>
-                                <div class="text-subtitle2 q-mb-sm">QA instructions</div>
+                                <div class="text-subtitle2 q-mb-sm">{{ $t('aiIntegration.qa.instructionsTitle') }}</div>
                                 <div class="text-grey-8 q-mb-md">
-                                    Organization-wide QA checklist provided to the AI reviewer.
-                                    Use plain text or Markdown to define additional required sections, fields, and report rules beyond the minimum completeness check.
+                                    {{ $t('aiIntegration.qa.instructionsDescription') }}
                                 </div>
                             </q-card-section>
 
@@ -341,18 +335,18 @@
                                 type="textarea"
                                 class="qa-instructions-editor"
                                 :input-style="{ fontFamily: 'monospace', minHeight: '360px' }"
-                                label="QA instructions"
+                                :label="$t('aiIntegration.qa.instructionsLabel')"
                                 v-model="qaInstructions.content"
                                 :readonly="!canEditQa || qaInstructions.delivery !== 'inline'"
-                                hint="Examples: require executive summary and scope sections, mandate remediation text, verify customer naming, retest wording."
+                                :hint="$t('aiIntegration.qa.instructionsHint')"
                                 />
                                 <q-banner
                                 v-if="qaInstructions.delivery === 'bedrock_prompt_cache'"
                                 dense
                                 class="bg-blue-1 text-blue-10"
                                 >
-                                    Delivery is configured as AWS Bedrock prompt cache.
-                                    Cache reference: <code>{{ qaInstructions.bedrockPromptCache.cacheReference || 'not set' }}</code>
+                                    {{ $t('aiIntegration.guidelines.bedrockDelivery') }}
+                                    {{ $t('aiIntegration.guidelines.cacheReference') }}: <code>{{ qaInstructions.bedrockPromptCache.cacheReference || $t('aiIntegration.guidelines.notSet') }}</code>
                                     <span v-if="qaInstructions.bedrockPromptCache.region">
                                         ({{ qaInstructions.bedrockPromptCache.region }})
                                     </span>
@@ -366,7 +360,7 @@
                         color="secondary"
                         unelevated
                         no-caps
-                        label="Save QA settings"
+                        :label="$t('aiIntegration.qa.save')"
                         :disable="!canEditQa || !hasQaChanges || (hasQaInstructionChanges && qaInstructions.delivery !== 'inline')"
                         :loading="savingQaSettings"
                         @click="saveQaSettings()"

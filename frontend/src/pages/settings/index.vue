@@ -26,7 +26,7 @@
                 <q-card-section class="q-py-none bg-blue-grey-5 text-white">
                     <q-item style="padding:0px;">
                         <q-item-section class="col-11">
-                            <div class="text-h6">AI Integration</div>
+                            <div class="text-h6">{{ $t('aiIntegration.settingsCard.title') }}</div>
                         </q-item-section>
                         <q-item-section class="col-md-1 items-center">
                             <q-toggle
@@ -40,12 +40,12 @@
                 </q-card-section>
                 <q-card-section>
                     <div class="text-grey-8">
-                        Disable to fully hide AI prompt configuration and AI generation buttons for all users.
+                        {{ $t('aiIntegration.settingsCard.disableHint') }}
                     </div>
                 </q-card-section>
                 <q-separator v-if="settings.ai && settings.ai.public && settings.ai.public.enabled && userStore.isAllowed('ai-settings:read')" />
                 <q-card-section v-if="settings.ai && settings.ai.public && settings.ai.public.enabled && userStore.isAllowed('ai-settings:read')">
-                    <div class="text-bold q-mb-md">AI Provider</div>
+                    <div class="text-bold q-mb-md">{{ $t('aiIntegration.settingsCard.providerTitle') }}</div>
                     <ai-provider-settings
                     ref="aiProviderSettings"
                     :settings="settings"

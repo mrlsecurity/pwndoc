@@ -5,7 +5,7 @@
     emit-value
     map-options
     options-sanitize
-    label="Default Provider"
+    :label="$t('aiIntegration.provider.defaultProviderLabel')"
     class="col-md-4 col-12"
     v-model="settings.ai.public.defaultProvider"
     :options="providerOptions"
@@ -15,20 +15,20 @@
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'openai'" class="q-gutter-md q-px-none">
         <q-input
         outlined
-        label="OpenAI Base URL"
+        :label="$t('aiIntegration.provider.openaiBaseUrl')"
         v-model="settings.ai.private.openaiBaseUrl"
         :readonly="!canEdit"
         />
         <q-input
         outlined
-        label="OpenAI Model"
+        :label="$t('aiIntegration.provider.openaiModel')"
         v-model="settings.ai.private.openaiModel"
         :readonly="!canEdit"
         />
         <q-input
         outlined
         :type="showOpenAIApiKey ? 'text' : 'password'"
-        label="OpenAI API Key"
+        :label="$t('aiIntegration.provider.openaiApiKey')"
         v-model="openaiApiKeyInput"
         :readonly="!canEdit"
         >
@@ -45,7 +45,7 @@
             outline
             no-caps
             color="primary"
-            label="Test connection"
+            :label="$t('aiIntegration.provider.testConnection')"
             :loading="testingProvider === 'openai'"
             :disable="testingProvider !== null"
             @click="testConnection('openai')"
@@ -57,13 +57,13 @@
     </q-card-section>
 
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'anthropic'" class="q-gutter-md q-px-none">
-        <q-input outlined label="Anthropic Base URL" v-model="settings.ai.private.anthropicBaseUrl" :readonly="!canEdit" />
-        <q-input outlined label="Anthropic Model" v-model="settings.ai.private.anthropicModel" :readonly="!canEdit" />
-        <q-input outlined label="Anthropic Version" v-model="settings.ai.private.anthropicVersion" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.anthropicBaseUrl')" v-model="settings.ai.private.anthropicBaseUrl" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.anthropicModel')" v-model="settings.ai.private.anthropicModel" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.anthropicVersion')" v-model="settings.ai.private.anthropicVersion" :readonly="!canEdit" />
         <q-input
         outlined
         :type="showAnthropicApiKey ? 'text' : 'password'"
-        label="Anthropic API Key"
+        :label="$t('aiIntegration.provider.anthropicApiKey')"
         v-model="anthropicApiKeyInput"
         :readonly="!canEdit"
         >
@@ -80,7 +80,7 @@
             outline
             no-caps
             color="primary"
-            label="Test connection"
+            :label="$t('aiIntegration.provider.testConnection')"
             :loading="testingProvider === 'anthropic'"
             :disable="testingProvider !== null"
             @click="testConnection('anthropic')"
@@ -92,12 +92,12 @@
     </q-card-section>
 
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'deepseek'" class="q-gutter-md q-px-none">
-        <q-input outlined label="DeepSeek Base URL" v-model="settings.ai.private.deepseekBaseUrl" :readonly="!canEdit" />
-        <q-input outlined label="DeepSeek Model" v-model="settings.ai.private.deepseekModel" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.deepseekBaseUrl')" v-model="settings.ai.private.deepseekBaseUrl" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.deepseekModel')" v-model="settings.ai.private.deepseekModel" :readonly="!canEdit" />
         <q-input
         outlined
         :type="showDeepseekApiKey ? 'text' : 'password'"
-        label="DeepSeek API Key"
+        :label="$t('aiIntegration.provider.deepseekApiKey')"
         v-model="deepseekApiKeyInput"
         :readonly="!canEdit"
         >
@@ -114,7 +114,7 @@
             outline
             no-caps
             color="primary"
-            label="Test connection"
+            :label="$t('aiIntegration.provider.testConnection')"
             :loading="testingProvider === 'deepseek'"
             :disable="testingProvider !== null"
             @click="testConnection('deepseek')"
@@ -126,12 +126,12 @@
     </q-card-section>
 
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'ollama'" class="q-gutter-md q-px-none">
-        <q-input outlined label="Ollama Base URL" v-model="settings.ai.private.ollamaBaseUrl" :readonly="!canEdit" />
-        <q-input outlined label="Ollama Model" v-model="settings.ai.private.ollamaModel" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.ollamaBaseUrl')" v-model="settings.ai.private.ollamaBaseUrl" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.ollamaModel')" v-model="settings.ai.private.ollamaModel" :readonly="!canEdit" />
         <q-input
         outlined
         :type="showOllamaApiKey ? 'text' : 'password'"
-        label="Ollama API Key"
+        :label="$t('aiIntegration.provider.ollamaApiKey')"
         v-model="ollamaApiKeyInput"
         :readonly="!canEdit"
         >
@@ -148,7 +148,7 @@
             outline
             no-caps
             color="primary"
-            label="Test connection"
+            :label="$t('aiIntegration.provider.testConnection')"
             :loading="testingProvider === 'ollama'"
             :disable="testingProvider !== null"
             @click="testConnection('ollama')"
@@ -160,15 +160,15 @@
     </q-card-section>
 
     <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'bedrock'" class="q-gutter-md q-px-none">
-        <q-input outlined label="AWS Region" v-model="settings.ai.private.bedrockRegion" :readonly="!canEdit" />
-        <q-input outlined label="Bedrock Model ID" v-model="settings.ai.private.bedrockModel" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.awsRegion')" v-model="settings.ai.private.bedrockRegion" :readonly="!canEdit" />
+        <q-input outlined :label="$t('aiIntegration.provider.bedrockModelId')" v-model="settings.ai.private.bedrockModel" :readonly="!canEdit" />
         <div v-if="!hasBedrockApiKey && !hasBedrockIamCredentials" class="text-caption text-grey-7">
-            Configure either a Bedrock API key or IAM credentials.
+            {{ $t('aiIntegration.provider.bedrockCredentialsHint') }}
         </div>
         <q-input
         outlined
         :type="showBedrockApiKey ? 'text' : 'password'"
-        label="Bedrock API Key"
+        :label="$t('aiIntegration.provider.bedrockApiKey')"
         v-model="bedrockApiKeyInput"
         :readonly="!canEdit"
         >
@@ -183,7 +183,7 @@
         <q-input
         outlined
         :type="showBedrockAccessKeyId ? 'text' : 'password'"
-        label="AWS Access Key ID"
+        :label="$t('aiIntegration.provider.awsAccessKeyId')"
         v-model="bedrockAccessKeyIdInput"
         :readonly="!canEdit"
         >
@@ -198,7 +198,7 @@
         <q-input
         outlined
         :type="showBedrockSecretAccessKey ? 'text' : 'password'"
-        label="AWS Secret Access Key"
+        :label="$t('aiIntegration.provider.awsSecretAccessKey')"
         v-model="bedrockSecretAccessKeyInput"
         :readonly="!canEdit"
         >
@@ -213,7 +213,7 @@
         <q-input
         outlined
         :type="showBedrockSessionToken ? 'text' : 'password'"
-        label="AWS Session Token (optional)"
+        :label="$t('aiIntegration.provider.awsSessionToken')"
         v-model="bedrockSessionTokenInput"
         :readonly="!canEdit"
         >
@@ -230,7 +230,7 @@
             outline
             no-caps
             color="primary"
-            label="Test connection"
+            :label="$t('aiIntegration.provider.testConnection')"
             :loading="testingProvider === 'bedrock'"
             :disable="testingProvider !== null"
             @click="testConnection('bedrock')"
@@ -242,7 +242,6 @@
     </q-card-section>
 </div>
 </template>
-
 <script>
 import AiService from '@/services/ai'
 
@@ -433,12 +432,17 @@ export default {
                 const model = response.data?.datas?.model
                 this.testResults = {
                     ...this.testResults,
-                    [provider]: { ok: true, message: model ? `Connection successful (model: ${model})` : 'Connection successful' }
+                    [provider]: {
+                        ok: true,
+                        message: model ?
+                            this.$t('aiIntegration.provider.testSuccessWithModel', { model }) :
+                            this.$t('aiIntegration.provider.testSuccess')
+                    }
                 }
             } catch (err) {
                 this.testResults = {
                     ...this.testResults,
-                    [provider]: { ok: false, message: err.response?.data?.datas || 'Connection failed' }
+                    [provider]: { ok: false, message: err.response?.data?.datas || this.$t('aiIntegration.provider.testFailed') }
                 }
             } finally {
                 this.testingProvider = null
@@ -447,3 +451,4 @@ export default {
     }
 }
 </script>
+

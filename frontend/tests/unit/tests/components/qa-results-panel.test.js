@@ -18,7 +18,7 @@ const messages = {
       noIssues: 'No issues flagged',
       noResultsYet: 'No QA results yet.',
       running: 'Running...',
-      runProgrammatic: 'Run Programmatical Checks',
+      runProgrammatic: 'Run Programmatic Checks',
       runAi: 'Run AI Checks',
       runAll: 'Run All',
       aiReview: 'AI review — verify before acting'

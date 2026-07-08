@@ -53,13 +53,13 @@
                 <q-item-section avatar>
                     <q-icon name="auto_awesome" />
                 </q-item-section>
-                <q-item-section>Assisted Writing</q-item-section>
+                <q-item-section>{{ $t('aiIntegration.menu.assistedWriting') }}</q-item-section>
             </q-item>
             <q-item v-if="showQualityAssurance" to='/data/quality-assurance'>
                 <q-item-section avatar>
                     <q-icon name="fas fa-list-check" />
                 </q-item-section>
-                <q-item-section>Quality Assurance</q-item-section>
+                <q-item-section>{{ $t('aiIntegration.menu.qualityAssurance') }}</q-item-section>
             </q-item>
 
             <q-separator spaced />

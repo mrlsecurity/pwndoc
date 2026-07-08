@@ -1,6 +1,7 @@
 import { Notify } from 'quasar';
 import DataService from '@/services/data';
 import { useUserStore } from '@/stores/user';
+import { $t } from '@/boot/i18n';
 import {
     QA_PROGRAMMATIC_CHECK_KEYS,
     QA_AI_CHECK_KEYS
@@ -29,58 +30,30 @@ const defaultQaChecks = () => ({
     instructions: true
 });
 
-const QA_CHECK_OPTIONS = [
-    {
-        key: 'completeness',
-        label: 'Report completeness',
-        description: 'Minimum report requirements only: audit name, at least one finding, and finding titles. Findings still in redaction are flagged as warnings.'
-    },
-    {
-        key: 'references',
-        label: 'Reference links',
-        description: 'Validate that HTTP(S) URLs listed in finding references are reachable.'
-    },
-    {
-        key: 'imageCaptions',
-        label: 'Image captions',
-        description: 'Flag images and figure captions that still use the imported filename (for example screenshot.png).'
-    },
-    {
-        key: 'duplicates',
-        label: 'Duplicate templates',
-        description: 'Fast structural checks for templates in the same language with the same title or identical description, observation, and remediation content.'
-    },
-    {
-        key: 'aiDuplicates',
-        label: 'AI duplicate templates',
-        description: 'AI review to identify templates that describe the same underlying vulnerability even when titles differ or content is paraphrased. Uses additional tokens.'
-    },
-    {
-        key: 'aiUnlinkedTranslations',
-        label: 'AI unlinked translations',
-        description: 'AI review to identify the same vulnerability template stored in separate records for different languages instead of being merged into one multilingual record. Uses additional tokens.'
-    },
-    {
-        key: 'redaction',
-        label: 'Redaction guidelines',
-        description: 'AI review of report content against organization redaction guidelines.'
-    },
-    {
-        key: 'customer',
-        label: 'Customer alignment',
-        description: 'AI review that the report content matches the expected customer and company.'
-    },
-    {
-        key: 'instructions',
-        label: 'QA instructions',
-        description: 'AI review against organization QA instructions below, including any additional required sections or fields you define.'
-    }
-];
+const QA_CHECK_I18N_KEYS = {
+    completeness: 'checkCompleteness',
+    references: 'checkReferences',
+    imageCaptions: 'checkImageCaptions',
+    duplicates: 'checkDuplicates',
+    aiDuplicates: 'checkAiDuplicates',
+    aiUnlinkedTranslations: 'checkAiUnlinkedTranslations',
+    redaction: 'checkRedaction',
+    customer: 'checkCustomer',
+    instructions: 'checkInstructions'
+};
 
-const PROMPT_FIELD_SECTIONS = [
+const buildQaCheckOptions = (keys) => {
+    return keys.map((key) => ({
+        key: key,
+        label: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Label`),
+        description: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Description`)
+    }));
+};
+
+const PROMPT_FIELD_SECTIONS = () => [
     {
         key: 'definition',
-        label: 'Findings — Definition',
+        label: $t('aiIntegration.prompts.sectionDefinition'),
         match: (mapping) => {
             return mapping.entityType === 'finding' &&
                 ['description', 'observation', 'remediation', 'references'].includes(mapping.fieldKey);
@@ -88,17 +61,17 @@ const PROMPT_FIELD_SECTIONS = [
     },
     {
         key: 'proofs',
-        label: 'Findings — Proofs',
+        label: $t('aiIntegration.prompts.sectionProofs'),
         match: (mapping) => mapping.entityType === 'finding' && mapping.fieldKey === 'poc'
     },
     {
         key: 'finding-custom',
-        label: 'Findings — Custom fields',
+        label: $t('aiIntegration.prompts.sectionFindingCustom'),
         match: (mapping) => mapping.entityType === 'finding' && String(mapping.fieldKey || '').startsWith('custom-field:')
     },
     {
         key: 'sections',
-        label: 'Sections',
+        label: $t('aiIntegration.prompts.sectionSections'),
         match: (mapping) => mapping.entityType === 'section'
     }
 ];
@@ -179,7 +152,6 @@ export default {
             redactionGuidelines: defaultMarkdownInstructions(),
             qaInstructions: defaultMarkdownInstructions(),
             qaChecks: defaultQaChecks(),
-            qaCheckOptions: QA_CHECK_OPTIONS,
             writingTab: 'prompts',
             qaTab: 'programmatic',
             orig: {
@@ -198,7 +170,7 @@ export default {
 
     computed: {
         pageTitle: function() {
-            return this.section === 'qa' ? 'Quality Assurance' : 'Assisted Writing';
+            return this.section === 'qa' ? this.$t('aiIntegration.pageTitleQa') : this.$t('aiIntegration.pageTitleWriting');
         },
 
         canViewPage: function() {
@@ -208,17 +180,17 @@ export default {
         },
 
         programmaticQaCheckOptions: function() {
-            return QA_CHECK_OPTIONS.filter((check) => QA_PROGRAMMATIC_CHECK_KEYS.includes(check.key));
+            return buildQaCheckOptions(QA_PROGRAMMATIC_CHECK_KEYS);
         },
 
         aiQaCheckOptions: function() {
-            return QA_CHECK_OPTIONS.filter((check) => QA_AI_CHECK_KEYS.includes(check.key));
+            return buildQaCheckOptions(QA_AI_CHECK_KEYS);
         },
 
         groupedPromptSections: function() {
             const used = new Set();
 
-            return PROMPT_FIELD_SECTIONS.map((section) => {
+            return PROMPT_FIELD_SECTIONS().map((section) => {
                 const mappings = this.promptMappings.filter((mapping) => {
                     if (!section.match(mapping))
                         return false;
@@ -348,7 +320,7 @@ export default {
             })
             .catch((err) => {
                 Notify.create({
-                    message: err.response?.data?.datas || 'Failed to load AI integration settings',
+                    message: err.response?.data?.datas || this.$t('aiIntegration.loadFailed'),
                     color: 'negative',
                     textColor: 'white',
                     position: 'top-right'
@@ -395,7 +367,7 @@ export default {
             .then((data) => {
                 this.applyPayload(data.data.datas || {});
                 Notify.create({
-                    message: 'Assisted writing prompts updated successfully',
+                    message: this.$t('aiIntegration.prompts.saveSuccess'),
                     color: 'positive',
                     textColor: 'white',
                     position: 'top-right'
@@ -403,7 +375,7 @@ export default {
             })
             .catch((err) => {
                 Notify.create({
-                    message: err.response?.data?.datas || 'Failed to update assisted writing prompts',
+                    message: err.response?.data?.datas || this.$t('aiIntegration.prompts.saveFailed'),
                     color: 'negative',
                     textColor: 'white',
                     position: 'top-right'
@@ -425,7 +397,7 @@ export default {
             .then((data) => {
                 this.applyPayload(data.data.datas || {});
                 Notify.create({
-                    message: 'Redaction guidelines updated successfully',
+                    message: this.$t('aiIntegration.guidelines.saveSuccess'),
                     color: 'positive',
                     textColor: 'white',
                     position: 'top-right'
@@ -433,7 +405,7 @@ export default {
             })
             .catch((err) => {
                 Notify.create({
-                    message: err.response?.data?.datas || 'Failed to update redaction guidelines',
+                    message: err.response?.data?.datas || this.$t('aiIntegration.guidelines.saveFailed'),
                     color: 'negative',
                     textColor: 'white',
                     position: 'top-right'
@@ -467,7 +439,7 @@ export default {
                 this.applyPayload(data.data.datas || {});
                 await this.refreshPublicSettings();
                 Notify.create({
-                    message: 'QA settings updated successfully',
+                    message: this.$t('aiIntegration.qa.saveSuccess'),
                     color: 'positive',
                     textColor: 'white',
                     position: 'top-right'
@@ -475,7 +447,7 @@ export default {
             })
             .catch((err) => {
                 Notify.create({
-                    message: err.response?.data?.datas || 'Failed to update QA settings',
+                    message: err.response?.data?.datas || this.$t('aiIntegration.qa.saveFailed'),
                     color: 'negative',
                     textColor: 'white',
                     position: 'top-right'

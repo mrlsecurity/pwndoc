@@ -64,7 +64,7 @@ const appendRedactionGuidelinesToSystemPrompt = (systemPrompt, resolved = {}) =>
 
     return [
         systemPrompt,
-        'Follow these organization redaction guidelines when writing or editing report content:',
+        'Follow these organization writing guidelines when writing or editing report content:',
         guidelinesText
     ].join(' ');
 };
@@ -75,7 +75,7 @@ const validateRedactionGuidelinesPayload = (payload) => {
 
     const delivery = String(payload.delivery || DELIVERY_MODES.INLINE).trim();
     if (!Object.values(DELIVERY_MODES).includes(delivery))
-        return { valid: false, message: `Invalid redaction guidelines delivery. Allowed values: ${Object.values(DELIVERY_MODES).join(', ')}` };
+        return { valid: false, message: `Invalid writing guidelines delivery. Allowed values: ${Object.values(DELIVERY_MODES).join(', ')}` };
 
     if (typeof payload.content !== 'string')
         return { valid: false, message: 'Invalid redactionGuidelines.content payload' };
