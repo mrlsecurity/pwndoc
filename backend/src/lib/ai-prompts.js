@@ -9,7 +9,7 @@ const AI_PROVIDER_DEFAULTS = {
     },
     anthropic: {
         baseUrl: 'https://api.anthropic.com/v1',
-        model: 'claude-opus-4.8',
+        model: 'claude-opus-4-8',
         timeoutMs: 30000,
         version: '2023-06-01'
     },

@@ -41,7 +41,7 @@ module.exports = function(request, app) {
         "openaiModel": "gpt-5.4-mini",
         "anthropicApiKey": "",
         "anthropicBaseUrl": "https://api.anthropic.com/v1",
-        "anthropicModel": "claude-opus-4.8",
+        "anthropicModel": "claude-opus-4-8",
         "anthropicVersion": "2023-06-01",
         "deepseekApiKey": "",
         "deepseekBaseUrl": "https://api.deepseek.com/v1",

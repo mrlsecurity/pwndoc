@@ -110,7 +110,7 @@ const SettingSchema = new Schema({
             openaiModel: {type: String, default: 'gpt-5.4-mini'},
             anthropicApiKey: {type: String, default: ''},
             anthropicBaseUrl: {type: String, default: 'https://api.anthropic.com/v1'},
-            anthropicModel: {type: String, default: 'claude-opus-4.8'},
+            anthropicModel: {type: String, default: 'claude-opus-4-8'},
             anthropicVersion: {type: String, default: '2023-06-01'},
             deepseekApiKey: {type: String, default: ''},
             deepseekBaseUrl: {type: String, default: 'https://api.deepseek.com/v1'},
