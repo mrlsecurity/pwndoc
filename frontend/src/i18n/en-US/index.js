@@ -1008,6 +1008,7 @@ export default {
         promptSelectLabel: 'Prompt template',
         applyField: 'Apply to field',
         previewChanges: 'Preview changes',
+        originalResponse: 'Original response',
         inputPlaceholder: 'Ask the AI to rewrite the selection...',
         sendHint: 'Tip: Press Ctrl+Enter to send.',
         send: 'Send',

@@ -18,14 +18,47 @@ function createWrapper() {
     global: {
       stubs: {
         'q-chat-message': true,
+        'q-icon': true,
+        'q-toolbar-title': true,
+        'q-toolbar': true,
+        'q-separator': true,
+        'q-card-section': true,
+        'q-input': true,
+        'q-btn-toggle': true,
+        'q-btn': {
+          props: ['label'],
+          template: '<button @click="$emit(\'click\')">{{ label }}</button>'
+        },
         'q-menu': true,
         'q-list': true,
         'q-item': true,
         'q-item-section': true,
         'q-spinner-dots': true
       },
+      directives: {
+        'close-popup': {}
+      },
       mocks: {
         $settings: {}
+      }
+    },
+    messages: {
+      'en-US': {
+        aiChat: {
+          assistant: 'Assistant',
+          apply: 'Apply',
+          applyField: 'Apply to field',
+          defaultPromptPlaceholder: 'Ask the AI to update this field...',
+          inputPlaceholder: 'Ask the AI to rewrite the selection...',
+          originalResponse: 'Original response',
+          previewChanges: 'Preview changes',
+          reviewDefaultPrompt: 'Ask the AI to help with this field.',
+          selectedText: 'Selected text',
+          send: 'Send',
+          sendHint: 'Tip: Press Ctrl+Enter to send.',
+          startPrompt: 'Ask the AI to rewrite or improve the selected text.',
+          you: 'You'
+        }
       }
     }
   })
@@ -119,5 +152,88 @@ describe('AiChatDrawer formatDraftPreview', () => {
 
     const preview = wrapper.find('.ai-chat-draft-preview')
     expect(preview.html()).toContain('<p>Formatted content</p>')
+  })
+})
+
+describe('AiChatDrawer preview changes toggle', () => {
+  function addAssistantMessage(store, draft = '<p>New description</p>') {
+    store.conversation.messages.push({
+      role: 'assistant',
+      content: 'Updated',
+      draft,
+      draftPreview: draft,
+      previewDiffOpen: false,
+      previewDiffDraft: null
+    })
+  }
+
+  it('toggles an assistant response between rendered draft and inline diff', async () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = {
+      title: 'AI - Description',
+      outputType: 'html',
+      requestParams: {},
+      diffContext: {
+        current: { description: '<p>Old description</p>' },
+        entityShape: 'finding',
+        fieldKey: 'description',
+        locale: 'en',
+        outputType: 'html',
+        mode: 'field',
+        selection: null,
+        languages: []
+      }
+    }
+    addAssistantMessage(store)
+    const message = store.conversation.messages[0]
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.ai-chat-draft-preview').exists()).toBe(true)
+
+    wrapper.vm.togglePreviewDiff(message)
+    await wrapper.vm.$nextTick()
+
+    expect(message.previewDiffOpen).toBe(true)
+    expect(message.previewDiffDraft.description).toBe('<p>New description</p>')
+    expect(wrapper.find('.draft-diff').exists()).toBe(true)
+    expect(wrapper.find('.draft-diff--chat-preview').exists()).toBe(true)
+    expect(wrapper.find('.diff-block__header').exists()).toBe(false)
+    expect(wrapper.find('.ai-chat-draft-preview').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Original response')
+
+    wrapper.vm.togglePreviewDiff(message)
+    await wrapper.vm.$nextTick()
+
+    expect(message.previewDiffOpen).toBe(false)
+    expect(wrapper.find('.ai-chat-draft-preview').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Preview changes')
+  })
+
+  it('builds selected-text preview diff from the selected replacement', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = {
+      title: 'AI - Description',
+      selectedText: 'wrong',
+      outputType: 'text',
+      requestParams: {},
+      diffContext: {
+        current: { description: 'alpha wrong omega' },
+        entityShape: 'finding',
+        fieldKey: 'description',
+        locale: 'en',
+        outputType: 'text',
+        mode: 'selection',
+        selection: { start: 6, end: 11, text: 'wrong' },
+        languages: []
+      }
+    }
+    addAssistantMessage(store, 'right')
+    const message = store.conversation.messages[0]
+
+    wrapper.vm.togglePreviewDiff(message)
+
+    expect(message.previewDiffDraft.description).toBe('alpha right omega')
   })
 })

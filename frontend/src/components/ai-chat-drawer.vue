@@ -34,7 +34,18 @@
         v-if="message.role === 'assistant' && message.draftPreview"
         class="q-mt-xs q-pa-sm bg-blue-grey-1 rounded-borders text-body2 ai-chat-assistant-response"
         >
-          <div class="ProseMirror draft-rendered-diff ai-chat-draft-preview" v-html="message.draftPreview" />
+          <draft-diff
+          v-if="message.previewDiffOpen && message.previewDiffDraft"
+          chat-preview
+          :current="sessionConfig.diffContext.current"
+          :draft="message.previewDiffDraft"
+          :languages="sessionConfig.diffContext.languages || []"
+          />
+          <div
+          v-else
+          class="ProseMirror draft-rendered-diff ai-chat-draft-preview"
+          v-html="message.draftPreview"
+          />
           <div class="q-mt-sm row q-gutter-sm">
             <q-btn
             unelevated
@@ -50,10 +61,10 @@
             outline
             dense
             no-caps
-            :label="$t('aiChat.previewChanges')"
+            :label="message.previewDiffOpen ? $t('aiChat.originalResponse') : $t('aiChat.previewChanges')"
             color="primary"
             :disable="loading"
-            @click="previewChanges(message.draft)"
+            @click="togglePreviewDiff(message)"
             />
           </div>
         </div>
@@ -133,11 +144,15 @@ import { useAiGenerationStore } from '@/stores/ai-generation'
 import AiService from '@/services/ai'
 import AiFieldHelper from '@/services/ai-field-helper'
 import { normalizeEditorHtml } from '@/services/editor-html-renderer'
-import DraftRecoveryDialog from '@/components/draft-recovery-dialog.vue'
+import DraftDiff from '@/components/draft-diff.vue'
 import { $t } from '@/boot/i18n'
 
 export default {
   name: 'AiChatDrawer',
+
+  components: {
+    DraftDiff
+  },
 
   data() {
     return {
@@ -309,7 +324,9 @@ export default {
           role: 'assistant',
           content: reply || this.$t('aiChat.updatedDraft'),
           draft,
-          draftPreview: this.formatDraftPreview(draft)
+          draftPreview: this.formatDraftPreview(draft),
+          previewDiffOpen: false,
+          previewDiffDraft: null
         })
       } catch (err) {
         store.conversation.messages.pop()
@@ -331,26 +348,22 @@ export default {
       this.completeSession(draft)
     },
 
-    previewChanges(draft) {
+    buildPreviewDiffDraft(draft) {
       const diffContext = this.sessionConfig?.diffContext
       if (!diffContext)
+        return null
+
+      return AiFieldHelper.buildAiDiffDraft(diffContext, draft)
+    },
+
+    togglePreviewDiff(message) {
+      if (!message.previewDiffDraft)
+        message.previewDiffDraft = this.buildPreviewDiffDraft(message.draft)
+
+      if (!message.previewDiffDraft)
         return
 
-      const draftData = AiFieldHelper.buildAiDiffDraft(diffContext, draft)
-      if (!draftData)
-        return
-
-      Dialog.create({
-        component: DraftRecoveryDialog,
-        componentProps: {
-          draft: {
-            data: draftData,
-            updatedAt: Date.now()
-          },
-          current: diffContext.current,
-          languages: diffContext.languages || []
-        }
-      })
+      message.previewDiffOpen = !message.previewDiffOpen
     },
 
     requestClose() {
@@ -440,10 +453,6 @@ export default {
   font-size: 0.8rem;
   padding: 0;
   white-space: inherit;
-}
-
-.ai-chat-draft-preview :deep(pre:last-child) {
-  margin-bottom: 1rem;
 }
 
 .ai-chat-draft-preview :deep(.draft-image) {

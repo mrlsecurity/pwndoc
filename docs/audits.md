@@ -64,6 +64,12 @@ The ![Propose Creation / Update in Vulnerability Database](/_images/finding_upd
 
 Saving can be done with the upper right button or by the most acclaimed feature: <kbd>Ctrl</kbd>+<kbd>S</kbd> or <kbd>&#8984;</kbd>+<kbd>S</kbd>
 
+### AI-assisted editing
+
+When AI integration is enabled, supported finding fields show an AI assistant button. Use it to generate or proofread content for the whole field, or select text in the editor to rewrite only that selection.
+
+The AI sidebar shows the generated draft before it is applied. Click **Preview changes** to toggle that assistant response between the rendered draft and an inline diff against the current field or selected text. Click **Original response** to return to the normal response. Applying the draft still updates the field or selected text, and you must save the finding to persist the result.
+
 ### Retest Audits
 
 When an audit type uses the `retest` stage, each finding includes additional retest fields:
