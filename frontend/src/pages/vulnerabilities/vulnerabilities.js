@@ -795,12 +795,16 @@ export default {
             return useAiGenerationStore().isFieldGenerating(this.buildAiLockKey(fieldKey))
         },
 
-        isAiFieldLocked: function(fieldKey) {
-            return useAiGenerationStore().isFieldLocked(this.buildAiLockKey(fieldKey))
+        isAiFieldSessionActive: function(fieldKey) {
+            return AiFieldHelper.isFieldSessionActive(this.buildAiLockKey(fieldKey))
+        },
+
+        isAiFieldSelectionLocked: function(fieldKey) {
+            return AiFieldHelper.isFieldSelectionLocked(this.buildAiLockKey(fieldKey))
         },
 
         isFieldEditable: function(fieldKey) {
-            return this.canUseAiInModal && !this.isAiFieldLocked(fieldKey)
+            return this.canUseAiInModal
         },
 
         getCurrentDetail: function() {
@@ -846,83 +850,24 @@ export default {
             Utils.syncEditors(this.$refs)
 
             const detail = this.getCurrentDetail()
-            const selectionTarget = this.getAiSelectionTarget(field, customField)
-            const selection = selectionTarget?.getTextSelection?.()
-            const outputType = AiFieldHelper.getOutputType(field, customField)
-            const fieldLabel = AiFieldHelper.getFieldLabel(field, customField, fieldKey)
-            const baseContext = AiFieldHelper.buildVulnerabilityAiContext(this.currentVulnerability, detail, customField)
-            const requestParams = {
-                entityType: 'finding',
-                field: fieldKey,
-                locale: this.currentLanguage,
-                outputType,
-                context: baseContext
-            }
 
             try {
-                if (selection?.text) {
-                    const draft = await AiFieldHelper.runSelectionAiChat({
-                        title: `AI - ${fieldLabel}`,
-                        selectedText: selection.text,
-                        outputType,
-                        lockKey,
-                        selection,
-                        getDiffEntity: () => this.currentVulnerability,
-                        entityShape: 'vulnerability',
-                        languages: this.languages,
-                        requestParams: {
-                            ...requestParams,
-                            context: {
-                                ...baseContext,
-                                selectedText: selection.text,
-                                selectedHtml: selection.html || selection.text
-                            }
-                        }
-                    })
-
-                    if (!draft)
-                        return
-
-                    AiFieldHelper.applySelectionDraft({
-                        selectionTarget,
-                        selection,
-                        draft,
-                        outputType
-                    })
-
-                    Notify.create({
-                        message: AiFieldHelper.appliedMessage(),
-                        color: 'positive',
-                        textColor: 'white',
-                        position: 'top-right'
-                    })
-                    return
-                }
-
-                const defaultPrompt = AiFieldHelper.getDefaultPrompt(
-                    this.aiFieldPrompts,
+                await AiFieldHelper.runFieldSession({
+                    field,
+                    customField,
                     fieldKey,
-                    baseContext
-                )
-
-                const draft = await AiFieldHelper.runFieldAiChat({
-                    title: `AI - ${fieldLabel}`,
-                    defaultPrompt,
-                    outputType,
-                    fieldLabel,
                     lockKey,
-                    getDiffEntity: () => this.currentVulnerability,
+                    selectionTarget: this.getAiSelectionTarget(field, customField),
                     entityShape: 'vulnerability',
+                    requestEntityType: 'finding',
+                    locale: this.currentLanguage,
+                    aiFieldPrompts: this.aiFieldPrompts,
                     languages: this.languages,
-                    requestParams
-                })
-
-                if (!draft)
-                    return
-
-                AiFieldHelper.applyFieldDraft({
-                    draft,
-                    outputType,
+                    buildContext: () => AiFieldHelper.buildVulnerabilityAiContext(this.currentVulnerability, detail, customField),
+                    getDiffEntity: () => {
+                        Utils.syncEditors(this.$refs)
+                        return this.currentVulnerability
+                    },
                     setValue: (value) => {
                         if (customField)
                             customField.text = value
@@ -930,17 +875,7 @@ export default {
                             detail[field] = value
                     }
                 })
-
-                Notify.create({
-                    message: AiFieldHelper.appliedFieldMessage(),
-                    color: 'positive',
-                    textColor: 'white',
-                    position: 'top-right'
-                })
             } catch (err) {
-                if (err?.message === 'cancelled')
-                    return
-
                 Notify.create({
                     message: err.response?.data?.datas || err.message || 'Unable to generate AI draft',
                     color: 'negative',

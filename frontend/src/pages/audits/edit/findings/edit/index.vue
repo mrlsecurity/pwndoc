@@ -185,7 +185,7 @@
                                     :commentIdList="commentIdList"
                                     :showAiButton="canGenerateAi('description') && isFieldEditable('description')"
                                     :aiLoading="isAiFieldLoading('description')"
-                                    :aiLocked="isAiFieldLocked('description')"
+                                    :aiSessionActive="isAiFieldSessionActive('description')"
                                     @ai-click="generateFieldDraftAI('description')"
                                     />
                                 </template>
@@ -218,7 +218,7 @@
                                     :commentIdList="commentIdList"
                                     :showAiButton="canGenerateAi('observation') && isFieldEditable('observation')"
                                     :aiLoading="isAiFieldLoading('observation')"
-                                    :aiLocked="isAiFieldLocked('observation')"
+                                    :aiSessionActive="isAiFieldSessionActive('observation')"
                                     @ai-click="generateFieldDraftAI('observation')"
                                     />
                                 </template>
@@ -241,9 +241,10 @@
                                 :label="$t('references')+' '+$t('one_per_line')"
                                 v-model="finding.references"
                                 :rules="($settings.report.public.requiredFields.findingReferences) ? [val => !!val || $t('fieldIsRequired')] : ['']"
-                                :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT || isAiFieldLocked('references')"
+                                :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT || isAiFieldSelectionLocked('references')"
                                 :showAiButton="canGenerateAi('references') && isFieldEditable('references')"
                                 :aiLoading="isAiFieldLoading('references')"
+                                :aiSessionActive="isAiFieldSessionActive('references')"
                                 @ai-click="generateFieldDraftAI('references')"
                                 />
                                 <q-badge v-if="commentMode && canCreateComment" color="deep-purple" floating class="cursor-pointer" @click="createComment('referencesField')">
@@ -273,7 +274,8 @@
                             :aiEnabled="aiEnabled"
                             :canGenerateAiForField="canGenerateAi"
                             :isAiGeneratingField="isAiFieldLoading"
-                            :isAiFieldLocked="isAiFieldLocked"
+                            :isAiFieldSessionActive="isAiFieldSessionActive"
+                            :isAiFieldSelectionLocked="isAiFieldSelectionLocked"
                             :generateAiForField="generateCustomFieldDraftAI"
                             />
                         </q-expansion-item>
@@ -305,7 +307,7 @@
                                     :commentIdList="commentIdList"
                                     :showAiButton="canGenerateAi('poc') && isFieldEditable('poc')"
                                     :aiLoading="isAiFieldLoading('poc')"
-                                    :aiLocked="isAiFieldLocked('poc')"
+                                    :aiSessionActive="isAiFieldSessionActive('poc')"
                                     @ai-click="generateFieldDraftAI('poc')"
                                     />
                                 </template>
@@ -461,7 +463,7 @@
                                         :commentIdList="commentIdList"
                                         :showAiButton="canGenerateAi('remediation') && isFieldEditable('remediation')"
                                         :aiLoading="isAiFieldLoading('remediation')"
-                                        :aiLocked="isAiFieldLocked('remediation')"
+                                        :aiSessionActive="isAiFieldSessionActive('remediation')"
                                         @ai-click="generateFieldDraftAI('remediation')"
                                         />
                                     </template>

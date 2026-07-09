@@ -130,3 +130,11 @@
         background: white;
     }
 }
+
+// Highlights the field currently targeted by an active AI assistant session.
+// Scoped to the input control only (not the label/hint) so it doesn't wrap
+// unrelated text below the field.
+.ai-field-active .q-field__control {
+    box-shadow: 0 0 0 1px $primary;
+    border-radius: 4px;
+}

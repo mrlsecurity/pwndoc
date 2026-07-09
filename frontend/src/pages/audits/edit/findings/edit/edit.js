@@ -525,13 +525,16 @@ export default {
             return useAiGenerationStore().isFieldGenerating(this.buildAiLockKey(fieldKey))
         },
 
-        isAiFieldLocked: function(fieldKey) {
-            return useAiGenerationStore().isFieldLocked(this.buildAiLockKey(fieldKey))
+        isAiFieldSessionActive: function(fieldKey) {
+            return AiFieldHelper.isFieldSessionActive(this.buildAiLockKey(fieldKey))
+        },
+
+        isAiFieldSelectionLocked: function(fieldKey) {
+            return AiFieldHelper.isFieldSelectionLocked(this.buildAiLockKey(fieldKey))
         },
 
         isFieldEditable: function(fieldKey) {
-            return this.frontEndAuditState === this.AUDIT_VIEW_STATE.EDIT &&
-                !this.isAiFieldLocked(fieldKey)
+            return this.frontEndAuditState === this.AUDIT_VIEW_STATE.EDIT
         },
 
         generateDescriptionDraftAI: function() {
@@ -583,94 +586,28 @@ export default {
         runFieldDraftGeneration: async function(field, customField, fieldKey, lockKey) {
             Utils.syncEditors(this.$refs)
 
-            const selectionTarget = this.getAiSelectionTarget(field, customField)
-            const selection = selectionTarget?.getTextSelection?.()
-            const outputType = AiFieldHelper.getOutputType(field, customField)
-            const fieldLabel = AiFieldHelper.getFieldLabel(field, customField, fieldKey)
-            const baseContext = AiFieldHelper.buildFindingAiContext(this.finding, customField)
-            const requestParams = {
-                entityType: 'finding',
-                field: fieldKey,
-                locale: this.auditParent.language,
-                outputType,
-                context: baseContext
-            }
-
             try {
-                if (selection?.text) {
-                    const draft = await AiFieldHelper.runSelectionAiChat({
-                        title: `AI - ${fieldLabel}`,
-                        selectedText: selection.text,
-                        outputType,
-                        lockKey,
-                        selection,
-                        getDiffEntity: () => this.finding,
-                        entityShape: 'finding',
-                        requestParams: {
-                            ...requestParams,
-                            context: {
-                                ...baseContext,
-                                selectedText: selection.text,
-                                selectedHtml: selection.html || selection.text
-                            }
-                        }
-                    })
-
-                    if (!draft)
-                        return
-
-                    AiFieldHelper.applySelectionDraft({
-                        selectionTarget,
-                        selection,
-                        draft,
-                        outputType
-                    })
-
-                    Notify.create({
-                        message: AiFieldHelper.appliedMessage(),
-                        color: 'positive',
-                        textColor: 'white',
-                        position: 'top-right'
-                    })
-                    return
-                }
-
-                const defaultPrompt = AiFieldHelper.getDefaultPrompt(
-                    this.aiFieldPrompts,
+                await AiFieldHelper.runFieldSession({
+                    field,
+                    customField,
                     fieldKey,
-                    baseContext
-                )
-
-                const draft = await AiFieldHelper.runFieldAiChat({
-                    title: `AI - ${fieldLabel}`,
-                    defaultPrompt,
-                    outputType,
-                    fieldLabel,
                     lockKey,
-                    getDiffEntity: () => this.finding,
+                    selectionTarget: this.getAiSelectionTarget(field, customField),
                     entityShape: 'finding',
-                    requestParams
-                })
-
-                if (!draft)
-                    return
-
-                AiFieldHelper.applyFieldDraft({
-                    draft,
-                    outputType,
+                    requestEntityType: 'finding',
+                    locale: this.auditParent.language,
+                    aiFieldPrompts: this.aiFieldPrompts,
+                    buildContext: () => AiFieldHelper.buildFindingAiContext(this.finding, customField),
+                    getDiffEntity: () => {
+                        Utils.syncEditors(this.$refs)
+                        return this.finding
+                    },
                     setValue: (value) => {
                         if (customField)
                             customField.text = value
                         else
                             this.finding[field] = value
                     }
-                })
-
-                Notify.create({
-                    message: AiFieldHelper.appliedFieldMessage(),
-                    color: 'positive',
-                    textColor: 'white',
-                    position: 'top-right'
                 })
             } catch (err) {
                 Notify.create({

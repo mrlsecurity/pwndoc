@@ -688,8 +688,6 @@ export default {
         emptyDraft: 'La réponse de l\'IA est vide',
         requestFailed: 'Impossible de générer la réponse de l\'IA',
         noSelection: 'Sélectionnez du texte dans le champ avant d\'utiliser l\'IA.',
-        applied: 'Modification IA appliquée à la sélection (pas encore enregistrée)',
-        appliedField: 'Brouillon IA appliqué au champ (pas encore enregistré)',
         generating: 'Génération du contenu...',
         leaveWhileGeneratingTitle: 'Génération IA en cours',
         leaveWhileGeneratingMessage: 'Le contenu est encore en cours de génération. Quitter maintenant annulera la requête IA en cours.',
@@ -699,7 +697,10 @@ export default {
         discardAndStart: 'Abandonner et recommencer',
         leaveWhileAiSessionMessage: 'Ce champ est verrouillé par une session IA active. Quitter maintenant l\'abandonnera.',
         activeSession: 'Terminez ou fermez la session IA actuelle avant d\'en démarrer une autre.',
-        generatingSession: 'Session IA en cours',
+        applySelection: 'Appliquer la sélection',
+        insertAtCursor: 'Insérer au curseur',
+        anchorCollapsed: 'Le texte sélectionné a été supprimé. Le brouillon sera inséré à sa position d\'origine.',
+        anchorLost: 'La sélection d\'origine n\'a pas pu être suivie. Resélectionnez le texte et réessayez, ou copiez la réponse manuellement.',
         tooltip: 'Assistant IA'
     },
 }

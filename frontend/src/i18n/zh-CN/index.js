@@ -746,8 +746,6 @@ export default {
         emptyDraft: 'AI 回复为空',
         requestFailed: '无法生成 AI 回复',
         noSelection: '使用 AI 前请先在字段中选择文本。',
-        applied: 'AI 更改已应用到所选内容（尚未保存）',
-        appliedField: 'AI 草稿已应用到字段（尚未保存）',
         generating: '正在生成内容...',
         leaveWhileGeneratingTitle: 'AI 正在生成',
         leaveWhileGeneratingMessage: '内容仍在生成中。现在离开将取消当前 AI 请求。',
@@ -757,7 +755,10 @@ export default {
         discardAndStart: '放弃并重新开始',
         leaveWhileAiSessionMessage: '此字段已被活动的 AI 会话锁定。现在离开将放弃该会话。',
         activeSession: '请先完成或关闭当前 AI 会话，然后再开始新的会话。',
-        generatingSession: 'AI 会话进行中',
+        applySelection: '应用所选内容',
+        insertAtCursor: '插入到光标处',
+        anchorCollapsed: '所选文本已被删除。草稿将插入到其原始位置。',
+        anchorLost: '无法追踪原始选区。请重新选择文本后重试，或手动复制回复内容。',
         tooltip: 'AI 助手'
     },
 }

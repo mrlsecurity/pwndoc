@@ -40,7 +40,7 @@
                         :commentIdList="commentIdList"
                         :showAiButton="showAiButton(field)"
                         :aiLoading="isAiLoading(field)"
-                        :aiLocked="isFieldLocked(field)"
+                        :aiSessionActive="isFieldSessionActive(field)"
                         @ai-click="triggerGenerateAi(field)"
                         /> 
                     </template>
@@ -57,8 +57,11 @@
                 :label='field.customField.label'
                 stack-label
                 v-model="field.text"
-                :class="{'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode}"
-                :readonly="readonly"
+                :class="{
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
+                }"
+                :readonly="readonly || isFieldSelectionLocked(field)"
                 :bg-color="(isTextInCustomFields(field))?'diffbackground':null"
                 :hint="field.customField.description"
                 hide-bottom-space
@@ -75,7 +78,7 @@
                         dense
                         color="primary"
                         :loading="isAiLoading(field)"
-                        :disable="readonly || isFieldLocked(field)"
+                        :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
                         >
                             <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
@@ -97,7 +100,10 @@
                 :label='field.customField.label'
                 stack-label
                 v-model="field.text"
-                :class="{'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode}"
+                :class="{
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
+                }"
                 :readonly="readonly"
                 :bg-color="(isTextInCustomFields(field))?'diffbackground':null"
                 :hint="field.customField.description"
@@ -115,7 +121,7 @@
                         dense
                         color="primary"
                         :loading="isAiLoading(field)"
-                        :disable="readonly || isFieldLocked(field)"
+                        :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
                         >
                             <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
@@ -141,7 +147,10 @@
                 v-if="field.customField.fieldType === 'select'"
                 :label="field.customField.label"
                 stack-label
-                :class="{'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode}"
+                :class="{
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
+                }"
                 v-model="field.text"
                 :options="field.customField.options.filter(e => e.locale === locale)"
                 option-value="value"
@@ -167,7 +176,7 @@
                         dense
                         color="primary"
                         :loading="isAiLoading(field)"
-                        :disable="readonly || isFieldLocked(field)"
+                        :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
                         >
                             <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
@@ -188,7 +197,10 @@
                 v-if="field.customField.fieldType === 'select-multiple'"
                 :label="field.customField.label"
                 stack-label
-                :class="{'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode}"
+                :class="{
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
+                }"
                 v-model="field.text"
                 :options="field.customField.options.filter(e => e.locale === locale)"
                 option-value="value"
@@ -216,7 +228,7 @@
                         dense
                         color="primary"
                         :loading="isAiLoading(field)"
-                        :disable="readonly || isFieldLocked(field)"
+                        :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
                         >
                             <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
@@ -250,7 +262,10 @@
                 v-if="field.customField.fieldType === 'checkbox'"
                 :label="field.customField.label"
                 stack-label
-                :class="{'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode}"
+                :class="{
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
+                }"
                 :model-value="field.text"
                 :hint="field.description"
                 hide-bottom-space
@@ -269,7 +284,7 @@
                         dense
                         color="primary"
                         :loading="isAiLoading(field)"
-                        :disable="readonly || isFieldLocked(field)"
+                        :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
                         >
                             <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
@@ -300,7 +315,10 @@
                 v-if="field.customField.fieldType === 'radio'"
                 :label="field.customField.label"
                 stack-label
-                :class="{'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode}"
+                :class="{
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
+                }"
                 :model-value="field.text"
                 :hint="field.description"
                 hide-bottom-space
@@ -319,7 +337,7 @@
                         dense
                         color="primary"
                         :loading="isAiLoading(field)"
-                        :disable="readonly || isFieldLocked(field)"
+                        :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
                         >
                             <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
@@ -412,7 +430,11 @@ export default {
             type: Function,
             default: () => false
         },
-        isAiFieldLocked: {
+        isAiFieldSessionActive: {
+            type: Function,
+            default: () => false
+        },
+        isAiFieldSelectionLocked: {
             type: Function,
             default: () => false
         },
@@ -491,12 +513,16 @@ export default {
             return this.isAiGeneratingField(this.getAiFieldKey(field))
         },
 
-        isFieldLocked: function(field) {
-            return this.isAiFieldLocked(this.getAiFieldKey(field))
+        isFieldSessionActive: function(field) {
+            return this.isAiFieldSessionActive(this.getAiFieldKey(field))
+        },
+
+        isFieldSelectionLocked: function(field) {
+            return this.isAiFieldSelectionLocked(this.getAiFieldKey(field))
         },
 
         isFieldEditable: function(field) {
-            return !this.readonly && !this.isFieldLocked(field)
+            return !this.readonly
         },
 
         triggerGenerateAi: function(field) {

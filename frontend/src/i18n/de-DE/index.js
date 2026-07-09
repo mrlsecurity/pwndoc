@@ -743,8 +743,6 @@ export default {
         emptyDraft: 'Die KI-Antwort ist leer',
         requestFailed: 'KI-Antwort konnte nicht generiert werden',
         noSelection: 'Wählen Sie Text im Feld aus, bevor Sie KI verwenden.',
-        applied: 'KI-Änderung auf Auswahl angewendet (noch nicht gespeichert)',
-        appliedField: 'KI-Entwurf auf Feld angewendet (noch nicht gespeichert)',
         generating: 'Inhalt wird generiert...',
         leaveWhileGeneratingTitle: 'KI-Generierung läuft',
         leaveWhileGeneratingMessage: 'Der Inhalt wird noch generiert. Wenn Sie jetzt gehen, wird die aktuelle KI-Anfrage abgebrochen.',
@@ -754,7 +752,10 @@ export default {
         discardAndStart: 'Verwerfen und neu starten',
         leaveWhileAiSessionMessage: 'Dieses Feld ist durch eine aktive KI-Sitzung gesperrt. Wenn Sie jetzt gehen, wird sie verworfen.',
         activeSession: 'Beenden oder schließen Sie die aktuelle KI-Sitzung, bevor Sie eine weitere starten.',
-        generatingSession: 'KI-Sitzung läuft',
+        applySelection: 'Auswahl anwenden',
+        insertAtCursor: 'An Cursor einfügen',
+        anchorCollapsed: 'Der ausgewählte Text wurde entfernt. Der Entwurf wird an seiner ursprünglichen Position eingefügt.',
+        anchorLost: 'Die ursprüngliche Auswahl konnte nicht nachverfolgt werden. Wählen Sie den Text erneut aus und versuchen Sie es noch einmal, oder kopieren Sie die Antwort manuell.',
         tooltip: 'KI-Assistent'
     },
 }

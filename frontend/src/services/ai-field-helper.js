@@ -212,40 +212,25 @@ const createDiffContext = ({
   outputType,
   mode,
   selection = null,
+  getSelectionPreviewValue = null,
   languages = []
 }) => ({
-  current: cloneData(getDiffEntity()),
+  getDiffEntity,
   entityShape,
   fieldKey,
   locale,
   outputType,
   mode,
   selection: selection ? { ...selection } : null,
+  getSelectionPreviewValue: typeof getSelectionPreviewValue === 'function' ? getSelectionPreviewValue : null,
   languages: languages || []
 })
-
-const replaceInputSelection = (inputRef, selection, content) => {
-  const el = inputRef?.$el?.querySelector('textarea, input')
-  if (!el || !selection)
-    return
-
-  const replacement = Array.isArray(content) ?
-    content.join('\n') :
-    String(content || '')
-  const value = el.value
-  const nextValue = value.substring(0, selection.start) + replacement + value.substring(selection.end)
-
-  const inputComponent = inputRef
-  if (inputComponent)
-    inputComponent.$emit('update:modelValue', nextValue)
-}
 
 export default {
   getOutputType,
   getFieldLabel,
   getDefaultPrompt,
   getInputSelection,
-  replaceInputSelection,
 
   validateDraft(draft, outputType) {
     if (outputType === 'array') {
@@ -270,28 +255,153 @@ export default {
     return text
   },
 
-  buildAiDiffDraft(diffContext, draft) {
-    if (!diffContext?.current)
+  // `current` lets a caller that already cloned the entity (e.g. to also show it
+  // as-is in the diff view) reuse that clone instead of re-deriving it here.
+  buildAiDiffDraft(diffContext, draft, current = null) {
+    if (!diffContext?.getDiffEntity)
       return null
 
     const {
-      current,
+      getDiffEntity,
       entityShape,
       fieldKey,
       locale,
       outputType,
       mode,
-      selection
+      selection,
+      getSelectionPreviewValue
     } = diffContext
+    const base = current || cloneData(getDiffEntity())
     const normalized = normalizeDraftForApply(draft, outputType)
 
+    let nextValue = normalized
     if (mode === 'selection' && selection) {
-      const currentValue = getFieldValue(current, entityShape, fieldKey, locale)
-      const nextValue = applySelectionToValue(currentValue, selection, normalized, outputType)
-      return setFieldValue(current, entityShape, fieldKey, locale, nextValue)
+      // Rich-text selections are tracked live (ProseMirror positions remapped
+      // through edits) - ask the editor to simulate the replacement over the
+      // current anchor rather than splicing stale start/end offsets.
+      if (typeof getSelectionPreviewValue === 'function') {
+        nextValue = getSelectionPreviewValue(normalized)
+        if (nextValue === null || nextValue === undefined)
+          return null
+      } else if (selection.start != null) {
+        const currentValue = getFieldValue(base, entityShape, fieldKey, locale)
+        nextValue = applySelectionToValue(currentValue, selection, normalized, outputType)
+      } else {
+        return null
+      }
     }
 
-    return setFieldValue(current, entityShape, fieldKey, locale, normalized)
+    return setFieldValue(base, entityShape, fieldKey, locale, nextValue)
+  },
+
+  cloneEntity(entity) {
+    return cloneData(entity)
+  },
+
+  isFieldSessionActive(lockKey) {
+    return useAiGenerationStore().isFieldSessionActive(lockKey)
+  },
+
+  isFieldSelectionLocked(lockKey) {
+    return useAiGenerationStore().isFieldSelectionLocked(lockKey)
+  },
+
+  // Shared orchestration for "generate + apply" used identically by findings,
+  // sections and vulnerabilities: resolve output type/label/context, branch
+  // on whether text was selected (anchored partial replace) vs not (whole-field
+  // replace), and always release the selection anchor on the way out. Error
+  // display stays with the caller (its own try/catch), matching this app's
+  // existing convention of showing Notify at the page/component level.
+  async runFieldSession({
+    field,
+    customField = null,
+    fieldKey,
+    lockKey,
+    selectionTarget,
+    entityShape,
+    requestEntityType,
+    locale,
+    aiFieldPrompts,
+    buildContext,
+    getDiffEntity,
+    setValue,
+    languages = []
+  }) {
+    const selection = selectionTarget?.getTextSelection?.()
+    const outputType = getOutputType(field, customField)
+    const fieldLabel = getFieldLabel(field, customField, fieldKey)
+    const baseContext = buildContext()
+    const requestParams = {
+      entityType: requestEntityType,
+      field: fieldKey,
+      locale,
+      outputType,
+      context: baseContext
+    }
+
+    try {
+      if (selection?.text) {
+        selectionTarget?.setAiSelectionAnchor?.(selection)
+
+        // Resolves only when the drawer closes. Apply/Apply selection write
+        // straight to the anchored range via onPartialApply, repeatably,
+        // without ending the session.
+        await this.runSelectionAiChat({
+          title: `AI - ${fieldLabel}`,
+          selectedText: selection.text,
+          outputType,
+          lockKey,
+          selection,
+          getDiffEntity,
+          entityShape,
+          languages,
+          getSelectionPreviewValue: (html) => selectionTarget?.buildAnchoredPreviewHtml?.(html),
+          onPartialApply: (content) => this.applySelectionDraft({
+            selectionTarget,
+            selection,
+            draft: content,
+            outputType,
+            reanchor: true
+          }),
+          requestParams: {
+            ...requestParams,
+            context: {
+              ...baseContext,
+              selectedText: selection.text,
+              selectedHtml: selection.html || selection.text
+            }
+          }
+        })
+        return
+      }
+
+      const defaultPrompt = getDefaultPrompt(aiFieldPrompts, fieldKey, baseContext)
+
+      // Same as above: resolves only when the drawer closes. Apply writes the
+      // whole field via onApply, repeatably.
+      await this.runFieldAiChat({
+        title: `AI - ${fieldLabel}`,
+        defaultPrompt,
+        outputType,
+        fieldLabel,
+        lockKey,
+        getDiffEntity,
+        entityShape,
+        languages,
+        onApply: (content) => this.applyFieldDraft({
+          draft: content,
+          outputType,
+          setValue
+        }),
+        onInsertAtCursor: selectionTarget?.insertAtCursor ?
+          (content) => this.applyInsertAtCursor({ selectionTarget, draft: content, outputType }) :
+          null,
+        requestParams
+      })
+    } finally {
+      // No-op unless a selection-mode anchor was set above.
+      selectionTarget?.clearAiSelectionAnchor?.()
+    }
   },
 
   async runFieldAiChat({
@@ -302,6 +412,8 @@ export default {
     fieldLabel = null,
     lockKey = null,
     onCancel,
+    onApply = null,
+    onInsertAtCursor = null,
     getDiffEntity = null,
     entityShape = null,
     languages = []
@@ -328,13 +440,18 @@ export default {
         )
       }
 
+      // Resolves only when the drawer closes - applying happens via onApply/
+      // onInsertAtCursor as the user clicks, not by settling this promise.
       return await useAiGenerationStore().openSession({
         title,
         defaultPrompt,
         outputType,
         requestParams: scopedRequestParams,
         lockKey,
-        diffContext
+        diffContext,
+        mode: 'field',
+        onApply,
+        onInsertAtCursor
       })
     } catch (err) {
       if (err?.message === 'cancelled') {
@@ -361,9 +478,11 @@ export default {
     requestParams,
     lockKey = null,
     onCancel,
+    onPartialApply = null,
     selection = null,
     getDiffEntity = null,
     entityShape = null,
+    getSelectionPreviewValue = null,
     languages = []
   }) {
     const diffContext = (typeof getDiffEntity === 'function' && entityShape && selection) ?
@@ -375,6 +494,7 @@ export default {
         outputType,
         mode: 'selection',
         selection,
+        getSelectionPreviewValue,
         languages
       }) :
       null
@@ -386,7 +506,9 @@ export default {
         outputType,
         requestParams,
         lockKey,
-        diffContext
+        diffContext,
+        mode: 'selection',
+        onPartialApply
       })
     } catch (err) {
       if (err?.message === 'cancelled') {
@@ -402,23 +524,24 @@ export default {
     selectionTarget,
     selection,
     draft,
-    outputType
+    outputType,
+    reanchor = false
   }) {
     const normalizedDraft = normalizeDraftForApply(draft, outputType)
 
-    if (selectionTarget?.applyReplacement) {
-      selectionTarget.applyReplacement(selection, normalizedDraft, outputType)
-      return
-    }
-
     if (selectionTarget?.replaceTextSelection) {
-      selectionTarget.replaceTextSelection(normalizedDraft, selection)
+      selectionTarget.replaceTextSelection(normalizedDraft, selection, { reanchor })
       return
     }
 
     if (selectionTarget?.editor?.replaceTextSelection) {
-      selectionTarget.editor.replaceTextSelection(normalizedDraft, selection)
+      selectionTarget.editor.replaceTextSelection(normalizedDraft, selection, { reanchor })
     }
+  },
+
+  applyInsertAtCursor({ selectionTarget, draft, outputType }) {
+    const normalizedDraft = normalizeDraftForApply(draft, outputType)
+    selectionTarget?.insertAtCursor?.(normalizedDraft)
   },
 
   buildFindingAiContext(finding, customField) {
@@ -485,13 +608,5 @@ export default {
       customFieldValue: customField?.text || '',
       customFields: customFieldContext
     }
-  },
-
-  appliedMessage() {
-    return $t('aiChat.applied')
-  },
-
-  appliedFieldMessage() {
-    return $t('aiChat.appliedField')
   }
 }

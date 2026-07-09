@@ -48,6 +48,10 @@ function createWrapper() {
           assistant: 'Assistant',
           apply: 'Apply',
           applyField: 'Apply to field',
+          applySelection: 'Apply selection',
+          insertAtCursor: 'Insert at cursor',
+          anchorCollapsed: 'The selected text was removed. The draft will be inserted at its original position.',
+          anchorLost: 'The original selection could not be tracked.',
           defaultPromptPlaceholder: 'Ask the AI to update this field...',
           inputPlaceholder: 'Ask the AI to rewrite the selection...',
           originalResponse: 'Original response',
@@ -170,18 +174,21 @@ describe('AiChatDrawer preview changes toggle', () => {
   it('toggles an assistant response between rendered draft and inline diff', async () => {
     const wrapper = createWrapper()
     const store = useAiGenerationStore()
+    const entity = { description: '<p>Old description</p>' }
     store.sessionConfig = {
       title: 'AI - Description',
       outputType: 'html',
+      mode: 'field',
       requestParams: {},
       diffContext: {
-        current: { description: '<p>Old description</p>' },
+        getDiffEntity: () => entity,
         entityShape: 'finding',
         fieldKey: 'description',
         locale: 'en',
         outputType: 'html',
         mode: 'field',
         selection: null,
+        getSelectionPreviewValue: null,
         languages: []
       }
     }
@@ -195,6 +202,7 @@ describe('AiChatDrawer preview changes toggle', () => {
     await wrapper.vm.$nextTick()
 
     expect(message.previewDiffOpen).toBe(true)
+    expect(message.previewDiffCurrent.description).toBe('<p>Old description</p>')
     expect(message.previewDiffDraft.description).toBe('<p>New description</p>')
     expect(wrapper.find('.draft-diff').exists()).toBe(true)
     expect(wrapper.find('.draft-diff--chat-preview').exists()).toBe(true)
@@ -210,22 +218,58 @@ describe('AiChatDrawer preview changes toggle', () => {
     expect(wrapper.text()).toContain('Preview changes')
   })
 
-  it('builds selected-text preview diff from the selected replacement', () => {
+  it('recomputes the diff from the live entity every time it is reopened', async () => {
     const wrapper = createWrapper()
     const store = useAiGenerationStore()
+    const entity = { description: '<p>Old description</p>' }
+    store.sessionConfig = {
+      title: 'AI - Description',
+      outputType: 'html',
+      mode: 'field',
+      requestParams: {},
+      diffContext: {
+        getDiffEntity: () => entity,
+        entityShape: 'finding',
+        fieldKey: 'description',
+        locale: 'en',
+        outputType: 'html',
+        mode: 'field',
+        selection: null,
+        getSelectionPreviewValue: null,
+        languages: []
+      }
+    }
+    addAssistantMessage(store)
+    const message = store.conversation.messages[0]
+
+    wrapper.vm.togglePreviewDiff(message)
+    expect(message.previewDiffCurrent.description).toBe('<p>Old description</p>')
+    wrapper.vm.togglePreviewDiff(message) // close
+
+    entity.description = '<p>Edited while the AI drawer was open</p>'
+    wrapper.vm.togglePreviewDiff(message) // reopen - should reflect the edit
+    expect(message.previewDiffCurrent.description).toBe('<p>Edited while the AI drawer was open</p>')
+  })
+
+  it('builds selected-text preview diff from the selected replacement using start/end offsets', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    const entity = { description: 'alpha wrong omega' }
     store.sessionConfig = {
       title: 'AI - Description',
       selectedText: 'wrong',
       outputType: 'text',
+      mode: 'selection',
       requestParams: {},
       diffContext: {
-        current: { description: 'alpha wrong omega' },
+        getDiffEntity: () => entity,
         entityShape: 'finding',
         fieldKey: 'description',
         locale: 'en',
         outputType: 'text',
         mode: 'selection',
         selection: { start: 6, end: 11, text: 'wrong' },
+        getSelectionPreviewValue: null,
         languages: []
       }
     }
@@ -235,5 +279,130 @@ describe('AiChatDrawer preview changes toggle', () => {
     wrapper.vm.togglePreviewDiff(message)
 
     expect(message.previewDiffDraft.description).toBe('alpha right omega')
+  })
+})
+
+describe('AiChatDrawer partial apply from a preview selection', () => {
+  function addAssistantMessage(store, draft = '<p>Paragraph one</p><p>Paragraph two</p>') {
+    store.conversation.messages.push({
+      role: 'assistant',
+      content: 'Updated',
+      draft,
+      draftPreview: draft,
+      previewDiffOpen: false,
+      previewDiffDraft: null,
+      previewDiffCurrent: null
+    })
+  }
+
+  it('selection mode: applies only the selected fragment to the anchored range and keeps the session open', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    const onPartialApply = vi.fn()
+    store.sessionConfig = {
+      title: 'AI - Description',
+      selectedText: 'wrong',
+      outputType: 'html',
+      mode: 'selection',
+      requestParams: {},
+      onPartialApply
+    }
+    addAssistantMessage(store)
+
+    wrapper.vm.previewSelection = { messageIndex: 0, html: '<p>Paragraph one</p>', text: 'Paragraph one' }
+    expect(wrapper.vm.applyLabel(0)).toBe('Apply selection')
+
+    wrapper.vm.applyDraft(store.conversation.messages[0], 0)
+
+    expect(onPartialApply).toHaveBeenCalledWith('<p>Paragraph one</p>')
+    expect(store.isActive).toBe(true)
+    expect(wrapper.vm.previewSelection).toBeNull()
+  })
+
+  it('field mode: applies the selected fragment as the whole field value without ending the session', () => {
+    // Field mode has no original range to preserve - "Apply" with a fragment
+    // selected writes it as the whole field (via onApply), same mechanism as
+    // the no-selection case, but never ends the session.
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    const onApply = vi.fn()
+    store.sessionConfig = { title: 'AI - Description', outputType: 'html', mode: 'field', requestParams: {}, onApply }
+    addAssistantMessage(store)
+
+    wrapper.vm.previewSelection = { messageIndex: 0, html: '<p>Paragraph one</p>', text: 'Paragraph one' }
+    expect(wrapper.vm.applyLabel(0)).toBe('Apply selection')
+
+    wrapper.vm.applyDraft(store.conversation.messages[0], 0)
+
+    expect(onApply).toHaveBeenCalledWith('<p>Paragraph one</p>')
+    expect(store.isActive).toBe(true)
+    expect(wrapper.vm.previewSelection).toBeNull()
+  })
+
+  it('field mode: applies the whole draft when nothing is selected, without ending the session', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    const onApply = vi.fn()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {}, onApply }
+    addAssistantMessage(store, '<p>Whole draft</p>')
+
+    wrapper.vm.applyDraft(store.conversation.messages[0], 0)
+
+    expect(onApply).toHaveBeenCalledWith('<p>Whole draft</p>')
+    expect(store.isActive).toBe(true)
+  })
+
+  it('field mode: applying again after already applying still works (repeatable, not a one-shot)', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    const onApply = vi.fn()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {}, onApply }
+    addAssistantMessage(store, '<p>First draft</p>')
+
+    wrapper.vm.applyDraft(store.conversation.messages[0], 0)
+    wrapper.vm.applyDraft(store.conversation.messages[0], 0)
+
+    expect(onApply).toHaveBeenCalledTimes(2)
+    expect(wrapper.vm.applyDisabled).toBe(false)
+  })
+
+  it('inserts the selected fragment at cursor without ending the session', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    const onInsertAtCursor = vi.fn()
+    store.sessionConfig = {
+      title: 'AI',
+      outputType: 'html',
+      mode: 'field',
+      requestParams: {},
+      onInsertAtCursor
+    }
+    addAssistantMessage(store)
+
+    wrapper.vm.previewSelection = { messageIndex: 0, html: '<p>Paragraph two</p>', text: 'Paragraph two' }
+    wrapper.vm.insertAtCursor(store.conversation.messages[0], 0)
+
+    expect(onInsertAtCursor).toHaveBeenCalledWith('<p>Paragraph two</p>')
+    expect(store.isActive).toBe(true)
+  })
+})
+
+describe('AiChatDrawer selection anchor status', () => {
+  it('exposes the collapsed anchor status for the caption', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', selectedText: 'wrong', outputType: 'text', mode: 'selection', requestParams: {} }
+    store.selectionAnchor = { from: 4, to: 4, status: 'collapsed' }
+
+    expect(wrapper.vm.anchorStatus).toBe('collapsed')
+  })
+
+  it('disables Apply when the tracked selection was lost', () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', selectedText: 'wrong', outputType: 'text', mode: 'selection', requestParams: {} }
+    store.selectionAnchor = { from: 0, to: 0, status: 'invalid' }
+
+    expect(wrapper.vm.applyDisabled).toBe(true)
   })
 })

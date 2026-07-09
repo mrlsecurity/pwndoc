@@ -350,8 +350,12 @@ export default {
             return useAiGenerationStore().isFieldGenerating(this.buildAiLockKey(fieldKey))
         },
 
-        isAiFieldLocked: function(fieldKey) {
-            return useAiGenerationStore().isFieldLocked(this.buildAiLockKey(fieldKey))
+        isAiFieldSessionActive: function(fieldKey) {
+            return AiFieldHelper.isFieldSessionActive(this.buildAiLockKey(fieldKey))
+        },
+
+        isAiFieldSelectionLocked: function(fieldKey) {
+            return AiFieldHelper.isFieldSelectionLocked(this.buildAiLockKey(fieldKey))
         },
 
         generateCustomFieldDraftAI: async function(customField) {
@@ -378,91 +382,24 @@ export default {
 
             Utils.syncEditors(this.$refs)
 
-            const selectionTarget = this.$refs.customfields?.getAiSelectionTarget?.(customField)
-            const selection = selectionTarget?.getTextSelection?.()
-            const outputType = AiFieldHelper.getOutputType(null, customField)
-            const fieldLabel = AiFieldHelper.getFieldLabel(null, customField, fieldKey)
-            const baseContext = AiFieldHelper.buildSectionAiContext(this.section, customField)
-            const requestParams = {
-                entityType: 'section',
-                field: fieldKey,
-                locale: this.auditParent.language,
-                outputType,
-                context: baseContext
-            }
-
             try {
-                if (selection?.text) {
-                    const draft = await AiFieldHelper.runSelectionAiChat({
-                        title: `AI - ${fieldLabel}`,
-                        selectedText: selection.text,
-                        outputType,
-                        lockKey,
-                        selection,
-                        getDiffEntity: () => this.section,
-                        entityShape: 'section',
-                        requestParams: {
-                            ...requestParams,
-                            context: {
-                                ...baseContext,
-                                selectedText: selection.text,
-                                selectedHtml: selection.html || selection.text
-                            }
-                        }
-                    })
-
-                    if (!draft)
-                        return
-
-                    AiFieldHelper.applySelectionDraft({
-                        selectionTarget,
-                        selection,
-                        draft,
-                        outputType
-                    })
-
-                    Notify.create({
-                        message: AiFieldHelper.appliedMessage(),
-                        color: 'positive',
-                        textColor: 'white',
-                        position: 'top-right'
-                    })
-                    return
-                }
-
-                const defaultPrompt = AiFieldHelper.getDefaultPrompt(
-                    this.aiFieldPrompts,
+                await AiFieldHelper.runFieldSession({
+                    customField,
                     fieldKey,
-                    baseContext
-                )
-
-                const draft = await AiFieldHelper.runFieldAiChat({
-                    title: `AI - ${fieldLabel}`,
-                    defaultPrompt,
-                    outputType,
-                    fieldLabel,
                     lockKey,
-                    getDiffEntity: () => this.section,
+                    selectionTarget: this.$refs.customfields?.getAiSelectionTarget?.(customField),
                     entityShape: 'section',
-                    requestParams
-                })
-
-                if (!draft)
-                    return
-
-                AiFieldHelper.applyFieldDraft({
-                    draft,
-                    outputType,
+                    requestEntityType: 'section',
+                    locale: this.auditParent.language,
+                    aiFieldPrompts: this.aiFieldPrompts,
+                    buildContext: () => AiFieldHelper.buildSectionAiContext(this.section, customField),
+                    getDiffEntity: () => {
+                        Utils.syncEditors(this.$refs)
+                        return this.section
+                    },
                     setValue: (value) => {
                         customField.text = value
                     }
-                })
-
-                Notify.create({
-                    message: AiFieldHelper.appliedFieldMessage(),
-                    color: 'positive',
-                    textColor: 'white',
-                    position: 'top-right'
                 })
             } catch (err) {
                 Notify.create({

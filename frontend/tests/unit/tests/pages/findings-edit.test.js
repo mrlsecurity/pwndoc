@@ -35,17 +35,30 @@ vi.mock('@/services/vulnerability', () => ({
   }
 }))
 
-vi.mock('@/services/ai-field-helper', () => ({
-  default: {
-    getOutputType: vi.fn(() => 'html'),
-    getFieldLabel: vi.fn(() => 'Proofs'),
-    buildFindingAiContext: vi.fn(() => ({})),
-    getDefaultPrompt: vi.fn(() => ''),
-    runFieldAiChat: vi.fn(() => Promise.resolve('<p>New draft</p>')),
-    applyFieldDraft: vi.fn(({ setValue, draft }) => setValue(draft)),
-    appliedFieldMessage: vi.fn(() => 'Applied')
+vi.mock('@/services/ai-field-helper', async () => {
+  const actual = await vi.importActual('@/services/ai-field-helper')
+  return {
+    // runFieldSession is kept as the real implementation (it's pure
+    // orchestration): it calls through to the mocked leaf methods below via
+    // `this`, so mocking only those is enough to simulate the drawer.
+    default: {
+      ...actual.default,
+      getOutputType: vi.fn(() => 'html'),
+      getFieldLabel: vi.fn(() => 'Proofs'),
+      buildFindingAiContext: vi.fn(() => ({})),
+      getDefaultPrompt: vi.fn(() => ''),
+      // Simulates the user clicking "Apply" once inside the drawer: invoke the
+      // onApply callback synchronously, then resolve only once the (mocked)
+      // drawer "closes" - matching the real runFieldAiChat's contract.
+      runFieldAiChat: vi.fn(({ onApply } = {}) => {
+        if (typeof onApply === 'function')
+          onApply('<p>New draft</p>')
+        return Promise.resolve(null)
+      }),
+      applyFieldDraft: vi.fn(({ setValue, draft }) => setValue(draft))
+    }
   }
-}))
+})
 
 vi.mock('@/services/utils', () => ({
   default: {
@@ -102,6 +115,12 @@ import AiFieldHelper from '@/services/ai-field-helper'
 import { Notify, Dialog } from 'quasar'
 import { useAiGenerationStore } from '@/stores/ai-generation'
 import { useAuditQaStore } from '@/stores/audit-qa'
+
+// The ai-field-helper mock above replaces the whole module; these two are
+// thin store delegations in the real implementation, so mirror that here
+// rather than hand-rolling lock-state assertions against the mock directly.
+AiFieldHelper.isFieldSessionActive = vi.fn((lockKey) => useAiGenerationStore().isFieldSessionActive(lockKey))
+AiFieldHelper.isFieldSelectionLocked = vi.fn((lockKey) => useAiGenerationStore().isFieldSelectionLocked(lockKey))
 
 describe('Findings Edit Page', () => {
   let router, pinia, i18n
@@ -923,6 +942,102 @@ describe('Findings Edit Page', () => {
 
       expect(Dialog.create).not.toHaveBeenCalled()
       expect(AiFieldHelper.runFieldAiChat).toHaveBeenCalled()
+    })
+  })
+
+  describe('AI field lock/session-active semantics', () => {
+    it('keeps a rich-text field editable while its own AI session is active', () => {
+      const wrapper = createWrapper()
+      const aiStore = useAiGenerationStore()
+      const lockKey = wrapper.vm.buildAiLockKey('poc')
+      aiStore.sessionConfig = { lockKey, mode: 'field' }
+      aiStore.lockKey = lockKey
+      aiStore.drawerOpen = true
+
+      expect(wrapper.vm.isAiFieldSessionActive('poc')).toBe(true)
+      expect(wrapper.vm.isFieldEditable('poc')).toBe(true)
+    })
+
+    it('locks the references field only during a selection-mode session on it', () => {
+      const wrapper = createWrapper()
+      const aiStore = useAiGenerationStore()
+      const lockKey = wrapper.vm.buildAiLockKey('references')
+      aiStore.lockKey = lockKey
+      aiStore.drawerOpen = true
+
+      aiStore.sessionConfig = { lockKey, mode: 'field' }
+      expect(wrapper.vm.isAiFieldSelectionLocked('references')).toBe(false)
+
+      aiStore.sessionConfig = { lockKey, mode: 'selection' }
+      expect(wrapper.vm.isAiFieldSelectionLocked('references')).toBe(true)
+    })
+  })
+
+  describe('runFieldDraftGeneration selection anchor lifecycle', () => {
+    it('anchors the live selection before opening the session and clears it once done', async () => {
+      // Simulates the user clicking "Apply selection" once inside the drawer:
+      // invoke onPartialApply synchronously, then resolve only once the
+      // (mocked) drawer "closes" - matching the real contract.
+      AiFieldHelper.runSelectionAiChat = vi.fn(({ onPartialApply } = {}) => {
+        if (typeof onPartialApply === 'function')
+          onPartialApply('<p>Selection draft</p>')
+        return Promise.resolve(null)
+      })
+      AiFieldHelper.applySelectionDraft = vi.fn()
+
+      const wrapper = createWrapper({ mocks: { $settings: { ai: { public: { enabled: true } } } } })
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 50))
+      wrapper.vm.aiPromptFieldKeys = ['poc']
+
+      const selection = { from: 2, to: 6, text: 'text', html: 'text' }
+      const setAiSelectionAnchor = vi.fn()
+      const clearAiSelectionAnchor = vi.fn()
+      const selectionTarget = {
+        getTextSelection: () => selection,
+        setAiSelectionAnchor,
+        clearAiSelectionAnchor,
+        buildAnchoredPreviewHtml: vi.fn()
+      }
+      wrapper.vm.getAiSelectionTarget = vi.fn(() => selectionTarget)
+
+      await wrapper.vm.generateFieldDraftAI('poc')
+
+      expect(setAiSelectionAnchor).toHaveBeenCalledWith(selection)
+      expect(AiFieldHelper.runSelectionAiChat).toHaveBeenCalled()
+      expect(AiFieldHelper.applySelectionDraft).toHaveBeenCalledWith(expect.objectContaining({
+        selectionTarget,
+        selection,
+        draft: '<p>Selection draft</p>'
+      }))
+      expect(clearAiSelectionAnchor).toHaveBeenCalled()
+    })
+
+    it('clears the anchor even when the selection session is cancelled', async () => {
+      AiFieldHelper.runSelectionAiChat = vi.fn(() => Promise.resolve(null))
+      AiFieldHelper.applySelectionDraft = vi.fn()
+
+      const wrapper = createWrapper({ mocks: { $settings: { ai: { public: { enabled: true } } } } })
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      await new Promise(resolve => setTimeout(resolve, 50))
+      wrapper.vm.aiPromptFieldKeys = ['poc']
+
+      const selection = { from: 2, to: 6, text: 'text', html: 'text' }
+      const clearAiSelectionAnchor = vi.fn()
+      const selectionTarget = {
+        getTextSelection: () => selection,
+        setAiSelectionAnchor: vi.fn(),
+        clearAiSelectionAnchor,
+        buildAnchoredPreviewHtml: vi.fn()
+      }
+      wrapper.vm.getAiSelectionTarget = vi.fn(() => selectionTarget)
+
+      await wrapper.vm.generateFieldDraftAI('poc')
+
+      expect(clearAiSelectionAnchor).toHaveBeenCalled()
+      expect(AiFieldHelper.applySelectionDraft).not.toHaveBeenCalled()
     })
   })
 

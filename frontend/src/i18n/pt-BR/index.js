@@ -780,8 +780,6 @@ draftRecovery: {
         emptyDraft: 'A resposta da IA está vazia',
         requestFailed: 'Não foi possível gerar a resposta da IA',
         noSelection: 'Selecione texto no campo antes de usar a IA.',
-        applied: 'Alteração da IA aplicada à seleção (ainda não salva)',
-        appliedField: 'Rascunho da IA aplicado ao campo (ainda não salvo)',
         generating: 'Gerando conteúdo...',
         leaveWhileGeneratingTitle: 'Geração por IA em andamento',
         leaveWhileGeneratingMessage: 'O conteúdo ainda está sendo gerado. Sair agora cancelará a solicitação de IA atual.',
@@ -791,7 +789,10 @@ draftRecovery: {
         discardAndStart: 'Descartar e iniciar nova',
         leaveWhileAiSessionMessage: 'Este campo está bloqueado por uma sessão de IA ativa. Sair agora irá descartá-la.',
         activeSession: 'Conclua ou feche a sessão de IA atual antes de iniciar outra.',
-        generatingSession: 'Sessão de IA em andamento',
+        applySelection: 'Aplicar seleção',
+        insertAtCursor: 'Inserir no cursor',
+        anchorCollapsed: 'O texto selecionado foi removido. O rascunho será inserido na posição original.',
+        anchorLost: 'Não foi possível rastrear a seleção original. Selecione o texto novamente e tente de novo, ou copie a resposta manualmente.',
         tooltip: 'Assistente de IA'
     },
 }

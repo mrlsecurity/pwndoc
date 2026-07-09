@@ -79,7 +79,8 @@
         :aiEnabled="aiEnabled"
         :canGenerateAiForField="canGenerateAi"
         :isAiGeneratingField="isAiFieldLoading"
-        :isAiFieldLocked="isAiFieldLocked"
+        :isAiFieldSessionActive="isAiFieldSessionActive"
+        :isAiFieldSelectionLocked="isAiFieldSelectionLocked"
         :generateAiForField="generateCustomFieldDraftAI"
         />
     </q-card>

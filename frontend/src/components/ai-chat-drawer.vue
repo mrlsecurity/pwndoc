@@ -12,6 +12,12 @@
       <q-card-section v-if="!isFieldMode" class="q-pa-none q-pb-sm">
         <div class="text-caption text-grey-7 q-mb-xs">{{ $t('aiChat.selectedText') }}</div>
         <div class="ai-chat-context text-body2">{{ sessionConfig.selectedText }}</div>
+        <div v-if="anchorStatus === 'collapsed'" class="text-caption text-warning q-mt-xs">
+          {{ $t('aiChat.anchorCollapsed') }}
+        </div>
+        <div v-else-if="anchorStatus === 'invalid'" class="text-caption text-negative q-mt-xs">
+          {{ $t('aiChat.anchorLost') }}
+        </div>
       </q-card-section>
 
       <div v-if="!conversation.messages.length" class="text-grey-6 text-center q-pa-md">
@@ -37,13 +43,14 @@
           <draft-diff
           v-if="message.previewDiffOpen && message.previewDiffDraft"
           chat-preview
-          :current="sessionConfig.diffContext.current"
+          :current="message.previewDiffCurrent"
           :draft="message.previewDiffDraft"
           :languages="sessionConfig.diffContext.languages || []"
           />
           <div
           v-else
           class="ProseMirror draft-rendered-diff ai-chat-draft-preview"
+          :data-message-index="index"
           v-html="message.draftPreview"
           />
           <div class="q-mt-sm row q-gutter-sm">
@@ -51,10 +58,20 @@
             unelevated
             dense
             no-caps
-            :label="isFieldMode ? $t('aiChat.applyField') : $t('aiChat.apply')"
+            :label="applyLabel(index)"
+            color="primary"
+            :disable="applyDisabled"
+            @click="applyDraft(message, index)"
+            />
+            <q-btn
+            v-if="canInsertAtCursor"
+            outline
+            dense
+            no-caps
+            :label="$t('aiChat.insertAtCursor')"
             color="primary"
             :disable="loading"
-            @click="applyDraft(message.draft)"
+            @click="insertAtCursor(message, index)"
             />
             <q-btn
             v-if="sessionConfig.diffContext"
@@ -143,7 +160,7 @@ import { mapState, mapActions } from 'pinia'
 import { useAiGenerationStore } from '@/stores/ai-generation'
 import AiService from '@/services/ai'
 import AiFieldHelper from '@/services/ai-field-helper'
-import { normalizeEditorHtml } from '@/services/editor-html-renderer'
+import { normalizeEditorHtml, denormalizeEditorHtml } from '@/services/editor-html-renderer'
 import DraftDiff from '@/components/draft-diff.vue'
 import { $t } from '@/boot/i18n'
 
@@ -156,7 +173,8 @@ export default {
 
   data() {
     return {
-      selectedPromptId: '__default__'
+      selectedPromptId: '__default__',
+      previewSelection: null
     }
   },
 
@@ -165,11 +183,32 @@ export default {
       sessionConfig: 'sessionConfig',
       sessionId: 'sessionId',
       loading: 'loading',
-      conversation: 'conversation'
+      conversation: 'conversation',
+      selectionAnchor: 'selectionAnchor'
     }),
 
     isFieldMode() {
       return !String(this.sessionConfig?.selectedText || '').trim()
+    },
+
+    mode() {
+      return this.sessionConfig?.mode || (this.isFieldMode ? 'field' : 'selection')
+    },
+
+    anchorStatus() {
+      if (this.mode !== 'selection')
+        return null
+      return this.selectionAnchor?.status || null
+    },
+
+    canInsertAtCursor() {
+      return this.isFieldMode && typeof this.sessionConfig?.onInsertAtCursor === 'function'
+    },
+
+    applyDisabled() {
+      // anchorStatus is already null outside selection mode, so this alone
+      // captures "loading, or the tracked selection was lost".
+      return this.loading || this.anchorStatus === 'invalid'
     },
 
     canSend() {
@@ -214,10 +253,12 @@ export default {
   watch: {
     sessionId() {
       this.selectedPromptId = '__default__'
+      this.previewSelection = null
     },
 
     'conversation.messages.length'() {
       this.scrollMessagesToBottom()
+      this.previewSelection = null
     },
 
     loading(value) {
@@ -226,12 +267,22 @@ export default {
     }
   },
 
+  mounted() {
+    document.addEventListener('selectionchange', this.captureDraftSelection)
+  },
+
+  beforeUnmount() {
+    document.removeEventListener('selectionchange', this.captureDraftSelection)
+  },
+
   methods: {
     ...mapActions(useAiGenerationStore, {
       setStoreLoading: 'setLoading',
-      completeSession: 'completeSession',
       cancelSession: 'cancelSession',
-      closeDrawer: 'closeDrawer'
+      closeDrawer: 'closeDrawer',
+      applyFieldValue: 'applyFieldValue',
+      applyPartialDraft: 'applyPartialDraft',
+      insertDraftAtCursor: 'insertDraftAtCursor'
     }),
 
     scrollMessagesToBottom() {
@@ -326,7 +377,8 @@ export default {
           draft,
           draftPreview: this.formatDraftPreview(draft),
           previewDiffOpen: false,
-          previewDiffDraft: null
+          previewDiffDraft: null,
+          previewDiffCurrent: null
         })
       } catch (err) {
         store.conversation.messages.pop()
@@ -342,25 +394,114 @@ export default {
       }
     },
 
-    applyDraft(draft) {
-      if (draft === null || draft === undefined)
-        return
-      this.completeSession(draft)
+    hasPreviewSelection(index) {
+      return !!this.previewSelection && this.previewSelection.messageIndex === index
     },
 
-    buildPreviewDiffDraft(draft) {
-      const diffContext = this.sessionConfig?.diffContext
-      if (!diffContext)
-        return null
+    applyLabel(index) {
+      if (this.hasPreviewSelection(index))
+        return this.$t('aiChat.applySelection')
+      return this.isFieldMode ? this.$t('aiChat.applyField') : this.$t('aiChat.apply')
+    },
 
-      return AiFieldHelper.buildAiDiffDraft(diffContext, draft)
+    captureDraftSelection() {
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        this.previewSelection = null
+        return
+      }
+
+      const range = selection.getRangeAt(0)
+      const anchorNode = range.commonAncestorContainer
+
+      // Cheap bail-out before any DOM walk: selectionchange is document-global,
+      // so most events fire for selections made elsewhere on the page.
+      if (!this.$refs.messagesContainer?.contains(anchorNode)) {
+        this.previewSelection = null
+        return
+      }
+
+      const anchorEl = anchorNode.nodeType === Node.ELEMENT_NODE ? anchorNode : anchorNode.parentElement
+      const previewEl = anchorEl?.closest?.('.ai-chat-draft-preview')
+
+      if (!previewEl) {
+        this.previewSelection = null
+        return
+      }
+
+      const messageIndex = Number(previewEl.dataset.messageIndex)
+      if (Number.isNaN(messageIndex)) {
+        this.previewSelection = null
+        return
+      }
+
+      const wrapper = document.createElement('div')
+      wrapper.appendChild(range.cloneContents())
+
+      this.previewSelection = {
+        messageIndex,
+        html: wrapper.innerHTML,
+        text: selection.toString()
+      }
+    },
+
+    buildSelectionContent() {
+      const outputType = this.sessionConfig?.outputType || 'html'
+      const selection = this.previewSelection
+
+      if (outputType === 'html')
+        return denormalizeEditorHtml(selection.html)
+
+      if (outputType === 'array') {
+        return selection.text
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+      }
+
+      return selection.text
+    },
+
+    // Resolves what a click should act on - the selected fragment if the user
+    // highlighted part of the preview, otherwise the whole draft - and clears
+    // the selection so it doesn't linger onto the next click.
+    resolveDraftContent(message, index) {
+      const content = this.hasPreviewSelection(index) ? this.buildSelectionContent() : message.draft
+      this.previewSelection = null
+      return content
+    },
+
+    // "Apply" never ends the session - it writes the current draft (or just
+    // the selected fragment) to the field/anchor and the drawer stays open,
+    // so the user can keep chatting and apply again as many times as they want.
+    applyDraft(message, index) {
+      if (message.draft === null || message.draft === undefined)
+        return
+
+      const content = this.resolveDraftContent(message, index)
+
+      if (this.isFieldMode)
+        this.applyFieldValue(content)
+      else
+        this.applyPartialDraft(content)
+    },
+
+    insertAtCursor(message, index) {
+      this.insertDraftAtCursor(this.resolveDraftContent(message, index))
     },
 
     togglePreviewDiff(message) {
-      if (!message.previewDiffDraft)
-        message.previewDiffDraft = this.buildPreviewDiffDraft(message.draft)
+      if (!message.previewDiffOpen) {
+        const diffContext = this.sessionConfig?.diffContext
+        // Sync editors and clone the entity once, then reuse that single clone
+        // for both the "current" side of the diff and as the base buildAiDiffDraft
+        // mutates into the "draft" side - avoids syncing/cloning twice per click.
+        const current = diffContext?.getDiffEntity ? AiFieldHelper.cloneEntity(diffContext.getDiffEntity()) : null
+        message.previewDiffCurrent = current
+        message.previewDiffDraft = current ? AiFieldHelper.buildAiDiffDraft(diffContext, message.draft, current) : null
+      }
 
-      if (!message.previewDiffDraft)
+      if (!message.previewDiffDraft || !message.previewDiffCurrent)
         return
 
       message.previewDiffOpen = !message.previewDiffOpen

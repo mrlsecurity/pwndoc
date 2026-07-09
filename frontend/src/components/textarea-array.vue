@@ -18,6 +18,7 @@
     type="textarea"
     @update:model-value="updateParent"
     outlined
+    :class="{'ai-field-active': aiSessionActive || aiLoading}"
     :rules="rules"
     lazy-rules="ondemand"
     :readonly="readonly"
@@ -50,6 +51,10 @@ export default {
             default: false
         },
         aiLoading: {
+            type: Boolean,
+            default: false
+        },
+        aiSessionActive: {
             type: Boolean,
             default: false
         }
@@ -129,6 +134,3 @@ export default {
 }
 
 </script>
-
-<style>
-</style>

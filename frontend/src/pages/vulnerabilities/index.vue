@@ -258,7 +258,7 @@
                         v-model="currentVulnerability.details[currentDetailsIndex].description"
                         :showAiButton="canGenerateAi('description') && isFieldEditable('description')"
                         :aiLoading="isAiFieldLoading('description')"
-                        :aiLocked="isAiFieldLocked('description')"
+                        :aiSessionActive="isAiFieldSessionActive('description')"
                         @ai-click="generateFieldDraftAI('description')"
                         />
                     </template>
@@ -273,7 +273,7 @@
                         v-model="currentVulnerability.details[currentDetailsIndex].observation"
                         :showAiButton="canGenerateAi('observation') && isFieldEditable('observation')"
                         :aiLoading="isAiFieldLoading('observation')"
-                        :aiLocked="isAiFieldLocked('observation')"
+                        :aiSessionActive="isAiFieldSessionActive('observation')"
                         @ai-click="generateFieldDraftAI('observation')"
                         />
                     </template>
@@ -304,7 +304,7 @@
                         v-model="currentVulnerability.details[currentDetailsIndex].remediation"
                         :showAiButton="canGenerateAi('remediation') && isFieldEditable('remediation')"
                         :aiLoading="isAiFieldLoading('remediation')"
-                        :aiLocked="isAiFieldLocked('remediation')"
+                        :aiSessionActive="isAiFieldSessionActive('remediation')"
                         @ai-click="generateFieldDraftAI('remediation')"
                         />
                     </template>
@@ -343,6 +343,7 @@
                 v-model="currentVulnerability.details[currentDetailsIndex].references"
                 :showAiButton="canGenerateAi('references') && isFieldEditable('references')"
                 :aiLoading="isAiFieldLoading('references')"
+                :aiSessionActive="isAiFieldSessionActive('references')"
                 @ai-click="generateFieldDraftAI('references')"
                 />
             </q-card-section>
@@ -363,7 +364,8 @@
                 :aiEnabled="aiEnabled"
                 :canGenerateAiForField="canGenerateAi"
                 :isAiGeneratingField="isAiFieldLoading"
-                :isAiFieldLocked="isAiFieldLocked"
+                :isAiFieldSessionActive="isAiFieldSessionActive"
+                :isAiFieldSelectionLocked="isAiFieldSelectionLocked"
                 :generateAiForField="generateCustomFieldDraftAI"
                 />
             </q-expansion-item>
@@ -499,7 +501,7 @@
                         v-model="currentVulnerability.details[currentDetailsIndex].description"
                         :showAiButton="canGenerateAi('description') && isFieldEditable('description')"
                         :aiLoading="isAiFieldLoading('description')"
-                        :aiLocked="isAiFieldLocked('description')"
+                        :aiSessionActive="isAiFieldSessionActive('description')"
                         @ai-click="generateFieldDraftAI('description')"
                         />
                     </template>
@@ -514,7 +516,7 @@
                         v-model="currentVulnerability.details[currentDetailsIndex].observation"
                         :showAiButton="canGenerateAi('observation') && isFieldEditable('observation')"
                         :aiLoading="isAiFieldLoading('observation')"
-                        :aiLocked="isAiFieldLocked('observation')"
+                        :aiSessionActive="isAiFieldSessionActive('observation')"
                         @ai-click="generateFieldDraftAI('observation')"
                         />
                     </template>
@@ -545,7 +547,7 @@
                         v-model="currentVulnerability.details[currentDetailsIndex].remediation"
                         :showAiButton="canGenerateAi('remediation') && isFieldEditable('remediation')"
                         :aiLoading="isAiFieldLoading('remediation')"
-                        :aiLocked="isAiFieldLocked('remediation')"
+                        :aiSessionActive="isAiFieldSessionActive('remediation')"
                         @ai-click="generateFieldDraftAI('remediation')"
                         />
                     </template>
@@ -584,6 +586,7 @@
                 v-model="currentVulnerability.details[currentDetailsIndex].references"
                 :showAiButton="canGenerateAi('references') && isFieldEditable('references')"
                 :aiLoading="isAiFieldLoading('references')"
+                :aiSessionActive="isAiFieldSessionActive('references')"
                 @ai-click="generateFieldDraftAI('references')"
                 />
             </q-card-section>
@@ -601,7 +604,8 @@
                 :aiEnabled="aiEnabled"
                 :canGenerateAiForField="canGenerateAi"
                 :isAiGeneratingField="isAiFieldLoading"
-                :isAiFieldLocked="isAiFieldLocked"
+                :isAiFieldSessionActive="isAiFieldSessionActive"
+                :isAiFieldSelectionLocked="isAiFieldSelectionLocked"
                 :generateAiForField="generateCustomFieldDraftAI"
                 />
             </q-expansion-item>
