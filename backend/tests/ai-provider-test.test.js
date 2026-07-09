@@ -63,7 +63,7 @@ module.exports = function(request, app) {
             expect(response.body.datas).toMatch(/OpenAI provider is not configured/);
         });
 
-        it('requires settings:update permission', async () => {
+        it('requires ai-settings:update permission', async () => {
             const response = await request(app).post('/api/ai/test')
                 .set('Cookie', [`token=JWT ${userToken}`])
                 .send({ provider: 'openai' });

@@ -898,11 +898,11 @@
                 </q-dialog>
             </q-card>
 
-            <q-card class="q-my-lg" v-if="canEdit" align="center">
+            <q-card class="q-my-lg" v-if="canEdit || canEditAiSettings" align="center">
                 <q-card-section >
                     <q-item>
                         <q-item-section class="q-px-md">
-                            <q-btn 
+                            <q-btn
                             :label="$t('saveSettings')"
                             color="secondary"
                             no-caps
@@ -911,8 +911,8 @@
                             @click="updateSettings"
                             ></q-btn>
                         </q-item-section>
-                        <q-item-section class="q-px-md">
-                            <q-btn 
+                        <q-item-section v-if="canEdit" class="q-px-md">
+                            <q-btn
                             :label="$t('revertSettingsToDefaults')"
                             color="negative"
                             no-caps
@@ -921,7 +921,7 @@
                             @click="revertToDefaults"
                             />
                         </q-item-section>
-                        <q-item-section class="q-px-md">
+                        <q-item-section v-if="canEdit" class="q-px-md">
                             <input
                             ref="importSetttings"
                             value=""
@@ -945,8 +945,8 @@
                                 </div>
                             </q-btn>
                         </q-item-section>
-                        <q-item-section class="q-px-md">
-                            <q-btn 
+                        <q-item-section v-if="canEdit" class="q-px-md">
+                            <q-btn
                             color="warning"
                             no-caps
                             flat

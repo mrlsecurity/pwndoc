@@ -607,5 +607,5 @@ module.exports = function(app) {
     app.post('/api/ai/generate', acl.hasPermission('validtoken'), requireAiGeneratePermission, handleAiGenerate);
     app.post('/api/ai/qa', acl.hasPermission('audits:ai-qa'), handleAiQa);
     app.post('/api/ai/vulnerabilities/qa', acl.hasPermission('validtoken'), requireVulnerabilityQaPermission, handleVulnerabilityQa);
-    app.post('/api/ai/test', acl.hasPermission('settings:update'), handleAiTestConnection);
+    app.post('/api/ai/test', acl.hasPermission('ai-settings:update'), handleAiTestConnection);
 };
