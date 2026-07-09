@@ -1,5 +1,7 @@
 const { URL } = require('url');
 const net = require('net');
+const http = require('http');
+const https = require('https');
 const dns = require('dns').promises;
 const { formatFindingLocation } = require('./ai-qa-location');
 
@@ -42,6 +44,9 @@ const isPrivateIpv4 = (address) => {
         return false;
 
     if (value >= ipv4ToInt('10.0.0.0') && value <= ipv4ToInt('10.255.255.255'))
+        return true;
+    // 100.64.0.0/10 — CGNAT / shared address space, routinely used for cloud-internal ranges.
+    if (value >= ipv4ToInt('100.64.0.0') && value <= ipv4ToInt('100.127.255.255'))
         return true;
     if (value >= ipv4ToInt('172.16.0.0') && value <= ipv4ToInt('172.31.255.255'))
         return true;
@@ -156,27 +161,39 @@ const resolveHostname = async (hostname = '') => {
     return (results || []).map((entry) => entry.address).filter(Boolean);
 };
 
-const getReferenceUrlValidationError = async (rawUrl = '') => {
+// Resolve and validate a reference URL, returning either an { error } or the concrete
+// { address, family } that passed validation. The returned address is what the outbound
+// request must be pinned to: resolving here and connecting to a *different* address later
+// is exactly the DNS-rebinding gap this closes.
+const resolveValidatedAddress = async (rawUrl = '') => {
     const staticError = getStaticReferenceUrlError(rawUrl);
     if (staticError)
-        return staticError;
+        return { error: staticError };
 
     const parsed = parseReferenceUrl(rawUrl);
     if (!parsed)
-        return REFERENCE_URL_ERRORS.malformed;
+        return { error: REFERENCE_URL_ERRORS.malformed };
 
     try {
         const addresses = await resolveHostname(parsed.hostname);
         if (!addresses.length)
-            return REFERENCE_URL_ERRORS.unresolvedHost;
+            return { error: REFERENCE_URL_ERRORS.unresolvedHost };
 
+        // Every resolved address must be safe — a mix of public and private answers is
+        // treated as hostile (partial rebinding) rather than picking a "good" one.
         if (!addresses.every((address) => !isBlockedIpAddress(address)))
-            return REFERENCE_URL_ERRORS.localOrPrivateHost;
+            return { error: REFERENCE_URL_ERRORS.localOrPrivateHost };
 
-        return null;
+        const address = addresses[0];
+        return { address: address, family: net.isIP(address) === 6 ? 6 : 4 };
     } catch (_) {
-        return REFERENCE_URL_ERRORS.unresolvedHost;
+        return { error: REFERENCE_URL_ERRORS.unresolvedHost };
     }
+};
+
+const getReferenceUrlValidationError = async (rawUrl = '') => {
+    const { error } = await resolveValidatedAddress(rawUrl);
+    return error || null;
 };
 
 const isAllowedReferenceUrl = async (rawUrl = '') => !(await getReferenceUrlValidationError(rawUrl));
@@ -206,25 +223,75 @@ const classifyHttpStatus = (status) => {
     };
 };
 
+// Issue a single HTTP(S) request pinned to a pre-validated IP address. A custom `lookup`
+// forces the socket to the exact address `resolveValidatedAddress` vetted, so a hostname
+// that rebinds to an internal IP between validation and connection can never be reached.
+// The URL's hostname is preserved for TLS SNI / certificate validation and the Host header.
+const performPinnedRequest = (rawUrl, method, pinnedAddress, family) => new Promise((resolve, reject) => {
+    let parsed;
+    try {
+        parsed = new URL(rawUrl);
+    } catch (_) {
+        reject(new Error(REFERENCE_URL_ERRORS.malformed));
+        return;
+    }
+
+    const transport = parsed.protocol === 'https:' ? https : http;
+    const pinnedFamily = family === 6 ? 6 : 4;
+    const pinnedLookup = (hostname, options, callback) => {
+        const cb = typeof options === 'function' ? options : callback;
+        const opts = typeof options === 'function' ? {} : (options || {});
+        if (opts.all)
+            cb(null, [{ address: pinnedAddress, family: pinnedFamily }]);
+        else
+            cb(null, pinnedAddress, pinnedFamily);
+    };
+
+    let settled = false;
+    const settle = (fn, value) => {
+        if (settled)
+            return;
+        settled = true;
+        fn(value);
+    };
+
+    const request = transport.request(rawUrl, {
+        method: method,
+        lookup: pinnedLookup,
+        headers: {
+            'User-Agent': 'PwnDoc-QA-LinkChecker/1.0'
+        }
+    }, (response) => {
+        const status = response.statusCode;
+        const location = response.headers ? (response.headers.location || null) : null;
+        response.resume(); // drain the body so the socket can be released
+        settle(resolve, { status: status, location: location });
+    });
+
+    request.setTimeout(DEFAULT_TIMEOUT_MS, () => {
+        request.destroy(new Error('request timed out'));
+    });
+    request.on('error', (err) => settle(reject, err));
+    request.end();
+});
+
 const requestReferenceUrl = async (url, method = 'HEAD') => {
     let currentUrl = url;
 
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-        const validationError = await getReferenceUrlValidationError(currentUrl);
-        if (validationError)
-            throw new Error(validationError);
+        // Re-resolve and re-validate on every hop, then pin the request to the vetted address.
+        const resolution = await resolveValidatedAddress(currentUrl);
+        if (resolution.error)
+            throw new Error(resolution.error);
 
-        const response = await fetch(currentUrl, {
-            method: method,
-            redirect: 'manual',
-            signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-            headers: {
-                'User-Agent': 'PwnDoc-QA-LinkChecker/1.0'
-            }
-        });
+        const { status, location } = await performPinnedRequest(
+            currentUrl,
+            method,
+            resolution.address,
+            resolution.family
+        );
 
-        if ([301, 302, 303, 307, 308].includes(response.status)) {
-            const location = response.headers.get('location');
+        if ([301, 302, 303, 307, 308].includes(status)) {
             if (!location)
                 throw new Error('Reference URL redirect did not include a location header.');
 
@@ -232,7 +299,7 @@ const requestReferenceUrl = async (url, method = 'HEAD') => {
             continue;
         }
 
-        return response.status;
+        return status;
     }
 
     throw new Error('Reference URL exceeded the maximum number of redirects.');

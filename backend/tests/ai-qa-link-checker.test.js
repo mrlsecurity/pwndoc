@@ -1,4 +1,5 @@
 const dns = require('dns').promises;
+const https = require('https');
 const {
     extractUrlsFromReferences,
     isBlockedReferenceUrl,
@@ -9,8 +10,34 @@ const {
 
 module.exports = function() {
     describe('AI QA reference link checker', () => {
-        const originalFetch = global.fetch;
         let lookupSpy = null;
+
+        // Build a fake ClientRequest whose callback yields the given response (or emits the
+        // given error). `onOptions` lets a test capture the options passed to request(),
+        // notably the pinned `lookup`.
+        const fakeRequestImpl = ({ status, headers = {}, error = null, onOptions } = {}) =>
+            (url, options, callback) => {
+                if (onOptions)
+                    onOptions(options);
+
+                const request = {
+                    setTimeout: jest.fn(),
+                    on: jest.fn((event, handler) => {
+                        if (event === 'error' && error)
+                            setImmediate(() => handler(error));
+                        return request;
+                    }),
+                    destroy: jest.fn(),
+                    end: jest.fn(() => {
+                        if (!error)
+                            setImmediate(() => callback({ statusCode: status, headers: headers, resume: jest.fn() }));
+                    })
+                };
+
+                return request;
+            };
+
+        const mockHttps = (config) => jest.spyOn(https, 'request').mockImplementation(fakeRequestImpl(config));
 
         beforeEach(() => {
             lookupSpy = jest.spyOn(dns, 'lookup').mockImplementation(async (hostname, options = {}) => {
@@ -23,9 +50,7 @@ module.exports = function() {
         });
 
         afterEach(() => {
-            global.fetch = originalFetch;
-            if (lookupSpy)
-                lookupSpy.mockRestore();
+            jest.restoreAllMocks();
         });
 
         it('should extract HTTP(S) URLs from reference strings', () => {
@@ -40,12 +65,16 @@ module.exports = function() {
             ]);
         });
 
-        it('should block private and local URLs', () => {
+        it('should block private, local and CGNAT URLs', () => {
             expect(isBlockedReferenceUrl('http://localhost/test')).toBe(true);
             expect(isBlockedReferenceUrl('http://127.0.0.1/test')).toBe(true);
             expect(isBlockedReferenceUrl('http://192.168.1.10/test')).toBe(true);
+            expect(isBlockedReferenceUrl('http://100.64.0.1/test')).toBe(true);
+            expect(isBlockedReferenceUrl('http://100.127.255.255/test')).toBe(true);
             expect(isBlockedReferenceUrl('ftp://example.com/test')).toBe(true);
             expect(isBlockedReferenceUrl('https://example.com/test')).toBe(false);
+            // 100.128.0.0 is just outside the CGNAT range and must stay allowed.
+            expect(isBlockedReferenceUrl('http://100.128.0.1/test')).toBe(false);
         });
 
         it('should block hostnames that resolve to private addresses', async () => {
@@ -54,12 +83,33 @@ module.exports = function() {
             expect(await isAllowedReferenceUrl('https://evil.example/test')).toBe(false);
         });
 
+        it('should block hostnames that resolve to CGNAT addresses', async () => {
+            lookupSpy.mockResolvedValueOnce([{ address: '100.64.5.5', family: 4 }]);
+
+            expect(await isAllowedReferenceUrl('https://evil.example/test')).toBe(false);
+        });
+
         it('should allow hostnames that resolve to public addresses', async () => {
             expect(await isAllowedReferenceUrl('https://example.com/test')).toBe(true);
         });
 
+        it('should pin the outbound request to the validated address (defeats DNS rebinding)', async () => {
+            let capturedOptions = null;
+            mockHttps({ status: 200, onOptions: (options) => { capturedOptions = options; } });
+
+            const result = await validateReferenceUrl('https://example.com/ok');
+            expect(result.valid).toBe(true);
+
+            // The request must carry a lookup pinned to the address we validated, not re-resolve.
+            expect(typeof capturedOptions.lookup).toBe('function');
+            const pinned = await new Promise((resolve) => {
+                capturedOptions.lookup('example.com', {}, (err, address) => resolve(address));
+            });
+            expect(pinned).toBe('93.184.216.34');
+        });
+
         it('should flag unreachable reference URLs', async () => {
-            global.fetch = jest.fn().mockRejectedValue(new Error('network down'));
+            mockHttps({ error: new Error('network down') });
 
             const result = await validateReferenceUrl('https://example.com/missing');
             expect(result.valid).toBe(false);
@@ -68,7 +118,7 @@ module.exports = function() {
         });
 
         it('should treat HTTP 404 as an invalid reference', async () => {
-            global.fetch = jest.fn().mockResolvedValue({ status: 404 });
+            mockHttps({ status: 404 });
 
             const result = await validateReferenceUrl('https://example.com/missing');
             expect(result.valid).toBe(false);
@@ -77,7 +127,7 @@ module.exports = function() {
         });
 
         it('should treat HTTP 400 with the same severity as 404', async () => {
-            global.fetch = jest.fn().mockResolvedValue({ status: 400 });
+            mockHttps({ status: 400 });
 
             const result = await validateReferenceUrl('https://example.com/bad-request');
             expect(result.valid).toBe(false);
@@ -87,25 +137,23 @@ module.exports = function() {
         });
 
         it('should accept healthy reference URLs', async () => {
-            global.fetch = jest.fn().mockResolvedValue({ status: 200 });
+            mockHttps({ status: 200 });
 
             const result = await validateReferenceUrl('https://example.com/ok');
             expect(result.valid).toBe(true);
         });
 
         it('should block redirects to private URLs', async () => {
-            global.fetch = jest.fn()
-                .mockResolvedValueOnce({
-                    status: 302,
-                    headers: {
-                        get: (name) => name.toLowerCase() === 'location' ? 'http://127.0.0.1/internal' : null
-                    }
-                });
+            const httpsSpy = mockHttps({
+                status: 302,
+                headers: { location: 'http://127.0.0.1/internal' }
+            });
 
             const result = await validateReferenceUrl('https://example.com/redirect');
             expect(result.valid).toBe(false);
             expect(result.message).toContain('private or local address');
-            expect(global.fetch).toHaveBeenCalledTimes(1);
+            // The private redirect target is rejected at validation, before any second request.
+            expect(httpsSpy).toHaveBeenCalledTimes(1);
         });
 
         it('should report unresolved hostnames clearly', async () => {
@@ -116,7 +164,7 @@ module.exports = function() {
         });
 
         it('should create issues for invalid finding reference links', async () => {
-            global.fetch = jest.fn().mockResolvedValue({ status: 404 });
+            mockHttps({ status: 404 });
 
             const issues = await runReferenceLinkChecks({
                 findings: [{
