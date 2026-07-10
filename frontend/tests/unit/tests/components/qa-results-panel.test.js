@@ -151,6 +151,38 @@ describe('QaResultsPanel info tile', () => {
   })
 })
 
+describe('QaResultsPanel running indicator', () => {
+  it('shows the progress bar and in-progress line while a run is in flight', () => {
+    const wrapper = createWrapper({ running: true, startedAt: Date.now() })
+
+    expect(wrapper.find('.qa-run-progress').exists()).toBe(true)
+    expect(wrapper.find('.qa-run-inprogress').exists()).toBe(true)
+    expect(wrapper.find('.qa-results-panel--running').exists()).toBe(true)
+  })
+
+  it('does not show the in-progress indicators when idle', () => {
+    const wrapper = createWrapper({ running: false })
+
+    expect(wrapper.find('.qa-run-progress').exists()).toBe(false)
+    expect(wrapper.find('.qa-run-inprogress').exists()).toBe(false)
+    expect(wrapper.find('.qa-results-panel--running').exists()).toBe(false)
+  })
+
+  it('keeps the previous report visible while running (does not replace it with a spinner)', () => {
+    const wrapper = createWrapper({
+      running: true,
+      startedAt: Date.now(),
+      groupedIssues: [{
+        label: 'General',
+        issues: [{ severity: 'warning', category: 'completeness', title: 'Issue', message: 'msg', location: 'report', source: 'structural' }]
+      }]
+    })
+
+    expect(wrapper.text()).toContain('Issue')
+    expect(wrapper.find('.qa-run-progress').exists()).toBe(true)
+  })
+})
+
 describe('QaResultsPanel AI-unavailable banner', () => {
   it('promotes AI-unavailable messages to a banner instead of a buried row', () => {
     const wrapper = createWrapper({

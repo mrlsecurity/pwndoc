@@ -2,6 +2,8 @@
   <qa-results-panel
   :title="$t('auditQa.title')"
   :loading="loading"
+  :running="running"
+  :started-at="startedAt"
   :error-message="errorMessage"
   :has-report-data="hasReport"
   :programmatic-ran-at="programmaticRanAt"
@@ -59,6 +61,8 @@ export default {
   computed: {
     ...mapState(useAuditQaStore, [
       'loading',
+      'running',
+      'startedAt',
       'issues',
       'hasReport',
       'programmaticRanAt',

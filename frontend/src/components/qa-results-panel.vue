@@ -1,10 +1,12 @@
 <template>
-  <div class="qa-results-panel column full-height">
+  <div class="qa-results-panel column full-height" :class="{ 'qa-results-panel--running': running }">
     <q-toolbar class="bg-grey-3" @mousedown.prevent>
       <q-icon name="fas fa-list-check" size="sm" class="q-mr-sm" />
       <q-toolbar-title class="text-subtitle1">{{ title }}</q-toolbar-title>
       <q-btn icon="close" flat round dense @click="$emit('close')" />
     </q-toolbar>
+
+    <q-linear-progress v-if="running" indeterminate color="primary" class="qa-run-progress" />
 
     <q-card-section v-if="loading" class="text-center q-py-xl col" @mousedown.prevent>
       <q-spinner color="primary" size="3em" />
@@ -13,6 +15,11 @@
 
     <template v-else>
       <q-card-section class="col-auto q-pb-none" @mousedown.prevent>
+        <div v-if="running" class="qa-run-inprogress q-mb-md">
+          <q-spinner-dots color="primary" size="20px" class="q-mr-sm" />
+          <span>{{ inProgressLabel }}</span>
+        </div>
+
         <q-banner v-if="topBanner" dense rounded class="bg-blue-grey-1 text-grey-9 q-mb-md">
           {{ topBanner }}
         </q-banner>
@@ -59,7 +66,7 @@
           no-caps
           color="primary"
           :label="$t('auditQa.runProgrammatic')"
-          :disable="loading"
+          :disable="loading || running"
           @click="$emit('run', 'programmatic')"
           />
           <q-btn
@@ -68,7 +75,7 @@
           no-caps
           color="primary"
           :label="$t('auditQa.runAi')"
-          :disable="loading"
+          :disable="loading || running"
           @click="$emit('run', 'ai')"
           />
           <q-btn
@@ -77,7 +84,7 @@
           no-caps
           color="primary"
           :label="$t('auditQa.runAll')"
-          :disable="loading"
+          :disable="loading || running"
           @click="$emit('run', 'all')"
           />
         </div>
@@ -227,6 +234,14 @@ export default {
       type: Boolean,
       default: false
     },
+    running: {
+      type: Boolean,
+      default: false
+    },
+    startedAt: {
+      type: [Number, String, Date],
+      default: null
+    },
     errorMessage: {
       type: String,
       default: ''
@@ -322,6 +337,23 @@ export default {
   },
 
   computed: {
+    startedAtLabel() {
+      if (!this.startedAt)
+        return ''
+
+      const date = new Date(this.startedAt)
+      if (Number.isNaN(date.getTime()))
+        return ''
+
+      return date.toLocaleTimeString()
+    },
+
+    inProgressLabel() {
+      return this.startedAtLabel
+        ? $t('auditQa.runInProgress', { time: this.startedAtLabel })
+        : $t('auditQa.runInProgressNoTime')
+    },
+
     showOutdatedBanner() {
       return this.outdated && !this.dismissedOutdated
     },
@@ -420,6 +452,25 @@ export default {
   font-size: 0.85rem;
   line-height: 1.4;
   color: #424242;
+}
+
+.qa-run-progress {
+  flex: 0 0 auto;
+}
+
+.qa-run-inprogress {
+  display: flex;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #1976d2;
+}
+
+/* Keep the previous report visible but clearly de-emphasised while a run is in flight. */
+.qa-results-panel--running .qa-groups,
+.qa-results-panel--running .qa-summary {
+  opacity: 0.5;
+  transition: opacity 0.15s;
 }
 
 .qa-run-meta {
@@ -593,5 +644,9 @@ export default {
 
 .body--dark .qa-summary {
   color: #e0e0e0;
+}
+
+.body--dark .qa-run-inprogress {
+  color: #90caf9;
 }
 </style>

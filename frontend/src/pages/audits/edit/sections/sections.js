@@ -196,6 +196,10 @@ export default {
             return useAuditQaStore().drawerOpen
         },
 
+        qaRunning: function() {
+            return useAuditQaStore().runningForAudit(this.auditId)
+        },
+
         aiDrawerOpen: function() {
             return useAiGenerationStore().drawerOpen
         },

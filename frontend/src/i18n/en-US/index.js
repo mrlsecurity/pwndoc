@@ -945,6 +945,8 @@ export default {
     auditQa: {
         title: 'QA Review',
         running: 'Running QA checks...',
+        runInProgress: 'AI QA in progress… started {time}',
+        runInProgressNoTime: 'AI QA in progress…',
         failed: 'Unable to run report QA review',
         previousProgrammaticRun: 'Showing data from programmatical checks',
         previousProgrammaticRunAt: 'Showing data from programmatical checks ({date})',

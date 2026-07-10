@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import AiService from '@/services/ai'
 import { useAiGenerationStore } from '@/stores/ai-generation'
+import { useQaRunsStore } from '@/stores/qa-runs'
 import { buildQaReportViewModel } from '@/services/qa-display'
 import { $t } from '@/boot/i18n'
 
@@ -14,28 +15,57 @@ const emptyCounts = () => ({
 export const useAuditQaStore = defineStore('auditQa', {
   state: () => ({
     drawerOpen: false,
-    loading: false,
     auditId: null,
-    summary: '',
-    issues: [],
-    cached: false,
-    outdated: false,
-    ranAt: null,
-    programmaticRanAt: null,
-    aiRanAt: null,
-    hasReport: false,
-    errorMessage: '',
-    severityFilter: 'all',
-    counts: emptyCounts()
+    severityFilter: 'all'
   }),
 
   getters: {
+    qaKey: (state) => (state.auditId ? `audit:${state.auditId}` : null),
+
+    // Whether a QA run is currently in flight for the open audit.
+    running() {
+      return useQaRunsStore().isRunning(this.qaKey)
+    },
+
+    // When the run started (ms), for the "in progress since …" indicator.
+    startedAt() {
+      return useQaRunsStore().startedAt(this.qaKey)
+    },
+
+    // Full-panel spinner only while first fetching a report with nothing to show yet.
+    loading() {
+      return useQaRunsStore().isLoading(this.qaKey) && !this.hasReport && !this.running
+    },
+
+    errorMessage() {
+      return useQaRunsStore().getRun(this.qaKey)?.error || ''
+    },
+
+    reportViewModel() {
+      return buildQaReportViewModel(useQaRunsStore().getRun(this.qaKey)?.report || {})
+    },
+
+    summary() { return this.reportViewModel.summary },
+    issues() { return this.reportViewModel.issues },
+    counts() { return this.reportViewModel.counts || emptyCounts() },
+    hasReport() { return this.reportViewModel.hasReport },
+    outdated() { return this.reportViewModel.outdated },
+    ranAt() { return this.reportViewModel.ranAt },
+    programmaticRanAt() { return this.reportViewModel.programmaticRanAt },
+    aiRanAt() { return this.reportViewModel.aiRanAt },
+    cached() { return this.reportViewModel.cached },
+
     filteredIssues(state) {
       if (state.severityFilter === 'all')
-        return state.issues
+        return this.issues
 
-      return state.issues.filter((issue) => issue.severity === state.severityFilter)
-    }
+      return this.issues.filter((issue) => issue.severity === state.severityFilter)
+    },
+
+    // Whether a run is in flight for a given audit — used by toolbar buttons whose panel
+    // may be closed (so a closed drawer still signals activity).
+    runningForAudit: () => (auditId) =>
+      useQaRunsStore().isRunning(auditId ? `audit:${auditId}` : null)
   },
 
   actions: {
@@ -47,7 +77,7 @@ export const useAuditQaStore = defineStore('auditQa', {
       this.auditId = auditId
       this.drawerOpen = true
       this.severityFilter = 'all'
-      this.errorMessage = ''
+      // Re-attach to any in-flight run; loadQa is a no-op while a run is running.
       this.loadQa(auditId)
     },
 
@@ -55,49 +85,23 @@ export const useAuditQaStore = defineStore('auditQa', {
       this.drawerOpen = false
     },
 
-    applyReport(data = {}) {
-      Object.assign(this, buildQaReportViewModel(data))
-    },
-
     loadQa(auditId) {
-      this.loading = true
-      this.errorMessage = ''
       this.auditId = auditId
-
-      return AiService.runAuditQa(auditId, { loadOnly: true })
-      .then((response) => {
-        this.applyReport(response.data.datas || {})
-      })
-      .catch((err) => {
-        this.errorMessage = err.response?.data?.datas || $t('auditQa.failed')
-        this.summary = ''
-        this.issues = []
-        this.hasReport = false
-        this.counts = emptyCounts()
-      })
-      .finally(() => {
-        this.loading = false
-      })
+      return useQaRunsStore().load(
+        `audit:${auditId}`,
+        () => AiService.runAuditQa(auditId, { loadOnly: true }).then((response) => response.data.datas || {}),
+        { errorFallback: $t('auditQa.failed') }
+      )
     },
 
     runQa(auditId, scope = 'all') {
-      this.loading = true
-      this.errorMessage = ''
       this.auditId = auditId
       this.severityFilter = 'all'
-
-      return AiService.runAuditQa(auditId, { scope })
-      .then((response) => {
-        this.applyReport(response.data.datas || {})
-        this.cached = false
-        this.outdated = false
-      })
-      .catch((err) => {
-        this.errorMessage = err.response?.data?.datas || $t('auditQa.failed')
-      })
-      .finally(() => {
-        this.loading = false
-      })
+      return useQaRunsStore().start(
+        `audit:${auditId}`,
+        () => AiService.runAuditQa(auditId, { scope }).then((response) => response.data.datas || {}),
+        { errorFallback: $t('auditQa.failed') }
+      )
     },
 
     setSeverityFilter(filter) {

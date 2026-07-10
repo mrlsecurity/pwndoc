@@ -30,6 +30,7 @@
         :ripple="false"
         @click="toggleQaView()"
         class="q-mr-sm">
+            <q-badge v-if="qaRunning" floating rounded color="orange" class="qa-run-badge" />
             <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
                 {{ $t('tooltip.auditQa') }}
             </q-tooltip>

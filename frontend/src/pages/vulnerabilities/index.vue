@@ -197,6 +197,7 @@
                 :class="{ 'bg-white': vulnQaOpen }"
                 @click="toggleVulnerabilityQaView()"
                 >
+                    <q-badge v-if="vulnQaRunning" floating rounded color="orange" class="qa-run-badge" />
                     <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
                         {{ $t('tooltip.vulnerabilityQa') }}
                     </q-tooltip>
@@ -432,6 +433,7 @@
                 :class="{ 'bg-white': vulnQaOpen }"
                 @click="toggleVulnerabilityQaView()"
                 >
+                    <q-badge v-if="vulnQaRunning" floating rounded color="orange" class="qa-run-badge" />
                     <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
                         {{ $t('tooltip.vulnerabilityQa') }}
                     </q-tooltip>

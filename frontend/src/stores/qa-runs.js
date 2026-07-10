@@ -1,0 +1,90 @@
+import { defineStore } from 'pinia'
+
+// Run state for QA reports, keyed by target so it survives the panel/drawer being closed,
+// remounted (language-tab switch), or the route changing. Keys look like:
+//   audit:<auditId>            audit report QA
+//   vuln:<vulnId>:<locale>     single stored-vulnerability QA
+//   all:<locale>               run-all vulnerability QA for a locale
+//   draft                      the unsaved vulnerability currently in the modal
+//
+// A run holds the raw report payload plus its lifecycle flags; consumers build their own
+// view models from `report`.
+const emptyRun = () => ({
+  running: false,
+  loading: false,
+  loaded: false,
+  startedAt: null,
+  report: null,
+  error: ''
+})
+
+const resolveError = (err, fallback) => err?.response?.data?.datas || fallback || ''
+
+export const useQaRunsStore = defineStore('qaRuns', {
+  state: () => ({
+    runs: {}
+  }),
+
+  getters: {
+    getRun: (state) => (key) => (key ? state.runs[key] || null : null),
+    isRunning: (state) => (key) => Boolean(key && state.runs[key]?.running),
+    isLoading: (state) => (key) => Boolean(key && state.runs[key]?.loading),
+    startedAt: (state) => (key) => (key && state.runs[key]?.startedAt) || null
+  },
+
+  actions: {
+    ensureRun(key) {
+      if (!this.runs[key])
+        this.runs[key] = emptyRun()
+      return this.runs[key]
+    },
+
+    // Fetch a cached report. Never runs while a QA run is in flight (the run owns the state),
+    // and never overwrites a run that starts while the fetch is outstanding.
+    async load(key, loader, { errorFallback = '' } = {}) {
+      const run = this.ensureRun(key)
+      if (run.running)
+        return
+
+      run.loading = true
+      run.error = ''
+      try {
+        const data = await loader()
+        if (run.running)
+          return
+        run.report = data || {}
+        run.loaded = true
+      } catch (err) {
+        if (!run.running)
+          run.error = resolveError(err, errorFallback)
+      } finally {
+        run.loading = false
+      }
+    },
+
+    // Start a QA run for a target. Ignored if that target already has a run in flight
+    // (double-run guard). The report stays visible while running so panels can dim it.
+    async start(key, runner, { errorFallback = '' } = {}) {
+      const run = this.ensureRun(key)
+      if (run.running)
+        return
+
+      run.running = true
+      run.startedAt = Date.now()
+      run.error = ''
+      try {
+        run.report = await runner() || {}
+        run.loaded = true
+      } catch (err) {
+        run.error = resolveError(err, errorFallback)
+      } finally {
+        run.running = false
+      }
+    },
+
+    reset(key) {
+      if (this.runs[key])
+        this.runs[key] = emptyRun()
+    }
+  }
+})

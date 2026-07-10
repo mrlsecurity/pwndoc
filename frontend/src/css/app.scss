@@ -138,3 +138,15 @@
     box-shadow: 0 0 0 1px $primary;
     border-radius: 4px;
 }
+// Pulsing dot on a QA toolbar button while that target's QA run is in flight, so a
+// closed panel still signals activity.
+.qa-run-badge {
+    padding: 4px;
+    min-height: auto;
+    animation: qa-run-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes qa-run-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.75); }
+}

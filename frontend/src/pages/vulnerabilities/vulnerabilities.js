@@ -13,6 +13,7 @@ import DataService from '@/services/data'
 import AiService from '@/services/ai'
 import AiFieldHelper from '@/services/ai-field-helper'
 import { useAiGenerationStore } from '@/stores/ai-generation'
+import { useQaRunsStore } from '@/stores/qa-runs'
 import { useUserStore } from 'src/stores/user'
 import Utils from '@/services/utils'
 import { createDraftRecovery } from '@/composables/useDraftRecovery'
@@ -209,6 +210,19 @@ export default {
 
         aiDrawerOpen: function() {
             return useAiGenerationStore().drawerOpen
+        },
+
+        // Run key for the QA panel of the vulnerability currently in the modal. Matches the
+        // key computed inside vulnerability-qa-panel so the toolbar dot reflects its run even
+        // when the panel is closed.
+        activeVulnQaKey: function() {
+            if (this.vulnerabilityId)
+                return `vuln:${this.vulnerabilityId}:${this.currentLanguage}`
+            return 'draft'
+        },
+
+        vulnQaRunning: function() {
+            return useQaRunsStore().isRunning(this.activeVulnQaKey)
         },
 
         sidePanelOpen: function() {
@@ -456,6 +470,9 @@ export default {
             if (aiStore.isActive)
                 aiStore.cancelSession({ force: true })
             this.vulnQaOpen = false
+            // The unsaved-vulnerability QA run is tied to this modal session; drop it so the
+            // next modal starts clean instead of showing a previous draft's results.
+            useQaRunsStore().reset('draft')
 
             if (this.draftRecovery) {
                 await this.draftRecovery.flushPendingWrite()
