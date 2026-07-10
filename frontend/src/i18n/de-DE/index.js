@@ -643,7 +643,17 @@ export default {
             sectionDefinition: 'Findings — Definition',
             sectionProofs: 'Findings — Proofs',
             sectionFindingCustom: 'Findings — Custom fields',
-            sectionSections: 'Sections'
+            sectionSections: 'Sections',
+            filterLabel: 'Filter fields',
+            filterPlaceholder: 'Search by field name',
+            noFieldsMatch: 'No fields match your search.',
+            unsavedChanges: '{count} unsaved change(s)',
+            incompleteGlobalPrompt: 'Give every custom prompt both a label and prompt text (or clear both) before saving.',
+            labelRequired: 'Label required',
+            promptRequired: 'Prompt required',
+            outputTypeHtml: 'HTML',
+            outputTypeList: 'List',
+            outputTypeText: 'Text'
         },
         guidelines: {
             description: 'Organization-wide writing rules provided to every AI request as additional context. Use plain text or Markdown, similar to a project style guide.',

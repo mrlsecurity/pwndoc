@@ -89,6 +89,8 @@
                                                         v-model="entry.label"
                                                         :readonly="!canEditPrompts"
                                                         :hint="$t('aiIntegration.prompts.labelHint')"
+                                                        :error="isGlobalPromptIncomplete(entry) && !entry.label.trim()"
+                                                        :error-message="$t('aiIntegration.prompts.labelRequired')"
                                                         />
                                                     </div>
                                                     <div class="col-auto">
@@ -118,6 +120,8 @@
                                                 v-model="entry.prompt"
                                                 :readonly="!canEditPrompts"
                                                 :disable="!entry.enabled"
+                                                :error="isGlobalPromptIncomplete(entry) && !entry.prompt.trim()"
+                                                :error-message="$t('aiIntegration.prompts.promptRequired')"
                                                 />
                                             </q-card>
 
@@ -133,54 +137,86 @@
                                             </div>
                                         </q-card-section>
                                     </q-expansion-item>
+                                </q-list>
+                            </q-card-section>
+
+                            <q-card-section>
+                                <q-input
+                                outlined
+                                dense
+                                clearable
+                                v-model="promptFilter"
+                                :label="$t('aiIntegration.prompts.filterLabel')"
+                                :placeholder="$t('aiIntegration.prompts.filterPlaceholder')"
+                                >
+                                    <template v-slot:prepend>
+                                        <q-icon name="search" />
+                                    </template>
+                                </q-input>
+                            </q-card-section>
+
+                            <q-card-section class="q-pa-none">
+                                <q-list bordered separator class="rounded-borders">
+                                    <div v-if="promptFilter.trim() && filteredGroupedPromptSections.length === 0" class="text-grey-7 q-pa-md">
+                                        {{ $t('aiIntegration.prompts.noFieldsMatch') }}
+                                    </div>
 
                                     <q-expansion-item
-                                    v-for="group in groupedPromptSections"
+                                    v-for="group in filteredGroupedPromptSections"
                                     :key="group.key"
+                                    :model-value="isGroupExpanded(group)"
+                                    @update:model-value="(val) => setGroupExpanded(group.key, val)"
                                     expand-separator
                                     icon="article"
                                     :label="group.label"
                                     :caption="$t('aiIntegration.prompts.fieldPromptCount', { count: group.mappings.length })"
                                     >
-                                        <q-card-section class="q-gutter-md">
-                                            <q-card
+                                        <q-list separator>
+                                            <q-expansion-item
                                             v-for="mapping in group.mappings"
                                             :key="`${mapping.entityType}:${mapping.fieldKey}`"
-                                            bordered
-                                            flat
-                                            class="q-pa-md"
+                                            dense-toggle
+                                            group="field"
                                             >
-                                                <div class="row items-center q-col-gutter-md q-mb-sm">
-                                                    <div class="col">
-                                                        <div class="text-subtitle2">{{ mapping.fieldLabel }}</div>
-                                                        <div class="text-caption text-grey-7">
-                                                            Entity: {{ mapping.entityType }} | Field key: {{ mapping.fieldKey }} | Output: {{ mapping.outputType }}
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-auto">
+                                                <template v-slot:header>
+                                                    <q-item-section avatar>
                                                         <q-toggle
                                                         v-model="mapping.enabled"
-                                                        :label="$t('aiIntegration.prompts.enableAi')"
                                                         :disable="!canEditPrompts"
+                                                        @click.stop
                                                         />
-                                                    </div>
-                                                </div>
-                                                <q-input
-                                                outlined
-                                                type="textarea"
-                                                autogrow
-                                                :label="$t('aiIntegration.prompts.fieldPromptLabel', { field: mapping.fieldLabel })"
-                                                v-model="mapping.prompt"
-                                                :readonly="!canEditPrompts"
-                                                :disable="!mapping.enabled"
-                                                />
-                                            </q-card>
-                                        </q-card-section>
+                                                    </q-item-section>
+                                                    <q-item-section>
+                                                        {{ fieldDisplayLabel(mapping) }}
+                                                    </q-item-section>
+                                                    <q-item-section side>
+                                                        <q-chip dense square color="grey-3" text-color="grey-8">
+                                                            {{ outputTypeLabel(mapping.outputType) }}
+                                                        </q-chip>
+                                                    </q-item-section>
+                                                </template>
+
+                                                <q-card-section>
+                                                    <q-input
+                                                    outlined
+                                                    type="textarea"
+                                                    autogrow
+                                                    :label="$t('aiIntegration.prompts.fieldPromptLabel', { field: fieldDisplayLabel(mapping) })"
+                                                    v-model="mapping.prompt"
+                                                    :readonly="!canEditPrompts"
+                                                    :disable="!mapping.enabled"
+                                                    />
+                                                </q-card-section>
+                                            </q-expansion-item>
+                                        </q-list>
                                     </q-expansion-item>
                                 </q-list>
                             </q-card-section>
 
-                            <q-card-actions align="right">
+                            <q-card-actions align="right" class="prompts-save-bar">
+                                <span v-if="promptDirtyCount > 0" class="text-caption text-grey-7 q-mr-md">
+                                    {{ $t('aiIntegration.prompts.unsavedChanges', { count: promptDirtyCount }) }}
+                                </span>
                                 <q-btn
                                 color="secondary"
                                 unelevated
@@ -378,5 +414,19 @@
 .redaction-guidelines-editor :deep(textarea),
 .qa-instructions-editor :deep(textarea) {
     line-height: 1.5;
+}
+
+.ai-integration-save-bar,
+.prompts-save-bar {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    z-index: 1;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+:deep(.body--dark) .ai-integration-save-bar,
+:deep(.body--dark) .prompts-save-bar {
+    background: var(--q-dark-page);
 }
 </style>

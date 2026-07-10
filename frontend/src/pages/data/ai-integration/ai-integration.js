@@ -1,4 +1,4 @@
-import { Notify } from 'quasar';
+import { Notify, Dialog } from 'quasar';
 import DataService from '@/services/data';
 import { useUserStore } from '@/stores/user';
 import { $t } from '@/boot/i18n';
@@ -6,6 +6,14 @@ import {
     QA_PROGRAMMATIC_CHECK_KEYS,
     QA_AI_CHECK_KEYS
 } from '@/services/qa-checks';
+
+const OUTPUT_TYPE_LABEL_KEYS = {
+    html: 'aiIntegration.prompts.outputTypeHtml',
+    array: 'aiIntegration.prompts.outputTypeList',
+    text: 'aiIntegration.prompts.outputTypeText'
+};
+
+const CUSTOM_FIELD_LABEL_PREFIX = /^(Finding|Section) Custom Field:\s*/;
 
 const userStore = useUserStore();
 
@@ -134,6 +142,22 @@ export default {
         }
     },
 
+    beforeRouteLeave(to, from, next) {
+        if (this.hasPromptChanges || this.hasGuidelineChanges || this.hasQaChanges) {
+            Dialog.create({
+                title: $t('msg.thereAreUnsavedChanges'),
+                message: $t('msg.doYouWantToLeave'),
+                ok: { label: $t('btn.confirm'), color: 'negative' },
+                cancel: { label: $t('btn.cancel'), color: 'white' },
+                focus: 'cancel'
+            })
+            .onOk(() => next());
+            return;
+        }
+
+        next();
+    },
+
     data: () => {
         return {
             loading: true,
@@ -154,6 +178,8 @@ export default {
             qaChecks: defaultQaChecks(),
             writingTab: 'prompts',
             qaTab: 'programmatic',
+            promptFilter: '',
+            openPromptGroups: {},
             orig: {
                 promptMappings: [],
                 globalPrompts: [],
@@ -210,6 +236,21 @@ export default {
             }).filter((section) => section.mappings.length > 0);
         },
 
+        filteredGroupedPromptSections: function() {
+            const filterText = this.promptFilter.trim().toLowerCase();
+            if (!filterText)
+                return this.groupedPromptSections;
+
+            return this.groupedPromptSections
+            .map((group) => ({
+                ...group,
+                mappings: group.mappings.filter((mapping) => {
+                    return this.fieldDisplayLabel(mapping).toLowerCase().includes(filterText);
+                })
+            }))
+            .filter((group) => group.mappings.length > 0);
+        },
+
         hasPromptChanges: function() {
             return JSON.stringify({
                 promptMappings: serializePromptMappings(this.promptMappings),
@@ -218,6 +259,35 @@ export default {
                 promptMappings: this.orig.promptMappings,
                 globalPrompts: this.orig.globalPrompts
             });
+        },
+
+        promptDirtyCount: function() {
+            let count = 0;
+
+            const origByKey = new Map(this.orig.promptMappings.map((mapping) => [`${mapping.entityType}:${mapping.fieldKey}`, mapping]));
+            serializePromptMappings(this.promptMappings).forEach((mapping) => {
+                const key = `${mapping.entityType}:${mapping.fieldKey}`;
+                const original = origByKey.get(key);
+                if (!original || original.enabled !== mapping.enabled || original.prompt !== mapping.prompt)
+                    count++;
+            });
+
+            const origGlobalById = new Map(this.orig.globalPrompts.map((entry) => [entry.id, entry]));
+            const currentGlobal = serializeGlobalPrompts(this.globalPrompts);
+            const currentGlobalIds = new Set(currentGlobal.map((entry) => entry.id));
+
+            currentGlobal.forEach((entry) => {
+                const original = origGlobalById.get(entry.id);
+                if (!original || original.label !== entry.label || original.prompt !== entry.prompt || original.enabled !== entry.enabled)
+                    count++;
+            });
+
+            this.orig.globalPrompts.forEach((entry) => {
+                if (!currentGlobalIds.has(entry.id))
+                    count++;
+            });
+
+            return count;
         },
 
         hasGuidelineChanges: function() {
@@ -346,9 +416,44 @@ export default {
             this.globalPrompts.splice(index, 1);
         },
 
+        fieldDisplayLabel: function(mapping) {
+            return String(mapping.fieldLabel || '').replace(CUSTOM_FIELD_LABEL_PREFIX, '');
+        },
+
+        outputTypeLabel: function(outputType) {
+            const key = OUTPUT_TYPE_LABEL_KEYS[outputType];
+            return key ? this.$t(key) : outputType;
+        },
+
+        isGroupExpanded: function(group) {
+            if (this.promptFilter.trim())
+                return true;
+            return this.openPromptGroups[group.key] !== false;
+        },
+
+        setGroupExpanded: function(key, expanded) {
+            this.openPromptGroups[key] = expanded;
+        },
+
+        isGlobalPromptIncomplete: function(entry) {
+            const hasLabel = !!String(entry.label || '').trim();
+            const hasPrompt = !!String(entry.prompt || '').trim();
+            return hasLabel !== hasPrompt;
+        },
+
         savePrompts: function() {
             if (!this.canEditPrompts || this.savingPrompts)
                 return;
+
+            if (this.globalPrompts.some((entry) => this.isGlobalPromptIncomplete(entry))) {
+                Notify.create({
+                    message: this.$t('aiIntegration.prompts.incompleteGlobalPrompt'),
+                    color: 'negative',
+                    textColor: 'white',
+                    position: 'top-right'
+                });
+                return;
+            }
 
             this.savingPrompts = true;
             const completeGlobalPrompts = this.globalPrompts.filter((entry) => {
