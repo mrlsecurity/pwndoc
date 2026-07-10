@@ -6,6 +6,34 @@ const {
     TYPE_BATCH_CEILING
 } = require('../src/lib/ai-vuln-duplicate-ai');
 
+const buildLargeCatalog = (count) => {
+    return Array.from({ length: count }, (_, i) => ({
+        _id: `vuln-${i}`,
+        details: [{
+            locale: 'en',
+            title: `Template ${i}`,
+            description: `<p>Description ${i}</p>`,
+            observation: `<p>Observation ${i}</p>`,
+            remediation: `<p>Remediation ${i}</p>`
+        }]
+    }));
+};
+
+// index.test.js requires every backend test module into one shared Jest module registry, so a
+// top-level jest.mock('../src/lib/ai-client') here would leak into unrelated suites (e.g.
+// ai-integration.test.js) that need the real provider dispatch. isolateModules sandboxes the
+// mock to a fresh copy of ai-vuln-duplicate-ai.js, required and used entirely inside the callback.
+const runAiDuplicateChecksWithMockedProvider = (mockFn, args) => {
+    let runAiDuplicateChecks;
+    jest.isolateModules(() => {
+        jest.doMock('../src/lib/ai-client', () => ({
+            runVulnerabilityDuplicateQaWithProvider: mockFn
+        }));
+        ({ runAiDuplicateChecks } = require('../src/lib/ai-vuln-duplicate-ai'));
+    });
+    return runAiDuplicateChecks(args);
+};
+
 module.exports = function() {
     describe('AI vulnerability duplicate detection', () => {
         const vulnerabilities = [
@@ -156,6 +184,87 @@ module.exports = function() {
 
             expect(issues).toHaveLength(1);
             expect(issues[0].location).toBe('vulnerability:SQLi on Login Page');
+        });
+
+        describe('batching large catalogs', () => {
+            it('should send a single request when the catalog fits in one batch', async () => {
+                const mockFn = jest.fn().mockResolvedValue({ issues: [], summary: 'ok', model: 'test-model' });
+
+                const result = await runAiDuplicateChecksWithMockedProvider(mockFn, {
+                    vulnerabilities: buildLargeCatalog(10),
+                    locale: 'en',
+                    settings: {},
+                    provider: 'anthropic'
+                });
+
+                expect(mockFn).toHaveBeenCalledTimes(1);
+                expect(mockFn.mock.calls[0][0].templates).toHaveLength(10);
+                expect(result.model).toBe('test-model');
+            });
+
+            it('should split a large "all templates" catalog into multiple batched requests', async () => {
+                const mockFn = jest.fn().mockResolvedValue({ issues: [], summary: '', model: 'test-model' });
+
+                await runAiDuplicateChecksWithMockedProvider(mockFn, {
+                    vulnerabilities: buildLargeCatalog(90),
+                    locale: 'en',
+                    settings: {},
+                    provider: 'anthropic'
+                });
+
+                expect(mockFn.mock.calls.length).toBeGreaterThan(1);
+                mockFn.mock.calls.forEach((call) => {
+                    expect(call[0].templates.length).toBeLessThanOrEqual(40);
+                    expect(call[0].mode).toBe('all');
+                });
+            });
+
+            it('should merge and dedupe issues collected across batches', async () => {
+                const mockFn = jest.fn()
+                    .mockResolvedValueOnce({
+                        issues: [{
+                            severity: 'warning',
+                            title: 'Likely duplicate vulnerability',
+                            vulnerabilityId: 'vuln-0',
+                            templateTitle: 'Template 0',
+                            relatedTemplates: [{ vulnerabilityId: 'vuln-1', title: 'Template 1' }]
+                        }],
+                        summary: 'first batch summary',
+                        model: 'test-model'
+                    })
+                    .mockResolvedValueOnce({ issues: [], summary: '', model: 'test-model' })
+                    .mockResolvedValueOnce({ issues: [], summary: '', model: 'test-model' });
+
+                const result = await runAiDuplicateChecksWithMockedProvider(mockFn, {
+                    vulnerabilities: buildLargeCatalog(90),
+                    locale: 'en',
+                    settings: {},
+                    provider: 'anthropic'
+                });
+
+                expect(result.issues).toHaveLength(1);
+                expect(result.summary).toBe('first batch summary');
+            });
+
+            it('should batch a single-target run without overlap between candidate batches', async () => {
+                const mockFn = jest.fn().mockResolvedValue({ issues: [], summary: '', model: 'test-model' });
+
+                await runAiDuplicateChecksWithMockedProvider(mockFn, {
+                    vulnerabilities: buildLargeCatalog(90),
+                    locale: 'en',
+                    targetVulnerabilityId: 'vuln-0',
+                    settings: {},
+                    provider: 'anthropic'
+                });
+
+                const totalCandidates = mockFn.mock.calls
+                    .reduce((sum, call) => sum + call[0].templates.length, 0);
+                expect(totalCandidates).toBe(89);
+                mockFn.mock.calls.forEach((call) => {
+                    expect(call[0].mode).toBe('single');
+                    expect(call[0].target.vulnerabilityId).toBe('vuln-0');
+                });
+            });
         });
     });
 };

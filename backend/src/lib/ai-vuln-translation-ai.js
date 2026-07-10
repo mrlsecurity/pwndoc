@@ -1,5 +1,5 @@
 const { runVulnerabilityUnlinkedTranslationQaWithProvider } = require('./ai-client');
-const { stripHtml, normalizeIssue } = require('./ai-qa-shared');
+const { stripHtml, normalizeIssue, chunkWithOverlap } = require('./ai-qa-shared');
 const { AI_DEFAULT_PROVIDER } = require('./ai-prompts');
 const {
     formatVulnerabilityLocation,
@@ -8,6 +8,9 @@ const {
 
 const AI_TRANSLATION_SEVERITIES = ['error', 'warning', 'info'];
 const FIELD_SLICE_LENGTH = 2500;
+// Keeps a single request's template catalog within provider context limits on large libraries.
+const AI_TRANSLATION_BATCH_SIZE = 40;
+const AI_TRANSLATION_BATCH_OVERLAP = 5;
 
 const pushIssue = (issues, issue, source = 'ai') => {
     const normalized = normalizeIssue({
@@ -186,31 +189,40 @@ const runAiUnlinkedTranslationChecks = async ({
         .trim()
         .toLowerCase();
 
-    // full-catalog translation prompt ceiling (~proxy/LLM context); upgrade: batch the catalog
-    if (!targetEntry && catalog.length > 75) {
-        throw new Error(
-            `Catalog has ${catalog.length} templates; AI unlinked-translation review is skipped above 75 (upgrade: batched catalog prompts).`
-        );
+    // A fixed target is compared against every candidate batch, so no overlap is needed to
+    // cover all pairs. A full-catalog run compares many-to-many, so batches overlap to reduce
+    // pairs missed at a batch boundary.
+    const templateBatches = targetEntry ?
+        chunkWithOverlap(candidates, AI_TRANSLATION_BATCH_SIZE, 0) :
+        chunkWithOverlap(catalog, AI_TRANSLATION_BATCH_SIZE, AI_TRANSLATION_BATCH_OVERLAP);
+
+    const rawIssues = [];
+    let model = null;
+    let summary = '';
+
+    for (const batch of templateBatches) {
+        const aiResult = await runVulnerabilityUnlinkedTranslationQaWithProvider({
+            provider: selectedProvider,
+            settings: settings,
+            mode: targetEntry ? 'single' : 'all',
+            target: targetEntry,
+            templates: batch
+        });
+        rawIssues.push(...(aiResult.issues || []));
+        model = model || aiResult.model || null;
+        summary = summary || String(aiResult.summary || '').trim();
     }
 
-    const aiResult = await runVulnerabilityUnlinkedTranslationQaWithProvider({
-        provider: selectedProvider,
-        settings: settings,
-        mode: targetEntry ? 'single' : 'all',
-        target: targetEntry,
-        templates: targetEntry ? candidates : catalog
-    });
-
     const catalogById = new Map(catalog.map((entry) => [entry.vulnerabilityId, entry]));
-    const issues = normalizeAiUnlinkedTranslationIssues(aiResult.issues || [], {
+    const issues = normalizeAiUnlinkedTranslationIssues(rawIssues, {
         targetVulnerabilityId: targetId || null,
         catalogById: catalogById
     });
 
     return {
         issues: issues,
-        summary: String(aiResult.summary || '').trim(),
-        model: aiResult.model || null,
+        summary: summary,
+        model: model,
         provider: selectedProvider
     };
 };

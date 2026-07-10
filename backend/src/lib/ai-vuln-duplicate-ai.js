@@ -1,5 +1,5 @@
 const { runVulnerabilityDuplicateQaWithProvider } = require('./ai-client');
-const { stripHtml, normalizeIssue } = require('./ai-qa-shared');
+const { stripHtml, normalizeIssue, chunkWithOverlap } = require('./ai-qa-shared');
 const { AI_DEFAULT_PROVIDER } = require('./ai-prompts');
 const {
     formatVulnerabilityLocation,
@@ -9,9 +9,9 @@ const {
 
 const AI_DUPLICATE_SEVERITIES = ['error', 'warning', 'info'];
 const FIELD_SLICE_LENGTH = 2500;
-// per-type prompt ceiling (~proxy/LLM context). Pairs that span chunks of the
-// same oversized type may be missed — upgrade: overlapping windows or hierarchical merge.
-const TYPE_BATCH_CEILING = 75;
+// Keeps a single request's template catalog within provider context limits on large libraries.
+const TYPE_BATCH_CEILING = 40;
+const AI_DUPLICATE_BATCH_OVERLAP = 5;
 
 const pushIssue = (issues, issue, source = 'ai') => {
     const normalized = normalizeIssue({
@@ -61,20 +61,15 @@ const groupCatalogByType = (catalog = []) => {
     return groups;
 };
 
-const chunkByCeiling = (entries = [], ceiling = TYPE_BATCH_CEILING) => {
+const chunkByCeiling = (entries = [], ceiling = TYPE_BATCH_CEILING, overlap = 0) => {
     if (entries.length < 2)
         return [];
 
     if (entries.length <= ceiling)
         return [entries];
 
-    const chunks = [];
-    for (let index = 0; index < entries.length; index += ceiling) {
-        const chunk = entries.slice(index, index + ceiling);
-        if (chunk.length >= 2)
-            chunks.push(chunk);
-    }
-    return chunks;
+    return chunkWithOverlap(entries, ceiling, overlap)
+        .filter((chunk) => chunk.length >= 2);
 };
 
 // Build prompt-sized batches: group by vulnType, then split oversized types.
@@ -82,7 +77,8 @@ const buildDuplicateBatches = (catalog = []) => {
     const batches = [];
 
     groupCatalogByType(catalog).forEach((entries) => {
-        chunkByCeiling(entries).forEach((batch) => batches.push(batch));
+        chunkByCeiling(entries, TYPE_BATCH_CEILING, AI_DUPLICATE_BATCH_OVERLAP)
+            .forEach((batch) => batches.push(batch));
     });
 
     return batches;

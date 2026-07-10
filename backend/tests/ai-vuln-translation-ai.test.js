@@ -3,6 +3,34 @@ const {
     normalizeAiUnlinkedTranslationIssues
 } = require('../src/lib/ai-vuln-translation-ai');
 
+const buildLargeSingleLocaleCatalog = (count) => {
+    return Array.from({ length: count }, (_, i) => ({
+        _id: `vuln-${i}`,
+        details: [{
+            locale: i % 2 === 0 ? 'en' : 'fr',
+            title: `Template ${i}`,
+            description: `<p>Description ${i}</p>`,
+            observation: `<p>Observation ${i}</p>`,
+            remediation: `<p>Remediation ${i}</p>`
+        }]
+    }));
+};
+
+// index.test.js requires every backend test module into one shared Jest module registry, so a
+// top-level jest.mock('../src/lib/ai-client') here would leak into unrelated suites (e.g.
+// ai-integration.test.js) that need the real provider dispatch. isolateModules sandboxes the
+// mock to a fresh copy of ai-vuln-translation-ai.js, required and used entirely inside the callback.
+const runAiUnlinkedTranslationChecksWithMockedProvider = (mockFn, args) => {
+    let runAiUnlinkedTranslationChecks;
+    jest.isolateModules(() => {
+        jest.doMock('../src/lib/ai-client', () => ({
+            runVulnerabilityUnlinkedTranslationQaWithProvider: mockFn
+        }));
+        ({ runAiUnlinkedTranslationChecks } = require('../src/lib/ai-vuln-translation-ai'));
+    });
+    return runAiUnlinkedTranslationChecks(args);
+};
+
 module.exports = function() {
     describe('AI vulnerability unlinked translation detection', () => {
         const vulnerabilities = [
@@ -101,6 +129,51 @@ module.exports = function() {
 
             expect(issues).toHaveLength(1);
             expect(issues[0].location).toContain('Cookie sans attribut HTTPOnly');
+        });
+
+        describe('batching large catalogs', () => {
+            it('should split a large "all templates" catalog into multiple batched requests', async () => {
+                const mockFn = jest.fn().mockResolvedValue({ issues: [], summary: '', model: 'test-model' });
+
+                await runAiUnlinkedTranslationChecksWithMockedProvider(mockFn, {
+                    vulnerabilities: buildLargeSingleLocaleCatalog(90),
+                    settings: {},
+                    provider: 'anthropic'
+                });
+
+                expect(mockFn.mock.calls.length).toBeGreaterThan(1);
+                mockFn.mock.calls.forEach((call) => {
+                    expect(call[0].templates.length).toBeLessThanOrEqual(40);
+                    expect(call[0].mode).toBe('all');
+                });
+            });
+
+            it('should merge issues collected across batches', async () => {
+                const mockFn = jest.fn()
+                    .mockResolvedValueOnce({
+                        issues: [{
+                            severity: 'warning',
+                            title: 'Unlinked translation',
+                            vulnerabilityId: 'vuln-0',
+                            templateTitle: 'Template 0',
+                            locale: 'en',
+                            relatedTemplates: [{ vulnerabilityId: 'vuln-1', title: 'Template 1', locale: 'fr' }]
+                        }],
+                        summary: 'first batch summary',
+                        model: 'test-model'
+                    })
+                    .mockResolvedValueOnce({ issues: [], summary: '', model: 'test-model' })
+                    .mockResolvedValueOnce({ issues: [], summary: '', model: 'test-model' });
+
+                const result = await runAiUnlinkedTranslationChecksWithMockedProvider(mockFn, {
+                    vulnerabilities: buildLargeSingleLocaleCatalog(90),
+                    settings: {},
+                    provider: 'anthropic'
+                });
+
+                expect(result.issues).toHaveLength(1);
+                expect(result.summary).toBe('first batch summary');
+            });
         });
     });
 };

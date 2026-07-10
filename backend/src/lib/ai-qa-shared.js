@@ -31,6 +31,26 @@ const normalizeIssue = (issue = {}, source = 'structural') => {
     };
 };
 
+// Overlap keeps a boundary item in two consecutive batches so a duplicate/translation
+// pair split across a batch edge still has one batch where both members are compared.
+const chunkWithOverlap = (items = [], batchSize, overlap = 0) => {
+    const size = Number(batchSize) > 0 ? Number(batchSize) : items.length;
+    if (!items.length)
+        return [];
+    if (items.length <= size)
+        return [items];
+
+    const step = Math.max(size - Math.max(Number(overlap) || 0, 0), 1);
+    const batches = [];
+    for (let start = 0; start < items.length; start += step) {
+        const end = Math.min(start + size, items.length);
+        batches.push(items.slice(start, end));
+        if (end >= items.length)
+            break;
+    }
+    return batches;
+};
+
 const summarizeCustomFields = (customFields = []) => {
     return (customFields || [])
         .map((field) => {
@@ -106,6 +126,7 @@ module.exports = {
     stripHtml,
     isEmptyContent,
     normalizeIssue,
+    chunkWithOverlap,
     summarizeCustomFields,
     isLlmEmpty,
     compactLlmValue,
