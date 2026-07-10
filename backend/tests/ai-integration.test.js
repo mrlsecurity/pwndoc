@@ -177,6 +177,35 @@ module.exports = function(request, app) {
             expect(response.body.datas.issues.length).toBeGreaterThan(0);
         });
 
+        it('should run QA on all vulnerabilities when neither vulnerabilityId nor a draft vulnerability is sent', async () => {
+            // Regression: normalizeDraftVulnerability used to default its argument to {},
+            // so an absent `vulnerability` key (the "run all" request shape) was treated as
+            // a truthy empty draft and misrouted into the single/draft path, which then
+            // failed with "Draft vulnerability has no content for this language" instead of
+            // running the all-templates report.
+            const response = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    locale: 'en',
+                    scope: 'all'
+                });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.mode).toBe('all');
+        });
+
+        it('should load the all-templates cached report when loadOnly is requested with no vulnerabilityId or draft', async () => {
+            const response = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    locale: 'en',
+                    loadOnly: true
+                });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.mode).toBe('all');
+        });
+
         it('should load a single vulnerability QA report without fetching the entire vulnerability database', async () => {
             await request(app).post('/api/vulnerabilities')
                 .set('Cookie', [`token=JWT ${adminToken}`])
