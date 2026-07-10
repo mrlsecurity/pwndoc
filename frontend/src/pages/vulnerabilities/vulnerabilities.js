@@ -201,6 +201,10 @@ export default {
             return this.computedVulnerabilities.length
         },
 
+        dtLanguageLabel: function() {
+            return this.languages.find((entry) => entry.locale === this.dtLanguage)?.language || this.dtLanguage
+        },
+
         aiEnabled: function() {
             return this.$settings?.ai?.public?.enabled !== false && (
                 userStore.isAllowed('audits:ai-generate') ||
@@ -230,8 +234,12 @@ export default {
         },
 
         vulnModalCardStyle: function() {
+            // The side panel keeps a fixed width and the form keeps a minimum width
+            // (see .vuln-modal-form / .vuln-modal-ai) - so opening the panel widens the
+            // dialog to make room for it instead of splitting the existing width and
+            // squeezing the form (which wrapped the CVSS matrix badly on narrower screens).
             return {
-                width: this.sidePanelOpen ? 'min(1400px, 98vw)' : 'min(1000px, 95vw)',
+                width: this.sidePanelOpen ? 'min(1600px, 98vw)' : 'min(1000px, 95vw)',
                 maxWidth: '98vw',
                 height: '90vh'
             }

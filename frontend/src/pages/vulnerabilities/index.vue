@@ -187,14 +187,14 @@
                     <span v-else>{{$t('addVulnerability')}} ({{$t('noCategory')}})</span>
                 </div>
                 <draft-recovery-status />
-                <q-separator v-if="aiQaEnabled" vertical color="white" class="q-mx-md" />
                 <q-btn
                 v-if="aiQaEnabled"
-                flat
+                outline
                 dense
                 icon="fas fa-list-check"
                 :color="vulnQaOpen ? 'primary' : 'white'"
                 :class="{ 'bg-white': vulnQaOpen }"
+                class="q-ml-md"
                 @click="toggleVulnerabilityQaView()"
                 >
                     <q-badge v-if="vulnQaRunning" floating rounded color="orange" class="qa-run-badge" />
@@ -202,12 +202,13 @@
                         {{ $t('tooltip.vulnerabilityQa') }}
                     </q-tooltip>
                 </q-btn>
+                <q-separator v-if="aiQaEnabled" vertical color="white" class="q-mx-md" />
                 <q-space />
                 <q-btn dense flat icon="close" data-testid="create-vulnerability-close" @click="$refs.createModal.hide()" />
             </q-bar>
 
             <div class="row col vuln-modal-content items-stretch no-wrap">
-                <div class="vuln-modal-form" :class="sidePanelOpen ? 'col-8' : 'col-12'">
+                <div class="vuln-modal-form">
             <q-card-section>
                 <div class="q-col-gutter-md row">
                     <q-input
@@ -372,7 +373,7 @@
             </q-expansion-item>
                 </div>
 
-                <div v-if="vulnQaOpen" class="col-4 vuln-modal-ai">
+                <div v-if="vulnQaOpen" class="vuln-modal-ai">
                     <vulnerability-qa-panel
                     :key="`draft:${currentLanguage}`"
                     :locale="currentLanguage"
@@ -382,7 +383,7 @@
                     />
                 </div>
 
-                <div v-else-if="aiDrawerOpen" class="col-4 vuln-modal-ai">
+                <div v-else-if="aiDrawerOpen" class="vuln-modal-ai">
                     <ai-chat-drawer />
                 </div>
             </div>
@@ -423,14 +424,14 @@
                     </q-item>
                 </q-list>
                 </q-btn-dropdown>
-                <q-separator v-if="aiQaEnabled && vulnerabilityId" vertical color="white" class="q-mx-md" />
                 <q-btn
                 v-if="aiQaEnabled && vulnerabilityId"
-                flat
+                outline
                 dense
                 icon="fas fa-list-check"
                 :color="vulnQaOpen ? 'primary' : 'white'"
                 :class="{ 'bg-white': vulnQaOpen }"
+                class="q-ml-md"
                 @click="toggleVulnerabilityQaView()"
                 >
                     <q-badge v-if="vulnQaRunning" floating rounded color="orange" class="qa-run-badge" />
@@ -438,20 +439,20 @@
                         {{ $t('tooltip.vulnerabilityQa') }}
                     </q-tooltip>
                 </q-btn>
-                <q-separator v-if="currentVulnerability.creator" vertical color="white" class="q-ml-md q-mr-sm" />
-                <div v-if="currentVulnerability.creator" class="q-toolbar-title" style="height:80%">
+                <div v-if="currentVulnerability.creator" class="q-toolbar-title q-ml-md" style="height:80%">
                     <span>
                         <q-badge color="grey" style="height:100%">
                             Creator: {{currentVulnerability.creator.username}}
                         </q-badge>
                     </span>
                 </div>
+                <q-separator vertical color="white" class="q-mx-md" />
                 <q-space />
                 <q-btn dense flat icon="close" data-testid="edit-vulnerability-close" @click="$refs.editModal.hide()" />
             </q-bar>
 
             <div class="row col vuln-modal-content items-stretch no-wrap">
-                <div class="vuln-modal-form" :class="sidePanelOpen ? 'col-8' : 'col-12'">
+                <div class="vuln-modal-form">
             <q-card-section>
                 <div class="q-col-gutter-md row">
                     <q-input
@@ -613,7 +614,7 @@
             </q-expansion-item>
                 </div>
 
-                <div v-if="vulnQaOpen" class="col-4 vuln-modal-ai">
+                <div v-if="vulnQaOpen" class="vuln-modal-ai">
                     <vulnerability-qa-panel
                     :key="`${vulnerabilityId}:${currentLanguage}`"
                     :locale="currentLanguage"
@@ -623,7 +624,7 @@
                     />
                 </div>
 
-                <div v-else-if="aiDrawerOpen" class="col-4 vuln-modal-ai">
+                <div v-else-if="aiDrawerOpen" class="vuln-modal-ai">
                     <ai-chat-drawer />
                 </div>
             </div>
@@ -982,6 +983,8 @@
             v-if="runAllQaOpen"
             :key="runAllQaKey"
             :locale="dtLanguage"
+            :expected-count="vulnerabilityQaCount"
+            :language-label="dtLanguageLabel"
             @close="closeRunAllQaModal()"
             />
         </q-card>
@@ -1101,14 +1104,20 @@
 
 .vuln-modal-form {
     overflow-y: auto;
+    overflow-x: auto;
     min-height: 0;
-    min-width: 0;
+    /* The panel keeps a fixed width (below) and the dialog widens to make room for it
+       (see vulnModalCardStyle) - the form keeps this floor instead of losing width to
+       an 8/4 column split, which was cramping the CVSS matrix on narrower screens. */
+    flex: 1 1 640px;
+    min-width: 640px;
 }
 
 .vuln-modal-ai {
     border-left: 1px solid #e0e0e0;
     min-height: 0;
-    min-width: 0;
+    flex: 0 0 420px;
+    width: 420px;
     max-height: 100%;
     overflow: hidden;
     display: flex;

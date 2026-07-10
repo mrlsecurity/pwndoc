@@ -450,6 +450,33 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.dtLanguage = 'en'
       expect(wrapper.vm.vulnTypeOptions).toEqual(['Undefined', 'Web', 'Network'])
     })
+
+    it('should resolve dtLanguageLabel to the matching language display name', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'fr'
+      expect(wrapper.vm.dtLanguageLabel).toBe('French')
+    })
+
+    it('should fall back to the raw locale code when dtLanguageLabel has no match', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'de'
+      expect(wrapper.vm.dtLanguageLabel).toBe('de')
+    })
+
+    it('should widen the vulnerability modal only while a side panel is open', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.vulnQaOpen = false
+      expect(wrapper.vm.vulnModalCardStyle.width).toBe('min(1000px, 95vw)')
+
+      wrapper.vm.vulnQaOpen = true
+      expect(wrapper.vm.vulnModalCardStyle.width).toBe('min(1600px, 98vw)')
+    })
   })
 
   describe('Draft Recovery Hints', () => {

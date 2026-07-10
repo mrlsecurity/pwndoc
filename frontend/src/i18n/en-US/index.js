@@ -1002,6 +1002,7 @@ export default {
         runAll: 'QA all vulnerabilities',
         reviewedCount: 'Reviewed {count} vulnerabilities for the selected language.',
         progressCount: 'Reviewed {processed} of {total} vulnerabilities…',
+        runAllPreview: 'Reviews all {count} templates in {language} with completeness, duplicate, and AI checks. May take several minutes.',
         location: {
             database: 'Vulnerability database'
         }
