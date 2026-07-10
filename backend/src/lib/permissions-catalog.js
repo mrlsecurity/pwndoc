@@ -102,9 +102,7 @@ const catalog = [
         permissions: [
             {scope: 'settings:read-public', core: true},
             {scope: 'settings:read', core: false},
-            {scope: 'settings:update', core: false},
-            {scope: 'ai-settings:read', core: false},
-            {scope: 'ai-settings:update', core: false}
+            {scope: 'settings:update', core: false}
         ]
     },
     {

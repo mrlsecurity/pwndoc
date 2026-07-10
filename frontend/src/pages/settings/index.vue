@@ -32,7 +32,7 @@
                             <q-toggle
                                 color="primary"
                                 keep-color
-                                :disable="!canEditAiSettings"
+                                :disable="!canEdit"
                                 v-model="settings.ai.public.enabled"
                             />
                         </q-item-section>
@@ -43,13 +43,13 @@
                         {{ $t('aiIntegration.settingsCard.disableHint') }}
                     </div>
                 </q-card-section>
-                <q-separator v-if="settings.ai && settings.ai.public && settings.ai.public.enabled && userStore.isAllowed('ai-settings:read')" />
-                <q-card-section v-if="settings.ai && settings.ai.public && settings.ai.public.enabled && userStore.isAllowed('ai-settings:read')">
+                <q-separator v-if="settings.ai && settings.ai.public && settings.ai.public.enabled" />
+                <q-card-section v-if="settings.ai && settings.ai.public && settings.ai.public.enabled">
                     <div class="text-bold q-mb-md">{{ $t('aiIntegration.settingsCard.providerTitle') }}</div>
                     <ai-provider-settings
                     ref="aiProviderSettings"
                     :settings="settings"
-                    :canEdit="canEditAiSettings"
+                    :canEdit="canEdit"
                     />
                 </q-card-section>
             </q-card>

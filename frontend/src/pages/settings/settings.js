@@ -31,7 +31,6 @@ export default {
             settings: {},
             settingsOrig : {},
             canEdit: false,
-            canEditAiSettings: false,
             highlightPalette: [
                 '#ffff25', '#00ff41', '#00ffff', '#ff00f9', '#0005fd',
                 '#ff0000', '#000177', '#00807a', '#008021', '#8e0075',
@@ -143,7 +142,6 @@ export default {
             setInterval(() => {this.getBackupStatus()}, 10000); // 10 seconds
             this.getBackups()
             this.canEdit = userStore.isAllowed('settings:update');
-            this.canEditAiSettings = userStore.isAllowed('ai-settings:update');
             document.addEventListener('keydown', this._listener, false)
         }
         else {

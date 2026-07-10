@@ -60,13 +60,6 @@ module.exports = function(request, app) {
             ])
           }),
           expect.objectContaining({
-            key: 'settings',
-            permissions: expect.arrayContaining([
-              expect.objectContaining({scope: 'ai-settings:read'}),
-              expect.objectContaining({scope: 'ai-settings:update'})
-            ])
-          }),
-          expect.objectContaining({
             key: 'ai',
             permissions: expect.arrayContaining([
               expect.objectContaining({scope: 'ai:prompts:read'}),
@@ -78,6 +71,16 @@ module.exports = function(request, app) {
             ])
           })
         ]))
+
+        // AI provider config (keys/model/defaultProvider) is managed through the same
+        // settings:read/settings:update scopes as the rest of /api/settings — there is no
+        // separate ai-settings:* granularity to imply the provider card is independently
+        // grantable. (The `ai` group's ai:prompts:*/ai:redaction-guidelines:*/ai:qa-instructions:*
+        // scopes above are unrelated: they gate the separate /api/data/ai-integration admin page.)
+        const settingsGroup = response.body.datas.find((group) => group.key === 'settings')
+        const settingsScopes = settingsGroup.permissions.map((permission) => permission.scope)
+        expect(settingsScopes).not.toContain('ai-settings:read')
+        expect(settingsScopes).not.toContain('ai-settings:update')
       })
 
       it('Allows read-only role users to list roles but not mutate them', async () => {
