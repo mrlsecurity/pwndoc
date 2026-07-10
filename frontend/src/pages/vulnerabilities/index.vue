@@ -1102,11 +1102,13 @@
 .vuln-modal-form {
     overflow-y: auto;
     min-height: 0;
+    min-width: 0;
 }
 
 .vuln-modal-ai {
     border-left: 1px solid #e0e0e0;
     min-height: 0;
+    min-width: 0;
     max-height: 100%;
     overflow: hidden;
     display: flex;
@@ -1117,6 +1119,7 @@
 .vuln-modal-ai :deep(.qa-results-panel) {
     flex: 1 1 0;
     min-height: 0;
+    min-width: 0;
 }
 
 .vulnerability-qa-dialog {

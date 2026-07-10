@@ -448,10 +448,26 @@ export default {
   caret-color: transparent;
 }
 
+.qa-results-panel :deep(.q-toolbar__title),
+.qa-results-panel :deep(.q-item__section) {
+  min-width: 0;
+}
+
+.qa-results-panel :deep(.q-toolbar__title) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qa-results-panel :deep(.q-item__label) {
+  overflow-wrap: anywhere;
+}
+
 .qa-summary {
   font-size: 0.85rem;
   line-height: 1.4;
   color: #424242;
+  overflow-wrap: anywhere;
 }
 
 .qa-run-progress {
@@ -494,6 +510,7 @@ export default {
   font-size: 0.72rem;
   line-height: 1.35;
   color: #616161;
+  min-width: 0;
 }
 
 .qa-run-meta__line + .qa-run-meta__line {
@@ -513,6 +530,7 @@ export default {
 
 .qa-run-meta__date {
   color: #757575;
+  overflow-wrap: anywhere;
 }
 
 .qa-run-meta__date::before {
