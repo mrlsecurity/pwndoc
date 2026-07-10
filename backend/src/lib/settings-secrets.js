@@ -1,5 +1,10 @@
 const _ = require('lodash');
 
+// Must stay byte-for-byte identical to MASKED_SECRET in
+// frontend/src/components/ai-provider-settings.vue - the frontend echoes this exact
+// sentinel back on save to mean "leave the stored secret alone" (see mergeSettingsSecrets
+// below); any drift between the two copies breaks secret masking silently. Covered by a
+// literal-value test in both suites (settings-secrets.test.js / ai-provider-settings.test.js).
 const MASKED_SECRET = '••••••••••••••••';
 
 const SECRET_FIELDS = [

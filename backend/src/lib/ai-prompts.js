@@ -68,6 +68,10 @@ const BUILTIN_FINDING_FIELDS = [
     }
 ];
 
+// Must match CUSTOM_FIELD_OUTPUT_TYPES in frontend/src/services/ai-field-helper.js, which
+// independently derives the same output type to validate/format a draft before it's applied.
+// The two can't share a module across the Node/browser boundary; covered by tests in both
+// suites (backend/tests/ai-prompts.test.js / ai-field-helper.test.js) instead.
 const CUSTOM_FIELD_OUTPUT_TYPES = {
     text: 'html',
     input: 'text',

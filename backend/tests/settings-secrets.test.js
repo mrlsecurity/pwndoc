@@ -6,6 +6,13 @@ const {
 
 module.exports = function() {
     describe('Settings secrets', () => {
+        // Pinned to the literal value, not just re-imported, so a drift from the frontend's
+        // independent copy in ai-provider-settings.vue is caught here rather than silently
+        // breaking secret masking (see the comment on MASKED_SECRET in settings-secrets.js).
+        it('MASKED_SECRET matches the frontend sentinel', () => {
+            expect(MASKED_SECRET).toBe('••••••••••••••••');
+        });
+
         const buildSettings = (openaiApiKey) => ({
             ai: {
                 private: {

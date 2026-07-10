@@ -117,3 +117,24 @@ describe('AiProviderSettings test connection', () => {
     expect(wrapper.vm.testingProvider).toBeNull()
   })
 })
+
+describe('AiProviderSettings masked secret sentinel', () => {
+  // Pinned to the literal value, not just re-derived, so a drift from the backend's
+  // independent copy in settings-secrets.js is caught here (see the comment on
+  // MASKED_SECRET in ai-provider-settings.vue).
+  it('masks a configured secret with the sentinel the backend expects back on save', () => {
+    const wrapper = createWrapper()
+
+    expect(wrapper.vm.maskedValue(true)).toBe('••••••••••••••••')
+    expect(wrapper.vm.maskedValue(false)).toBe('')
+  })
+
+  it('pre-fills each configured secret field with the masked sentinel on mount', () => {
+    const settings = buildSettings()
+    settings.ai.private.openaiApiKeyConfigured = true
+
+    const wrapper = createWrapper(settings)
+
+    expect(wrapper.vm.openaiApiKeyInput).toBe('••••••••••••••••')
+  })
+})

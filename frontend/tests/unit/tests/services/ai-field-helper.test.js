@@ -349,3 +349,24 @@ describe('AiFieldHelper.runFieldSession', () => {
     expect(clearAiSelectionAnchor).toHaveBeenCalled()
   })
 })
+
+describe('AiFieldHelper.getOutputType', () => {
+  // Pinned to the literal mapping, not just re-derived, so a drift from the backend's
+  // independent copy in ai-prompts.js is caught here (see the comment on
+  // CUSTOM_FIELD_OUTPUT_TYPES in ai-field-helper.js).
+  it.each([
+    ['text', 'html'],
+    ['input', 'text'],
+    ['date', 'text'],
+    ['select', 'text'],
+    ['radio', 'text'],
+    ['select-multiple', 'array'],
+    ['checkbox', 'array']
+  ])('maps custom field type %s to output type %s', (fieldType, expected) => {
+    expect(AiFieldHelper.getOutputType(null, { customField: { fieldType } })).toBe(expected)
+  })
+
+  it('falls back to text for an unknown custom field type', () => {
+    expect(AiFieldHelper.getOutputType(null, { customField: { fieldType: 'unknown' } })).toBe('text')
+  })
+})

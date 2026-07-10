@@ -245,6 +245,9 @@
 <script>
 import AiService from '@/services/ai'
 
+// Must stay byte-for-byte identical to MASKED_SECRET in
+// backend/src/lib/settings-secrets.js - see that file for why. Covered by a literal-value
+// test in both suites (ai-provider-settings.test.js / settings-secrets.test.js).
 const MASKED_SECRET = '••••••••••••••••'
 
 export default {

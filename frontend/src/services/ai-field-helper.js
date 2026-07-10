@@ -10,6 +10,10 @@ const FINDING_FIELD_OUTPUT_TYPES = {
   references: 'array'
 }
 
+// Must match CUSTOM_FIELD_OUTPUT_TYPES in backend/src/lib/ai-prompts.js, which independently
+// derives the same output type when building the field's default generation prompt. The two
+// can't share a module across the Node/browser boundary; covered by tests in both suites
+// (ai-field-helper.test.js / backend/tests/ai-prompts.test.js) instead.
 const CUSTOM_FIELD_OUTPUT_TYPES = {
   text: 'html',
   input: 'text',
