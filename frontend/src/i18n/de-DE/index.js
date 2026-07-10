@@ -746,6 +746,7 @@ export default {
         inputPlaceholder: 'Bitten Sie die KI, die Auswahl umzuschreiben...',
         sendHint: 'Tipp: Drücken Sie Strg+Enter zum Senden.',
         send: 'Senden',
+        stop: 'Generierung stoppen',
         apply: 'Auf Auswahl anwenden',
         you: 'Sie',
         assistant: 'Assistent',

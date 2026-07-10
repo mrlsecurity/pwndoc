@@ -783,6 +783,7 @@ draftRecovery: {
         inputPlaceholder: 'Peça à IA para reescrever a seleção...',
         sendHint: 'Dica: pressione Ctrl+Enter para enviar.',
         send: 'Enviar',
+        stop: 'Parar geração',
         apply: 'Aplicar à seleção',
         you: 'Você',
         assistant: 'Assistente',

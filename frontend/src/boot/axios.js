@@ -15,6 +15,11 @@ export default defineBoot(({ app, router }) => {
       return response
     }, 
     error => {
+      // No response to inspect: network error or a cancelled request (e.g. an
+      // aborted AI generation) - nothing to redirect on, just propagate it.
+      if (!error.response)
+        return Promise.reject(error)
+
       const originalRequest = error.config
       const status = error.response?.status
 

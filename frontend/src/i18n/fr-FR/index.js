@@ -691,6 +691,7 @@ export default {
         inputPlaceholder: 'Demandez à l\'IA de réécrire la sélection...',
         sendHint: 'Astuce : appuyez sur Ctrl+Entrée pour envoyer.',
         send: 'Envoyer',
+        stop: 'Arrêter la génération',
         apply: 'Appliquer à la sélection',
         you: 'Vous',
         assistant: 'Assistant',

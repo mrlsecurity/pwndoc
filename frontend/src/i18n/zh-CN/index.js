@@ -749,6 +749,7 @@ export default {
         inputPlaceholder: '让 AI 重写所选内容...',
         sendHint: '提示：按 Ctrl+Enter 发送。',
         send: '发送',
+        stop: '停止生成',
         apply: '应用到所选内容',
         you: '你',
         assistant: '助手',

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { createTestWrapper } from '../../test-utils'
 import AiChatDrawer from '@/components/ai-chat-drawer.vue'
 import { useAiGenerationStore } from '@/stores/ai-generation'
+import AiService from '@/services/ai'
 
 vi.mock('@/services/ai', () => ({
   default: {
@@ -13,7 +14,7 @@ vi.mock('@/boot/i18n', () => ({
   $t: (key) => key
 }))
 
-function createWrapper() {
+function createWrapper({ notify } = {}) {
   return createTestWrapper(AiChatDrawer, {
     global: {
       stubs: {
@@ -39,7 +40,10 @@ function createWrapper() {
         'close-popup': {}
       },
       mocks: {
-        $settings: {}
+        $settings: {},
+        // The shared test setup doesn't install Quasar's Notify plugin, so $q.notify
+        // isn't a real function unless a test needs to assert on it.
+        ...(notify ? { $q: { notify } } : {})
       }
     },
     messages: {
@@ -385,6 +389,72 @@ describe('AiChatDrawer partial apply from a preview selection', () => {
     expect(onInsertAtCursor).toHaveBeenCalledWith('<p>Paragraph two</p>')
     expect(store.isActive).toBe(true)
   })
+})
+
+describe('AiChatDrawer send/stop generation', () => {
+  it('passes a cancelToken to AiService.generateFieldDraft while a request is in flight', async () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
+    store.conversation.userInput = 'do it'
+
+    let resolveResponse
+    AiService.generateFieldDraft.mockReturnValue(new Promise((resolve) => { resolveResponse = resolve }))
+
+    const sendPromise = wrapper.vm.sendMessage()
+    await wrapper.vm.$nextTick()
+
+    expect(store.loading).toBe(true)
+    const [, config] = AiService.generateFieldDraft.mock.calls[0]
+    expect(config.cancelToken).toBeDefined()
+
+    resolveResponse({ data: { datas: { draft: '<p>ok</p>', reply: '' } } })
+    await sendPromise
+  })
+
+  it('stopGeneration cancels the in-flight request, restores the input, and shows no error notify', async () => {
+    const notify = vi.fn()
+    const wrapper = createWrapper({ notify })
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
+    store.conversation.userInput = 'do it'
+
+    AiService.generateFieldDraft.mockImplementation((payload, config) => {
+      return new Promise((_resolve, reject) => {
+        config.cancelToken.promise.then((cancel) => reject(cancel))
+      })
+    })
+
+    const sendPromise = wrapper.vm.sendMessage()
+    await wrapper.vm.$nextTick()
+
+    expect(store.conversation.messages).toHaveLength(1)
+
+    wrapper.vm.stopGeneration()
+    await sendPromise
+
+    expect(store.loading).toBe(false)
+    expect(store.conversation.messages).toHaveLength(0)
+    expect(store.conversation.userInput).toBe('do it')
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('shows an error notify and restores the input for a real request failure (not a cancel)', async () => {
+    const notify = vi.fn()
+    const wrapper = createWrapper({ notify })
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
+    store.conversation.userInput = 'do it'
+
+    AiService.generateFieldDraft.mockRejectedValue(new Error('boom'))
+
+    await wrapper.vm.sendMessage()
+
+    expect(store.conversation.messages).toHaveLength(0)
+    expect(store.conversation.userInput).toBe('do it')
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ color: 'negative' }))
+  })
+
 })
 
 describe('AiChatDrawer selection anchor status', () => {

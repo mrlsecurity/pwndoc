@@ -7,8 +7,8 @@ export default {
     })
   },
 
-  generateFieldDraft: function(params) {
-    return api.post('ai/generate', params)
+  generateFieldDraft: function(params, config = {}) {
+    return api.post('ai/generate', params, config)
   },
 
   runAuditQa: function(auditId, params = {}) {

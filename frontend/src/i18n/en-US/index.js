@@ -1019,6 +1019,7 @@ export default {
         inputPlaceholder: 'Ask the AI to rewrite the selection...',
         sendHint: 'Tip: Press Ctrl+Enter to send.',
         send: 'Send',
+        stop: 'Stop generating',
         apply: 'Apply to selection',
         you: 'You',
         assistant: 'Assistant',

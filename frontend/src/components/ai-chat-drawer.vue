@@ -136,13 +136,23 @@
               </q-menu>
             </q-btn>
             <q-btn
+            v-if="loading"
+            round
+            dense
+            unelevated
+            icon="stop"
+            color="negative"
+            :aria-label="$t('aiChat.stop')"
+            @click="stopGeneration"
+            />
+            <q-btn
+            v-else
             round
             dense
             unelevated
             icon="send"
             color="primary"
             :disable="!canSend"
-            :loading="loading"
             :aria-label="$t('aiChat.send')"
             @click="sendMessage"
             />
@@ -156,6 +166,7 @@
 
 <script>
 import { Dialog } from 'quasar'
+import axios from 'axios'
 import { mapState, mapActions } from 'pinia'
 import { useAiGenerationStore } from '@/stores/ai-generation'
 import AiService from '@/services/ai'
@@ -174,7 +185,8 @@ export default {
   data() {
     return {
       selectedPromptId: '__default__',
-      previewSelection: null
+      previewSelection: null,
+      cancelTokenSource: null
     }
   },
 
@@ -331,9 +343,15 @@ export default {
       if (!prompt || this.loading || !this.sessionConfig)
         return
 
+      // Guards every store mutation below: if the drawer is closed/cancelled or a new
+      // session starts while this request is in flight (including via Stop), a late
+      // response or the abort itself must not touch a conversation that has moved on.
+      const requestSessionId = store.sessionId
+
       store.conversation.messages.push({ role: 'user', content: prompt })
       store.conversation.userInput = ''
       this.setStoreLoading(true)
+      this.cancelTokenSource = axios.CancelToken.source()
 
       try {
         const context = { ...(this.sessionConfig.requestParams.context || {}) }
@@ -364,7 +382,10 @@ export default {
           payload.userPrompt = prompt
         }
 
-        const response = await AiService.generateFieldDraft(payload)
+        const response = await AiService.generateFieldDraft(payload, { cancelToken: this.cancelTokenSource.token })
+
+        if (store.sessionId !== requestSessionId)
+          return
 
         const draft = response.data?.datas?.draft
         const reply = String(response.data?.datas?.reply || '').trim()
@@ -381,17 +402,32 @@ export default {
           previewDiffCurrent: null
         })
       } catch (err) {
+        if (store.sessionId !== requestSessionId)
+          return
+
         store.conversation.messages.pop()
         store.conversation.userInput = prompt
-        this.$q.notify({
-          message: err.response?.data?.datas || err.message || this.$t('aiChat.requestFailed'),
-          color: 'negative',
-          textColor: 'white',
-          position: 'top-right'
-        })
+
+        // A user-initiated Stop is not a failure - restore the input silently, no error toast.
+        if (!axios.isCancel(err)) {
+          this.$q.notify({
+            message: err.response?.data?.datas || err.message || this.$t('aiChat.requestFailed'),
+            color: 'negative',
+            textColor: 'white',
+            position: 'top-right'
+          })
+        }
       } finally {
-        this.setStoreLoading(false)
+        if (store.sessionId === requestSessionId) {
+          this.setStoreLoading(false)
+          this.cancelTokenSource = null
+        }
       }
+    },
+
+    stopGeneration() {
+      if (this.cancelTokenSource)
+        this.cancelTokenSource.cancel()
     },
 
     hasPreviewSelection(index) {
@@ -517,6 +553,7 @@ export default {
           focus: 'cancel'
         })
         .onOk(() => {
+          this.stopGeneration()
           this.cancelSession({ force: true })
         })
         return
