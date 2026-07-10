@@ -76,31 +76,6 @@ describe('SettingsService', () => {
     })
   })
 
-  describe('getAiSettings', () => {
-    it('should call the dedicated AI settings endpoint', async () => {
-      const mockResponse = { data: { datas: { public: { enabled: true }, private: {} } } }
-      api.get.mockResolvedValue(mockResponse)
-
-      const result = await SettingsService.getAiSettings()
-
-      expect(api.get).toHaveBeenCalledWith('settings/ai')
-      expect(result).toEqual(mockResponse)
-    })
-  })
-
-  describe('updateAiSettings', () => {
-    it('should call the dedicated AI settings endpoint with the provider payload', async () => {
-      const payload = { public: { enabled: true, defaultProvider: 'anthropic' }, private: { anthropicModel: 'claude-opus-4-8' } }
-      const mockResponse = { data: { datas: payload } }
-      api.put.mockResolvedValue(mockResponse)
-
-      const result = await SettingsService.updateAiSettings(payload)
-
-      expect(api.put).toHaveBeenCalledWith('settings/ai', payload)
-      expect(result).toEqual(mockResponse)
-    })
-  })
-
   describe('exportSettings', () => {
     it('should call the correct API endpoint', async () => {
       const mockResponse = { data: { datas: { export: 'base64data' } } }

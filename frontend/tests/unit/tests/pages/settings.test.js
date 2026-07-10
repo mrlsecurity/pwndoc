@@ -26,8 +26,6 @@ vi.mock('@/services/settings', () => ({
   default: {
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
-    getAiSettings: vi.fn(),
-    updateAiSettings: vi.fn(),
     exportSettings: vi.fn(),
     revertDefaults: vi.fn()
   }
@@ -408,30 +406,6 @@ describe('Settings Page', () => {
       await wrapper.vm.$nextTick()
 
       expect(SettingsService.updateSettings).toHaveBeenCalledWith(wrapper.vm.settings)
-    })
-
-    it('should save the AI provider subtree via updateAiSettings for ai-settings-only users', async () => {
-      // settings:read to load the page + ai-settings:update to edit AI, but NOT settings:update
-      mockUserStore.roles = 'settings:read,ai-settings:read,ai-settings:update'
-      SettingsService.updateAiSettings.mockResolvedValue({ data: { datas: 'ok' } })
-
-      const wrapper = createWrapper()
-      await wrapper.vm.$nextTick()
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.vm.canEdit).toBe(false)
-      expect(wrapper.vm.canEditAiSettings).toBe(true)
-
-      wrapper.vm.updateSettings()
-      await wrapper.vm.$nextTick()
-
-      expect(SettingsService.updateSettings).not.toHaveBeenCalled()
-      expect(SettingsService.updateAiSettings).toHaveBeenCalledWith(
-        expect.objectContaining({
-          public: expect.objectContaining({ enabled: true, defaultProvider: 'openai' }),
-          private: expect.any(Object)
-        })
-      )
     })
 
     it('should clamp minReviewers to min=1 if below', async () => {

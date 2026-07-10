@@ -237,19 +237,11 @@ export default {
             if(this.settings.reviews.public.minReviewers < min || this.settings.reviews.public.minReviewers > max) {
                 this.settings.reviews.public.minReviewers = this.settings.reviews.public.minReviewers < min ? min: max;
             }
-            if (this.canEditAiSettings && this.$refs.aiProviderSettings)
+            if (this.$refs.aiProviderSettings)
                 this.$refs.aiProviderSettings.applyPendingKeyUpdates()
-            if (this.canEdit)
-                this.applyLanguageToolApiKeyUpdate()
+            this.applyLanguageToolApiKeyUpdate()
 
-            // Users with only `ai-settings:update` (no `settings:update`) save the AI provider
-            // subtree through the dedicated endpoint; everyone else uses the generic endpoint,
-            // which also persists provider changes for `ai-settings:update` admins.
-            const saveRequest = this.canEdit
-                ? SettingsService.updateSettings(this.settings)
-                : SettingsService.updateAiSettings(this.buildAiSettingsPayload())
-
-            saveRequest
+            SettingsService.updateSettings(this.settings)
             .then((data) => {
                 this.stripSavedSecretsFromSettings()
                 this.settingsOrig = this.$_.cloneDeep(this.settings);
@@ -397,16 +389,6 @@ export default {
             }
 
             this.settings.report.private.languageToolApiKey = value.trim()
-        },
-
-        buildAiSettingsPayload() {
-            return {
-                public: {
-                    enabled: this.settings.ai?.public?.enabled,
-                    defaultProvider: this.settings.ai?.public?.defaultProvider
-                },
-                private: this.settings.ai?.private || {}
-            }
         },
 
         stripSavedSecretsFromSettings() {
