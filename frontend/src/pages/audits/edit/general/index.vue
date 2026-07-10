@@ -24,7 +24,7 @@
                     {{ $t('tooltip.auditQa') }}
                 </q-tooltip>
             </q-btn>
-            <q-separator v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT" vertical inset class="q-mr-sm" />
+            <q-separator v-if="aiQaEnabled || frontEndAuditState === AUDIT_VIEW_STATE.EDIT" vertical inset class="q-mr-sm" />
             <q-btn
                 v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
                 outline
@@ -298,6 +298,8 @@
                 no-sync-editor
                 :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                 :locale="audit.language"
+                :qaDrawerOpen="qaDrawerOpen"
+                :fieldHighlighted="fieldHighlighted"
                 />
             </q-expansion-item>
         </q-card>
@@ -307,6 +309,7 @@
                 :audit-id="auditId"
                 :findings="auditParent.findings || []"
                 :sections="auditParent.sections || []"
+                @highlight-field="highlightQaField"
                 />
             </q-scroll-area>
         </q-card>

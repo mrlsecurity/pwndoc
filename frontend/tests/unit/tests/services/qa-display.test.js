@@ -69,6 +69,11 @@ describe('qa-display', () => {
     expect(formatQaLocationLabel('field:category')).toBe('category')
   })
 
+  it('strips the embedded finding id when formatting finding locations', () => {
+    expect(formatQaLocationLabel('finding:507f1f77bcf86cd799439011::SQL Injection/description'))
+      .toBe('SQL Injection · description')
+  })
+
   it('builds a QA report view model with derived counts', () => {
     const view = buildQaReportViewModel({
       issues: [{ severity: 'error' }, { severity: 'warning' }],

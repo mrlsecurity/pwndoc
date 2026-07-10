@@ -8,7 +8,8 @@ const { runQaWithProvider } = require('./ai-client');
 const {
     formatFindingLocation,
     normalizeIssueLocations,
-    normalizeAiIssueLocation
+    normalizeAiIssueLocation,
+    attachFindingIdsToIssueLocations
 } = require('./ai-qa-location');
 const {
     resolveRedactionGuidelinesForRequest,
@@ -272,12 +273,12 @@ const runAuditQa = async ({ audit, settings, provider, scope = 'all' }) => {
         }, 'ai')),
         qaChecks
     );
-    const issues = sortIssues(dedupeIssues([
+    const issues = sortIssues(dedupeIssues(attachFindingIdsToIssueLocations([
         ...structuralIssues,
         ...referenceLinkIssues,
         ...imageCaptionIssues,
         ...aiIssues
-    ]));
+    ], audit.findings || [])));
     const summary = buildSummary(issues, aiResult?.summary || '');
 
     if (runAi && aiChecksEnabled && !aiResult && aiSkippedReason) {

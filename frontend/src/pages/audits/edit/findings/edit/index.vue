@@ -124,7 +124,7 @@
                             ref="titleField"
                             for="titleField"
                             class="col-md-8 col-12"
-                            :class="{'highlighted-border': fieldHighlighted == 'titleField' && commentMode}"
+                            :class="{'highlighted-border': fieldHighlighted == 'titleField' && (commentMode || qaDrawerOpen)}"
                             label-slot
                             stack-label v-model="finding.title"
                             outlined
@@ -142,7 +142,7 @@
                             ref="typeField"
                             id="typeField"
                             class="col-md-4 col-12"
-                            :class="{'highlighted-border': fieldHighlighted == 'typeField' && commentMode}"
+                            :class="{'highlighted-border': fieldHighlighted == 'typeField' && (commentMode || qaDrawerOpen)}"
                             label-slot
                             v-model="finding.vulnType" 
                             :options="vulnTypesLang" 
@@ -167,7 +167,7 @@
                             ref="descriptionField"
                             for="descriptionField"
                             class="col-md-12 basic-editor q-pt-none"
-                            :class="{'highlighted-border': fieldHighlighted == 'descriptionField' && commentMode}"
+                            :class="{'highlighted-border': fieldHighlighted == 'descriptionField' && (commentMode || qaDrawerOpen)}"
                             borderless
                             label-slot
                             stack-label
@@ -200,7 +200,7 @@
                             ref="observationField"
                             for="observationField"
                             class="col-md-12 basic-editor q-pt-none"
-                            :class="{'highlighted-border': fieldHighlighted == 'observationField' && commentMode}"
+                            :class="{'highlighted-border': fieldHighlighted == 'observationField' && (commentMode || qaDrawerOpen)}"
                             borderless
                             label-slot
                             stack-label
@@ -233,7 +233,7 @@
                             class="col-12 q-pt-none" 
                             bg-color="transparent" 
                             borderless 
-                            :class="{'highlighted-border': fieldHighlighted == 'referencesField' && commentMode}"
+                            :class="{'highlighted-border': fieldHighlighted == 'referencesField' && (commentMode || qaDrawerOpen)}"
                             >
                                 <textarea-array
                                 ref="referencesField"
@@ -267,6 +267,7 @@
                             :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                             :locale="auditParent.language"
                             :commentMode="commentMode"
+                            :qaDrawerOpen="qaDrawerOpen"
                             :focusedComment="focusedComment"
                             :commentIdList="commentIdList"
                             :fieldHighlighted="fieldHighlighted"
@@ -289,7 +290,7 @@
                             ref="pocField"
                             for="pocField"
                             class="col-md-12 basic-editor q-pt-none"
-                            :class="{'highlighted-border': fieldHighlighted == 'pocField' && commentMode}"
+                            :class="{'highlighted-border': fieldHighlighted == 'pocField' && (commentMode || qaDrawerOpen)}"
                             borderless
                             label-slot
                             stack-label
@@ -329,7 +330,7 @@
                                 ref="affectedField"
                                 for="affectedField"
                                 class="col-md-12 basic-editor q-pt-none"
-                                :class="{'highlighted-border': fieldHighlighted == 'affectedField' && commentMode}"
+                                :class="{'highlighted-border': fieldHighlighted == 'affectedField' && (commentMode || qaDrawerOpen)}"
                                 borderless
                                 label-slot
                                 stack-label
@@ -358,7 +359,7 @@
                                 <q-card-section
                                 id="cvss3Field"
                                 v-if="$settings.report.public.scoringMethods.CVSS3"
-                                :class="{'highlighted-border': fieldHighlighted == 'cvss3Field' && commentMode}"
+                                :class="{'highlighted-border': fieldHighlighted == 'cvss3Field' && (commentMode || qaDrawerOpen)}"
                                 >
                                     <cvss3-calculator 
                                     v-model="finding.cvssv3"
@@ -373,7 +374,7 @@
                                 <q-card-section
                                 id="cvss4Field"
                                 v-if="$settings.report.public.scoringMethods.CVSS4"
-                                :class="{'highlighted-border': fieldHighlighted == 'cvss4Field' && commentMode}"
+                                :class="{'highlighted-border': fieldHighlighted == 'cvss4Field' && (commentMode || qaDrawerOpen)}"
                                 >
                                     <cvss4-calculator 
                                     v-model="finding.cvssv4"
@@ -396,7 +397,7 @@
                                     label-slot
                                     stack-label
                                     class="col-md-6 col-12"
-                                    :class="{'highlighted-border': fieldHighlighted == 'remediationDifficultyField' && commentMode}"
+                                    :class="{'highlighted-border': fieldHighlighted == 'remediationDifficultyField' && (commentMode || qaDrawerOpen)}"
                                     v-model="finding.remediationComplexity"
                                     :options="[{label: $t('easy'), value: 1},{label: $t('medium'), value: 2},{label: $t('complex'), value: 3}]"
                                     map-options
@@ -420,7 +421,7 @@
                                     label-slot
                                     stack-label
                                     class="col-md-6 col-12"
-                                    :class="{'highlighted-border': fieldHighlighted == 'priorityField' && commentMode}"
+                                    :class="{'highlighted-border': fieldHighlighted == 'priorityField' && (commentMode || qaDrawerOpen)}"
                                     v-model="finding.priority"
                                     :options="[{label: $t('low'), value: 1},{label: $t('medium'), value: 2},{label: $t('high'), value: 3},{label: $t('urgent'), value: 4}]"
                                     map-options
@@ -445,7 +446,7 @@
                                 ref="remediationField"
                                 for="remediationField"
                                 class="col-md-12 basic-editor"
-                                :class="{'highlighted-border': fieldHighlighted == 'remediationField' && commentMode}"
+                                :class="{'highlighted-border': fieldHighlighted == 'remediationField' && (commentMode || qaDrawerOpen)}"
                                 borderless
                                 label-slot
                                 stack-label
@@ -560,7 +561,7 @@
                                 borderless
                                 bg-color="transparent"
                                 class="col-12"
-                                :class="{'highlighted-border': fieldHighlighted == 'retestStatusField' && commentMode}"
+                                :class="{'highlighted-border': fieldHighlighted == 'retestStatusField' && (commentMode || qaDrawerOpen)}"
                                 >
                                     <q-radio keep-color color="green" v-model="finding.retestStatus" val="ok" :label="$t('corrected')" />
                                     <q-radio keep-color color="red" v-model="finding.retestStatus" val="ko" :label="$t('not_corrected')" />
@@ -575,7 +576,7 @@
                                 ref="retestDescriptionField"
                                 for="retestDescriptionField"
                                 class="col-12 basic-editor"
-                                :class="{'highlighted-border': fieldHighlighted == 'retestDescriptionField' && commentMode}"
+                                :class="{'highlighted-border': fieldHighlighted == 'retestDescriptionField' && (commentMode || qaDrawerOpen)}"
                                 label-slot
                                 borderless
                                 stack-label

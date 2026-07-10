@@ -24,6 +24,12 @@ const splitEntityLocation = (value, prefix) => {
   let rest = value.slice(prefix.length);
   let field = '';
 
+  // Strip an embedded finding id (finding:<id>::<title>) — the id is only used for
+  // navigation matching, titles are the display form.
+  const idMatch = rest.match(/^[0-9a-fA-F]{24}::(.*)$/);
+  if (idMatch)
+    rest = idMatch[1];
+
   Object.keys(fieldLabels).forEach((fieldKey) => {
     const suffix = `/${fieldKey}`;
     if (rest.endsWith(suffix)) {

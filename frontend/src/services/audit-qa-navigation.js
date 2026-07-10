@@ -72,6 +72,13 @@ export const parseIssueLocation = (location = '') => {
   if (value.startsWith('finding:')) {
     let rest = value.slice('finding:'.length);
     let fieldKey = null;
+    let findingId = null;
+
+    const idMatch = rest.match(/^([0-9a-fA-F]{24})::(.*)$/);
+    if (idMatch) {
+      findingId = idMatch[1];
+      rest = idMatch[2];
+    }
 
     FIELD_KEYS.forEach((key) => {
       const suffix = `/${key}`;
@@ -81,7 +88,7 @@ export const parseIssueLocation = (location = '') => {
       }
     });
 
-    return { type: 'finding', findingTitle: rest, fieldKey };
+    return { type: 'finding', findingId, findingTitle: rest, fieldKey };
   }
 
   return { type: 'unknown', raw: value };
@@ -112,7 +119,15 @@ export const buildIssueRoute = (auditId, parsed, { findings = [], sections = [] 
 
   if (parsed.type === 'finding') {
     const title = String(parsed.findingTitle || '').trim();
-    const finding = findings.find((entry) => String(entry?.title || '').trim() === title);
+    let finding = null;
+
+    if (parsed.findingId)
+      finding = findings.find((entry) => String(entry?._id || entry?.id || '') === parsed.findingId);
+
+    // Title is a display fallback for locations that predate id-tagging, or an id that no
+    // longer resolves (finding deleted since the QA run).
+    if (!finding)
+      finding = findings.find((entry) => String(entry?.title || '').trim() === title);
 
     if (finding?._id) {
       return {

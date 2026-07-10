@@ -872,6 +872,62 @@ describe('Findings Edit Page', () => {
     })
   })
 
+  describe('highlightQaField', () => {
+    it('switches to the proofs tab and highlights a poc field', () => {
+      const wrapper = createWrapper()
+      wrapper.vm.selectedTab = 'definition'
+
+      wrapper.vm.highlightQaField('pocField')
+
+      expect(wrapper.vm.fieldHighlighted).toBe('pocField')
+      expect(wrapper.vm.selectedTab).toBe('proofs')
+    })
+
+    it('switches to the details tab for a remediation field', () => {
+      const wrapper = createWrapper()
+      wrapper.vm.selectedTab = 'definition'
+
+      wrapper.vm.highlightQaField('remediationField')
+
+      expect(wrapper.vm.selectedTab).toBe('details')
+    })
+
+    it('switches to the definition tab for a custom field', () => {
+      const wrapper = createWrapper()
+      wrapper.vm.selectedTab = 'details'
+
+      wrapper.vm.highlightQaField('field-Custom Label')
+
+      expect(wrapper.vm.selectedTab).toBe('definition')
+    })
+
+    it('leaves the current tab alone for an unrecognized field', () => {
+      const wrapper = createWrapper()
+      wrapper.vm.selectedTab = 'details'
+
+      wrapper.vm.highlightQaField('someUnknownField')
+
+      expect(wrapper.vm.selectedTab).toBe('details')
+    })
+
+    it('scrolls the highlighted field into view once it is rendered', async () => {
+      const scrollIntoView = vi.fn()
+      const getElementByIdSpy = vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+        if (id === 'pocField')
+          return { scrollIntoView }
+        return null
+      })
+
+      const wrapper = createWrapper()
+      wrapper.vm.highlightQaField('pocField')
+      await new Promise(resolve => setTimeout(resolve, 250))
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
+
+      getElementByIdSpy.mockRestore()
+    })
+  })
+
   describe('toggleQaView', () => {
     it('should confirm before discarding an active AI session when opening QA', () => {
       const wrapper = createWrapper()

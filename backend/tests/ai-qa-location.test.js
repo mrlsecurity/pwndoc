@@ -2,7 +2,9 @@ const {
     formatFindingLocation,
     resolveIssueLocation,
     normalizeAiIssueLocation,
-    normalizeIssueLocations
+    normalizeIssueLocations,
+    attachFindingIdToLocation,
+    attachFindingIdsToIssueLocations
 } = require('../src/lib/ai-qa-location');
 
 module.exports = function() {
@@ -52,6 +54,43 @@ module.exports = function() {
             expect(normalizeAiIssueLocation('field path: finding.category', {
                 entityPrefix: 'finding'
             })).toBe('field:category');
+        });
+
+        it('should embed the finding id when the finding has one', () => {
+            expect(formatFindingLocation({ _id: '507f1f77bcf86cd799439011', title: 'SQL Injection' }))
+                .toBe('finding:507f1f77bcf86cd799439011::SQL Injection');
+        });
+
+        it('should attach a finding id to an AI location with a unique title match', () => {
+            const findings = [{ _id: '507f1f77bcf86cd799439011', title: 'SQL Injection' }];
+            expect(attachFindingIdToLocation('finding:SQL Injection/description', findings))
+                .toBe('finding:507f1f77bcf86cd799439011::SQL Injection/description');
+        });
+
+        it('should leave an AI location unresolved when the title is ambiguous', () => {
+            const findings = [
+                { _id: '507f1f77bcf86cd799439011', title: 'SQL Injection' },
+                { _id: '507f1f77bcf86cd799439012', title: 'SQL Injection' }
+            ];
+            expect(attachFindingIdToLocation('finding:SQL Injection/description', findings))
+                .toBe('finding:SQL Injection/description');
+        });
+
+        it('should not touch a location that already carries a finding id', () => {
+            const findings = [{ _id: '507f1f77bcf86cd799439099', title: 'SQL Injection' }];
+            expect(attachFindingIdToLocation('finding:507f1f77bcf86cd799439011::SQL Injection', findings))
+                .toBe('finding:507f1f77bcf86cd799439011::SQL Injection');
+        });
+
+        it('should attach finding ids across a batch of issues, leaving non-finding locations untouched', () => {
+            const findings = [{ _id: '507f1f77bcf86cd799439011', title: 'SQL Injection' }];
+            const issues = attachFindingIdsToIssueLocations([
+                { title: 'A', location: 'finding:SQL Injection' },
+                { title: 'B', location: 'general' }
+            ], findings);
+
+            expect(issues[0].location).toBe('finding:507f1f77bcf86cd799439011::SQL Injection');
+            expect(issues[1].location).toBe('general');
         });
     });
 };

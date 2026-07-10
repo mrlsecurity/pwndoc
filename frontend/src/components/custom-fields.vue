@@ -12,7 +12,7 @@
                 borderless
                 :class="{
                     'bg-diffbackground': isTextInCustomFields(field),
-                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && (commentMode || qaDrawerOpen)
                 }"
                 class="basic-editor"
                 :hint="field.customField.description"
@@ -58,7 +58,7 @@
                 stack-label
                 v-model="field.text"
                 :class="{
-                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && (commentMode || qaDrawerOpen),
                     'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
                 }"
                 :readonly="readonly || isFieldSelectionLocked(field)"
@@ -101,7 +101,7 @@
                 stack-label
                 v-model="field.text"
                 :class="{
-                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && (commentMode || qaDrawerOpen),
                     'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
                 }"
                 :readonly="readonly"
@@ -148,7 +148,7 @@
                 :label="field.customField.label"
                 stack-label
                 :class="{
-                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && (commentMode || qaDrawerOpen),
                     'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
                 }"
                 v-model="field.text"
@@ -198,7 +198,7 @@
                 :label="field.customField.label"
                 stack-label
                 :class="{
-                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && (commentMode || qaDrawerOpen),
                     'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
                 }"
                 v-model="field.text"
@@ -263,7 +263,7 @@
                 :label="field.customField.label"
                 stack-label
                 :class="{
-                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && (commentMode || qaDrawerOpen),
                     'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
                 }"
                 :model-value="field.text"
@@ -316,7 +316,7 @@
                 :label="field.customField.label"
                 stack-label
                 :class="{
-                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && commentMode,
+                    'highlighted-border': fieldHighlighted == `field-${field.customField.label}` && (commentMode || qaDrawerOpen),
                     'ai-field-active': isFieldSessionActive(field) || isAiLoading(field)
                 }"
                 :model-value="field.text"
@@ -395,6 +395,10 @@ export default {
             default: ''
         },
         commentMode: {
+            type: Boolean,
+            default: false
+        },
+        qaDrawerOpen: {
             type: Boolean,
             default: false
         },

@@ -10,6 +10,16 @@ describe('audit-qa-navigation', () => {
   it('parses finding locations with field suffixes', () => {
     expect(parseIssueLocation('finding:SQL Injection/description')).toEqual({
       type: 'finding',
+      findingId: null,
+      findingTitle: 'SQL Injection',
+      fieldKey: 'description'
+    })
+  })
+
+  it('parses finding locations with an embedded finding id', () => {
+    expect(parseIssueLocation('finding:507f1f77bcf86cd799439011::SQL Injection/description')).toEqual({
+      type: 'finding',
+      findingId: '507f1f77bcf86cd799439011',
       findingTitle: 'SQL Injection',
       fieldKey: 'description'
     })
@@ -17,6 +27,33 @@ describe('audit-qa-navigation', () => {
 
   it('builds finding routes and field highlights', () => {
     const parsed = parseIssueLocation('finding:SQL Injection/description')
+    const route = buildIssueRoute('audit-1', parsed, {
+      findings: [{ _id: 'finding-1', title: 'SQL Injection' }]
+    })
+
+    expect(route).toEqual({
+      path: '/audits/audit-1/findings/finding-1',
+      fieldName: 'descriptionField'
+    })
+  })
+
+  it('resolves duplicate-titled findings by embedded id instead of the first title match', () => {
+    const parsed = parseIssueLocation('finding:507f1f77bcf86cd799439012::SQL Injection/description')
+    const route = buildIssueRoute('audit-1', parsed, {
+      findings: [
+        { _id: '507f1f77bcf86cd799439011', title: 'SQL Injection' },
+        { _id: '507f1f77bcf86cd799439012', title: 'SQL Injection' }
+      ]
+    })
+
+    expect(route).toEqual({
+      path: '/audits/audit-1/findings/507f1f77bcf86cd799439012',
+      fieldName: 'descriptionField'
+    })
+  })
+
+  it('falls back to title matching when the embedded id no longer resolves', () => {
+    const parsed = parseIssueLocation('finding:507f1f77bcf86cd799439099::SQL Injection/description')
     const route = buildIssueRoute('audit-1', parsed, {
       findings: [{ _id: 'finding-1', title: 'SQL Injection' }]
     })

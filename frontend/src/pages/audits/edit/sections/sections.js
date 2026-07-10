@@ -547,6 +547,19 @@ export default {
 
         highlightQaField: function(fieldName) {
             this.fieldHighlighted = fieldName
+
+            let checkCount = 0
+            const intervalId = setInterval(() => {
+                checkCount++
+                const elementField = document.getElementById(fieldName)
+                if (elementField) {
+                    clearInterval(intervalId)
+                    elementField.scrollIntoView({block: "center"})
+                }
+                else if (checkCount >= 10) {
+                    clearInterval(intervalId)
+                }
+            }, 200)
         },
 
         focusComment: function(comment) {

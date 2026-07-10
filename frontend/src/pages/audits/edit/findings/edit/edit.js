@@ -715,6 +715,37 @@ export default {
 
         highlightQaField: function(fieldName) {
             this.fieldHighlighted = fieldName
+
+            const targetTab = this.getFieldTab(fieldName)
+            if (targetTab && this.selectedTab !== targetTab)
+                this.selectedTab = targetTab
+
+            let checkCount = 0
+            const intervalId = setInterval(() => {
+                checkCount++
+                const elementField = document.getElementById(fieldName)
+                if (elementField) {
+                    clearInterval(intervalId)
+                    elementField.scrollIntoView({block: "center"})
+                }
+                else if (checkCount >= 10) {
+                    clearInterval(intervalId)
+                }
+            }, 200)
+        },
+
+        // Shared by comment focus and QA "go to field" navigation so both land on the same tab.
+        getFieldTab: function(fieldName) {
+            const definitionFields = ["titleField", "typeField", "descriptionField", "observationField", "referencesField"]
+            const detailsFields = ["affectedField", "cvssField", "cvss3Field", "cvss4Field", "remediationDifficultyField", "priorityField", "remediationField", "retestStatusField", "retestDescriptionField"]
+
+            if (fieldName === 'pocField')
+                return "proofs"
+            if (detailsFields.includes(fieldName))
+                return "details"
+            if (definitionFields.includes(fieldName) || (fieldName || '').startsWith('field-'))
+                return "definition"
+            return null
         },
 
         focusComment: function(comment) {
@@ -757,19 +788,11 @@ export default {
                 return
             }
 
-            let definitionFields = ["titleField", "typeField", "descriptionField", "observationField", "referencesField"]
-            let detailsFields = ["affectedField", "cvssField", "cvss3Field", "cvss4Field", "remediationDifficultyField", "priorityField", "remediationField"]
+            // Go to the tab containing the field and scrollTo it
+            const targetTab = this.getFieldTab(comment.fieldName)
+            if (targetTab && this.selectedTab !== targetTab)
+                this.selectedTab = targetTab
 
-            // Go to definition tab and scrollTo field
-            if (this.selectedTab !== 'definition' && (definitionFields.includes(comment.fieldName) || comment.fieldName.startsWith('field-'))) {
-                this.selectedTab = "definition"
-            }
-            else if (this.selectedTab !== 'poc' && comment.fieldName === 'pocField') {
-                this.selectedTab = "proofs"
-            }
-            else if (this.selectedTab !== 'details' && detailsFields.includes(comment.fieldName)) {
-                this.selectedTab = "details"
-            }
             let checkCount = 0
             let elementField = null
             let elementCommentEditor = null

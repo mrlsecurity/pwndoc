@@ -1,7 +1,8 @@
 const {
     runStructuralChecks,
     buildAuditSnapshot,
-    isEmptyContent
+    isEmptyContent,
+    runAuditQa
 } = require('../src/lib/ai-qa');
 
 module.exports = function() {
@@ -72,6 +73,42 @@ module.exports = function() {
             expect(snapshot.company.name).toBe('Acme Corp');
             expect(snapshot.findings[0].location).toBe('finding:XSS');
             expect(snapshot.sections[0].text).toContain('Overall risk is medium');
+        });
+
+        it('should embed the finding id in the snapshot location when the finding has one', () => {
+            const snapshot = buildAuditSnapshot({
+                name: 'Web App Pentest',
+                findings: [{
+                    _id: '507f1f77bcf86cd799439011',
+                    identifier: 2,
+                    title: 'XSS',
+                    description: '<p>Reflected XSS in search.</p>'
+                }],
+                sections: []
+            });
+
+            expect(snapshot.findings[0].location).toBe('finding:507f1f77bcf86cd799439011::XSS');
+        });
+
+        it('should attach finding ids to structural issue locations from a programmatic-only run', async () => {
+            const result = await runAuditQa({
+                audit: {
+                    name: 'Web App Pentest',
+                    findings: [{
+                        _id: '507f1f77bcf86cd799439011',
+                        identifier: 1,
+                        title: 'SQL Injection',
+                        status: 1
+                    }],
+                    sections: []
+                },
+                settings: {},
+                scope: 'programmatic'
+            });
+
+            const findingIssue = result.issues.find((issue) => issue.title === 'Finding still in redaction');
+            expect(findingIssue).toBeDefined();
+            expect(findingIssue.location).toBe('finding:507f1f77bcf86cd799439011::SQL Injection');
         });
     });
 };

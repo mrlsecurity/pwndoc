@@ -972,6 +972,33 @@ describe('Audit Edit General Page', () => {
       expect(wrapper.vm.customFields).toEqual([])
     })
   })
+
+  describe('highlightQaField', () => {
+    it('sets fieldHighlighted for the given field', () => {
+      const wrapper = createWrapper()
+
+      wrapper.vm.highlightQaField('field-Custom Label')
+
+      expect(wrapper.vm.fieldHighlighted).toBe('field-Custom Label')
+    })
+
+    it('scrolls the highlighted field into view once it is rendered', async () => {
+      const scrollIntoView = vi.fn()
+      const getElementByIdSpy = vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+        if (id === 'field-Custom Label')
+          return { scrollIntoView }
+        return null
+      })
+
+      const wrapper = createWrapper()
+      wrapper.vm.highlightQaField('field-Custom Label')
+      await new Promise(resolve => setTimeout(resolve, 250))
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
+
+      getElementByIdSpy.mockRestore()
+    })
+  })
 })
 
 // Helper to flush all pending promises

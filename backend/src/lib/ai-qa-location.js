@@ -1,10 +1,47 @@
 const utils = require('./utils');
 
 const formatFindingLocation = (finding = {}) => {
-    const title = String(finding?.title || '').trim();
-    if (title)
-        return `finding:${title}`;
-    return 'finding:Untitled finding';
+    const title = String(finding?.title || '').trim() || 'Untitled finding';
+    const id = String(finding?._id || finding?.id || '').trim();
+    if (id)
+        return `finding:${id}::${title}`;
+    return `finding:${title}`;
+};
+
+// Issues produced by the AI reviewer only know a finding's title (see the QA system prompts),
+// so duplicate titles are ambiguous. This resolves them to an id after the fact, whenever the
+// title happens to be unique in the audit, without having to trust the model to echo an id back.
+const FINDING_LOCATION_HAS_ID = /^finding:[0-9a-fA-F]{24}::/;
+
+const attachFindingIdToLocation = (location = '', findings = []) => {
+    const value = String(location || '').trim();
+    if (!value.startsWith('finding:') || FINDING_LOCATION_HAS_ID.test(value))
+        return value;
+
+    const rest = value.slice('finding:'.length);
+    const slashIndex = rest.indexOf('/');
+    const title = (slashIndex === -1 ? rest : rest.slice(0, slashIndex)).trim();
+    const suffix = slashIndex === -1 ? '' : rest.slice(slashIndex);
+
+    const matches = findings.filter((finding) => String(finding?.title || '').trim() === title);
+    if (matches.length !== 1)
+        return value;
+
+    const id = String(matches[0]._id || matches[0].id || '').trim();
+    if (!id)
+        return value;
+
+    return `finding:${id}::${title}${suffix}`;
+};
+
+const attachFindingIdsToIssueLocations = (issues = [], findings = []) => {
+    if (!findings.length)
+        return issues;
+
+    return issues.map((issue) => ({
+        ...issue,
+        location: attachFindingIdToLocation(issue.location, findings)
+    }));
 };
 
 const buildFindingTitleByIdentifier = (findings = []) => {
@@ -78,5 +115,7 @@ module.exports = {
     buildFindingTitleByIdentifier,
     resolveIssueLocation,
     normalizeAiIssueLocation,
-    normalizeIssueLocations
+    normalizeIssueLocations,
+    attachFindingIdToLocation,
+    attachFindingIdsToIssueLocations
 };

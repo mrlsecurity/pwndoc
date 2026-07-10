@@ -72,6 +72,7 @@
         :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
         :locale="auditParent.language"
         :commentMode="commentMode"
+        :qaDrawerOpen="qaDrawerOpen"
         :focusedComment="focusedComment"
         :commentIdList="commentIdList"
         :fieldHighlighted="fieldHighlighted"
