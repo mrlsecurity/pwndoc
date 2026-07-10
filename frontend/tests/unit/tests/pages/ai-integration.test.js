@@ -382,6 +382,76 @@ describe('AI Integration Page', () => {
     })
   })
 
+  describe('QA tab scope/dirty tracking', () => {
+    it('should label check scopes for audit-vs-vulnerability', () => {
+      const wrapper = createWrapper()
+      expect(wrapper.vm.scopeLabel('audit')).toBe('aiIntegration.qa.scopeAudit')
+      expect(wrapper.vm.scopeLabel('vulnerability')).toBe('aiIntegration.qa.scopeVulnerability')
+    })
+
+    it('should mark only duplicate-detection checks as vulnerability-only', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      const byKey = Object.fromEntries(
+        [...wrapper.vm.programmaticQaCheckOptions, ...wrapper.vm.aiQaCheckOptions].map((check) => [check.key, check.scopes])
+      )
+
+      expect(byKey.duplicates).toEqual(['vulnerability'])
+      expect(byKey.aiDuplicates).toEqual(['vulnerability'])
+      expect(byKey.aiUnlinkedTranslations).toEqual(['vulnerability'])
+      expect(byKey.completeness).toEqual(['audit', 'vulnerability'])
+      expect(byKey.redaction).toEqual(['audit', 'vulnerability'])
+      expect(byKey.customer).toEqual(['audit', 'vulnerability'])
+      expect(byKey.instructions).toEqual(['audit', 'vulnerability'])
+    })
+
+    it('should be clean with no changes', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      expect(wrapper.vm.programmaticQaTabDirty).toBe(false)
+      expect(wrapper.vm.aiQaTabDirty).toBe(false)
+      expect(wrapper.vm.qaDirtyCount).toBe(0)
+    })
+
+    it('should flag the programmatic tab when a programmatic check changes', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.qaChecks.completeness = false
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.programmaticQaTabDirty).toBe(true)
+      expect(wrapper.vm.aiQaTabDirty).toBe(false)
+      expect(wrapper.vm.qaDirtyCount).toBe(1)
+    })
+
+    it('should flag the AI tab when an AI check changes', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.qaChecks.redaction = false
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.aiQaTabDirty).toBe(true)
+      expect(wrapper.vm.programmaticQaTabDirty).toBe(false)
+      expect(wrapper.vm.qaDirtyCount).toBe(1)
+    })
+
+    it('should flag the AI tab when only the QA instructions textarea changes', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.qaInstructions.content = 'Always check the retest section.'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.aiQaTabDirty).toBe(true)
+      expect(wrapper.vm.programmaticQaTabDirty).toBe(false)
+      expect(wrapper.vm.qaDirtyCount).toBe(1)
+    })
+  })
+
   describe('isGlobalPromptIncomplete', () => {
     it('should be false when both label and prompt are empty', () => {
       const wrapper = createWrapper()

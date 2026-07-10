@@ -298,8 +298,18 @@
                     indicator-color="primary"
                     align="left"
                     >
-                        <q-tab name="programmatic" :label="$t('aiIntegration.tabProgrammaticChecks')" />
-                        <q-tab name="ai" :label="$t('aiIntegration.tabAiChecks')" />
+                        <q-tab name="programmatic">
+                            <div class="row items-center no-wrap">
+                                <span>{{ $t('aiIntegration.tabProgrammaticChecks') }}</span>
+                                <q-badge v-if="programmaticQaTabDirty" rounded color="orange" class="q-ml-xs" />
+                            </div>
+                        </q-tab>
+                        <q-tab name="ai">
+                            <div class="row items-center no-wrap">
+                                <span>{{ $t('aiIntegration.tabAiChecks') }}</span>
+                                <q-badge v-if="aiQaTabDirty" rounded color="orange" class="q-ml-xs" />
+                            </div>
+                        </q-tab>
                     </q-tabs>
 
                     <q-separator />
@@ -318,6 +328,19 @@
                                         <div class="col">
                                             <div class="text-subtitle2">{{ check.label }}</div>
                                             <div class="text-caption text-grey-7">{{ check.description }}</div>
+                                            <div class="q-mt-xs">
+                                                <q-chip
+                                                v-for="scope in check.scopes"
+                                                :key="scope"
+                                                dense
+                                                square
+                                                outline
+                                                color="grey-7"
+                                                class="q-mr-xs"
+                                                >
+                                                    {{ scopeLabel(scope) }}
+                                                </q-chip>
+                                            </div>
                                         </div>
                                         <div class="col-auto">
                                             <q-toggle
@@ -342,8 +365,26 @@
                                 >
                                     <div class="row items-center q-col-gutter-md">
                                         <div class="col">
-                                            <div class="text-subtitle2">{{ check.label }}</div>
+                                            <div class="text-subtitle2">
+                                                {{ check.label }}
+                                                <q-chip dense square color="blue-1" text-color="blue-9" class="q-ml-sm">
+                                                    {{ $t('aiIntegration.qa.usesTokens') }}
+                                                </q-chip>
+                                            </div>
                                             <div class="text-caption text-grey-7">{{ check.description }}</div>
+                                            <div class="q-mt-xs">
+                                                <q-chip
+                                                v-for="scope in check.scopes"
+                                                :key="scope"
+                                                dense
+                                                square
+                                                outline
+                                                color="grey-7"
+                                                class="q-mr-xs"
+                                                >
+                                                    {{ scopeLabel(scope) }}
+                                                </q-chip>
+                                            </div>
                                         </div>
                                         <div class="col-auto">
                                             <q-toggle
@@ -391,7 +432,10 @@
                         </q-tab-panel>
                     </q-tab-panels>
 
-                    <q-card-actions align="right">
+                    <q-card-actions align="right" class="ai-integration-save-bar">
+                        <span v-if="qaDirtyCount > 0" class="text-caption text-grey-7 q-mr-md">
+                            {{ $t('aiIntegration.prompts.unsavedChanges', { count: qaDirtyCount }) }}
+                        </span>
                         <q-btn
                         color="secondary"
                         unelevated

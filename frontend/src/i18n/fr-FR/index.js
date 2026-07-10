@@ -631,15 +631,18 @@ export default {
             checkDuplicatesLabel: 'Duplicate templates',
             checkDuplicatesDescription: 'Fast structural checks for templates in the same language with the same title or identical description, observation, and remediation content.',
             checkAiDuplicatesLabel: 'AI duplicate templates',
-            checkAiDuplicatesDescription: 'AI review to identify templates that describe the same underlying vulnerability even when titles differ or content is paraphrased. Uses additional tokens.',
+            checkAiDuplicatesDescription: 'AI review to identify templates that describe the same underlying vulnerability even when titles differ or content is paraphrased.',
             checkAiUnlinkedTranslationsLabel: 'AI unlinked translations',
-            checkAiUnlinkedTranslationsDescription: 'AI review to identify the same vulnerability template stored in separate records for different languages instead of being merged into one multilingual record. Uses additional tokens.',
+            checkAiUnlinkedTranslationsDescription: 'AI review to identify the same vulnerability template stored in separate records for different languages instead of being merged into one multilingual record.',
             checkRedactionLabel: 'Writing guidelines review',
-            checkRedactionDescription: 'AI review of report content against organization writing guidelines. Uses additional tokens.',
+            checkRedactionDescription: 'AI review of report content against organization writing guidelines.',
             checkCustomerLabel: 'Customer alignment',
-            checkCustomerDescription: 'AI review that the report content matches the expected customer and company. Uses additional tokens.',
+            checkCustomerDescription: 'AI review that the report content matches the expected customer and company.',
             checkInstructionsLabel: 'QA instructions',
-            checkInstructionsDescription: 'AI review against organization QA instructions below, including any additional required sections or fields you define. Uses additional tokens.'
+            checkInstructionsDescription: 'AI review against organization QA instructions below, including any additional required sections or fields you define.',
+            usesTokens: 'Uses tokens',
+            scopeAudit: 'Audit reports',
+            scopeVulnerability: 'Vulnerability database'
         },
         settingsCard: {
             title: 'AI Integration',

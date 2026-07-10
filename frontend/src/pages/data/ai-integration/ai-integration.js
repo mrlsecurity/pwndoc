@@ -50,11 +50,27 @@ const QA_CHECK_I18N_KEYS = {
     instructions: 'checkInstructions'
 };
 
+// Mirrors what the backend actually scopes each check to (backend/src/lib/ai-qa.js and
+// ai-vuln-qa.js): only the duplicate-detection checks are vulnerability-database-only,
+// everything else runs against both audit reports and vulnerability templates.
+const QA_CHECK_SCOPES = {
+    completeness: ['audit', 'vulnerability'],
+    references: ['audit', 'vulnerability'],
+    imageCaptions: ['audit', 'vulnerability'],
+    duplicates: ['vulnerability'],
+    aiDuplicates: ['vulnerability'],
+    aiUnlinkedTranslations: ['vulnerability'],
+    redaction: ['audit', 'vulnerability'],
+    customer: ['audit', 'vulnerability'],
+    instructions: ['audit', 'vulnerability']
+};
+
 const buildQaCheckOptions = (keys) => {
     return keys.map((key) => ({
         key: key,
         label: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Label`),
-        description: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Description`)
+        description: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Description`),
+        scopes: QA_CHECK_SCOPES[key] || []
     }));
 };
 
@@ -310,6 +326,25 @@ export default {
 
         hasQaChanges: function() {
             return this.hasQaInstructionChanges || this.hasQaCheckChanges;
+        },
+
+        programmaticQaTabDirty: function() {
+            return QA_PROGRAMMATIC_CHECK_KEYS.some((key) => this.qaChecks[key] !== this.orig.qaChecks[key]);
+        },
+
+        // The instructions textarea lives in the AI tab alongside the AI checks, so a
+        // change to either one is enough to mark this tab dirty.
+        aiQaTabDirty: function() {
+            return QA_AI_CHECK_KEYS.some((key) => this.qaChecks[key] !== this.orig.qaChecks[key]) ||
+                this.hasQaInstructionChanges;
+        },
+
+        qaDirtyCount: function() {
+            const checkKeys = [...QA_PROGRAMMATIC_CHECK_KEYS, ...QA_AI_CHECK_KEYS];
+            let count = checkKeys.filter((key) => this.qaChecks[key] !== this.orig.qaChecks[key]).length;
+            if (this.hasQaInstructionChanges)
+                count++;
+            return count;
         }
     },
 
@@ -423,6 +458,10 @@ export default {
         outputTypeLabel: function(outputType) {
             const key = OUTPUT_TYPE_LABEL_KEYS[outputType];
             return key ? this.$t(key) : outputType;
+        },
+
+        scopeLabel: function(scope) {
+            return scope === 'audit' ? this.$t('aiIntegration.qa.scopeAudit') : this.$t('aiIntegration.qa.scopeVulnerability');
         },
 
         isGroupExpanded: function(group) {
