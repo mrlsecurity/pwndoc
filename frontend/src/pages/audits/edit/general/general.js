@@ -71,8 +71,7 @@ export default {
             AUDIT_VIEW_STATE: Utils.AUDIT_VIEW_STATE,
             draftRecovery: null,
             saveSuccess: false,
-            saveSuccessTimer: null,
-            fieldHighlighted: ""
+            saveSuccessTimer: null
         }
     },
 
@@ -222,23 +221,6 @@ export default {
                 aiStore.closeDrawer();
 
             qaStore.open(this.auditId);
-        },
-
-        highlightQaField: function(fieldName) {
-            this.fieldHighlighted = fieldName;
-
-            let checkCount = 0;
-            const intervalId = setInterval(() => {
-                checkCount++;
-                const elementField = document.getElementById(fieldName);
-                if (elementField) {
-                    clearInterval(intervalId);
-                    elementField.scrollIntoView({block: "center"});
-                }
-                else if (checkCount >= 10) {
-                    clearInterval(intervalId);
-                }
-            }, 200);
         },
 
         _listener: function(e) {

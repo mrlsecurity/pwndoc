@@ -501,8 +501,12 @@ export default {
 			return
 		}
 
+		// General also hosts the audit-qa-sidebar, so arriving there must not force-close the
+		// QA drawer the way leaving the report entirely (network, audit list, ...) should.
+		const hostsQaSidebar = /\/audits\/[^/]+\/general/.test(to.path)
+
 		confirmRouterLeaveIfAiGenerating((result) => {
-			if (result !== false)
+			if (result !== false && !hostsQaSidebar)
 				useAuditQaStore().close()
 			next(result)
 		})

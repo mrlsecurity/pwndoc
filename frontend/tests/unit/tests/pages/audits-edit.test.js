@@ -143,6 +143,7 @@ import DraftRecoveryService from '@/services/draft-recovery'
 import AuditEditPage from '@/pages/audits/edit/index.vue'
 import { Dialog, Notify } from 'quasar'
 import { useAiGenerationStore } from '@/stores/ai-generation'
+import { useAuditQaStore } from '@/stores/audit-qa'
 
 // Mock lodash globally (component uses _ globally)
 globalThis._ = {
@@ -1446,6 +1447,42 @@ describe('Audit Edit Page', () => {
       expect(Dialog.create).not.toHaveBeenCalled()
       expect(next).toHaveBeenCalled()
       expect(next.mock.calls[0][0]).not.toBe(false)
+    })
+
+    it('does not close the QA drawer when navigating from a finding to general', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const qaStore = useAuditQaStore()
+      qaStore.drawerOpen = true
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/general' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(next).toHaveBeenCalled()
+      expect(qaStore.drawerOpen).toBe(true)
+    })
+
+    it('still closes the QA drawer when navigating away to a page without the sidebar', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const qaStore = useAuditQaStore()
+      qaStore.drawerOpen = true
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/network' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(next).toHaveBeenCalled()
+      expect(qaStore.drawerOpen).toBe(false)
     })
   })
 })

@@ -971,7 +971,7 @@ export default {
         total: 'Total',
         filterAll: 'All',
         noIssues: 'No issues flagged',
-        goToField: 'Go to field',
+        goToFinding: 'Go to finding',
         goToSection: 'Go to section',
         aiReview: 'AI review — verify before acting',
         category: {

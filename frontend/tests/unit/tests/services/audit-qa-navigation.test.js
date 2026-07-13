@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest'
 import {
   parseIssueLocation,
   buildIssueRoute,
-  issueNavigationType,
-  isGeneralInformationLocation
+  issueNavigationKind,
+  isGeneralInformationLocation,
+  resolveFindingForLocation
 } from '@/services/audit-qa-navigation'
 
 describe('audit-qa-navigation', () => {
-  it('parses finding locations with field suffixes', () => {
+  it('parses finding locations, discarding any field suffix', () => {
     expect(parseIssueLocation('finding:SQL Injection/description')).toEqual({
       type: 'finding',
       findingId: null,
-      findingTitle: 'SQL Injection',
-      fieldKey: 'description'
+      findingTitle: 'SQL Injection'
     })
   })
 
@@ -20,21 +20,33 @@ describe('audit-qa-navigation', () => {
     expect(parseIssueLocation('finding:507f1f77bcf86cd799439011::SQL Injection/description')).toEqual({
       type: 'finding',
       findingId: '507f1f77bcf86cd799439011',
-      findingTitle: 'SQL Injection',
-      fieldKey: 'description'
+      findingTitle: 'SQL Injection'
     })
   })
 
-  it('builds finding routes and field highlights', () => {
+  it('parses finding locations with a custom field label suffix the same way', () => {
+    expect(parseIssueLocation('finding:507f1f77bcf86cd799439011::SQL Injection/Business Impact')).toEqual({
+      type: 'finding',
+      findingId: '507f1f77bcf86cd799439011',
+      findingTitle: 'SQL Injection'
+    })
+  })
+
+  it('parses a finding location with no field suffix at all', () => {
+    expect(parseIssueLocation('finding:507f1f77bcf86cd799439011::SQL Injection')).toEqual({
+      type: 'finding',
+      findingId: '507f1f77bcf86cd799439011',
+      findingTitle: 'SQL Injection'
+    })
+  })
+
+  it('builds finding routes', () => {
     const parsed = parseIssueLocation('finding:SQL Injection/description')
     const route = buildIssueRoute('audit-1', parsed, {
       findings: [{ _id: 'finding-1', title: 'SQL Injection' }]
     })
 
-    expect(route).toEqual({
-      path: '/audits/audit-1/findings/finding-1',
-      fieldName: 'descriptionField'
-    })
+    expect(route).toEqual({ path: '/audits/audit-1/findings/finding-1' })
   })
 
   it('resolves duplicate-titled findings by embedded id instead of the first title match', () => {
@@ -46,10 +58,7 @@ describe('audit-qa-navigation', () => {
       ]
     })
 
-    expect(route).toEqual({
-      path: '/audits/audit-1/findings/507f1f77bcf86cd799439012',
-      fieldName: 'descriptionField'
-    })
+    expect(route).toEqual({ path: '/audits/audit-1/findings/507f1f77bcf86cd799439012' })
   })
 
   it('falls back to title matching when the embedded id no longer resolves', () => {
@@ -58,10 +67,14 @@ describe('audit-qa-navigation', () => {
       findings: [{ _id: 'finding-1', title: 'SQL Injection' }]
     })
 
-    expect(route).toEqual({
-      path: '/audits/audit-1/findings/finding-1',
-      fieldName: 'descriptionField'
-    })
+    expect(route).toEqual({ path: '/audits/audit-1/findings/finding-1' })
+  })
+
+  it('falls back to the general page when a finding no longer exists', () => {
+    const parsed = parseIssueLocation('finding:Deleted finding/description')
+    const route = buildIssueRoute('audit-1', parsed, { findings: [] })
+
+    expect(route).toEqual({ path: '/audits/audit-1/general' })
   })
 
   it('builds section routes from section names', () => {
@@ -70,14 +83,21 @@ describe('audit-qa-navigation', () => {
       sections: [{ _id: 'section-1', name: 'Executive Summary' }]
     })
 
-    expect(route).toEqual({
-      path: '/audits/audit-1/sections/section-1'
-    })
+    expect(route).toEqual({ path: '/audits/audit-1/sections/section-1' })
   })
 
-  it('classifies navigation targets', () => {
-    expect(issueNavigationType('general')).toBe('section')
-    expect(issueNavigationType('finding:Test/description')).toBe('field')
+  it('builds the general/network page routes', () => {
+    expect(buildIssueRoute('audit-1', parseIssueLocation('general'))).toEqual({ path: '/audits/audit-1/general' })
+    expect(buildIssueRoute('audit-1', parseIssueLocation('network'))).toEqual({ path: '/audits/audit-1/network' })
+  })
+
+  it('classifies navigation kinds: finding, section/general/network, or none for report', () => {
+    expect(issueNavigationKind('finding:Test/description')).toBe('finding')
+    expect(issueNavigationKind('section:Executive Summary')).toBe('section')
+    expect(issueNavigationKind('general')).toBe('section')
+    expect(issueNavigationKind('network')).toBe('section')
+    expect(issueNavigationKind('report')).toBe(null)
+    expect(issueNavigationKind('')).toBe(null)
   })
 
   it('groups general information field paths together', () => {
@@ -90,8 +110,21 @@ describe('audit-qa-navigation', () => {
     expect(isGeneralInformationLocation('section:Executive Summary')).toBe(false)
     expect(parseIssueLocation('field:client')).toEqual({
       type: 'page',
-      page: 'general',
-      fieldKey: null
+      page: 'general'
     })
+  })
+
+  it('resolves a finding by embedded id, ignoring a stale/corrupted title', () => {
+    const parsed = parseIssueLocation('finding:507f1f77bcf86cd799439011::SQL Injection/Business Impact')
+    const finding = resolveFindingForLocation(parsed, [
+      { _id: '507f1f77bcf86cd799439011', title: 'SQL Injection' }
+    ])
+
+    expect(finding).toEqual({ _id: '507f1f77bcf86cd799439011', title: 'SQL Injection' })
+  })
+
+  it('resolveFindingForLocation returns null for non-finding locations', () => {
+    expect(resolveFindingForLocation(parseIssueLocation('general'), [{ _id: '1', title: 'x' }])).toBe(null)
+    expect(resolveFindingForLocation(parseIssueLocation('section:Executive Summary'), [{ _id: '1', title: 'x' }])).toBe(null)
   })
 })

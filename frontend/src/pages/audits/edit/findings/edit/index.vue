@@ -501,14 +501,12 @@
             </q-card>
 
             <q-card v-else-if="qaDrawerOpen" class="col-3 bg-grey-11 sidebar-comments">
-                <q-scroll-area class="scrollarea-comments">
-                    <audit-qa-sidebar
-                    :audit-id="auditParent._id"
-                    :findings="auditParent.findings || []"
-                    :sections="auditParent.sections || []"
-                    @highlight-field="highlightQaField"
-                    />
-                </q-scroll-area>
+                <audit-qa-sidebar
+                :audit-id="auditParent._id"
+                :findings="auditParent.findings || []"
+                :sections="auditParent.sections || []"
+                height="calc(100vh - 152px)"
+                />
             </q-card>
 
             <q-card v-else-if="aiDrawerOpen" class="col-3 bg-grey-11 sidebar-comments sidebar-ai">
@@ -774,14 +772,12 @@
         </q-card>
 
         <q-card v-else-if="qaDrawerOpen" class="col-3 bg-grey-11 sidebar-comments">
-            <q-scroll-area class="scrollarea-comments-retest">
-                <audit-qa-sidebar
-                :audit-id="auditParent._id"
-                :findings="auditParent.findings || []"
-                :sections="auditParent.sections || []"
-                @highlight-field="highlightQaField"
-                />
-            </q-scroll-area>
+            <audit-qa-sidebar
+            :audit-id="auditParent._id"
+            :findings="auditParent.findings || []"
+            :sections="auditParent.sections || []"
+            height="calc(100vh - 104px)"
+            />
         </q-card>
 
         <q-card v-else-if="aiDrawerOpen" class="col-3 bg-grey-11 sidebar-comments sidebar-ai-retest">

@@ -1,27 +1,3 @@
-const FIELD_KEYS = [
-  'description',
-  'observation',
-  'remediation',
-  'references',
-  'poc',
-  'affected',
-  'cvssv3',
-  'cvssv4',
-  'retestDescription'
-];
-
-export const QA_FIELD_HIGHLIGHT_MAP = {
-  description: 'descriptionField',
-  observation: 'observationField',
-  remediation: 'remediationField',
-  references: 'referencesField',
-  poc: 'pocField',
-  affected: 'affectedField',
-  cvssv3: 'cvss3Field',
-  cvssv4: 'cvss4Field',
-  retestDescription: 'retestDescriptionField'
-};
-
 const FINDING_FIELD_KEYS = new Set([
   'description',
   'observation',
@@ -56,22 +32,24 @@ export const isGeneralInformationLocation = (location = '') => {
   return !/^finding\./.test(fieldPathMatch[1].trim());
 };
 
+// Classifies a location into what it points at. Only the finding's/section's identity
+// matters for navigation now — any trailing field suffix (built-in or custom) is stripped
+// and discarded, since "go to" only ever lands on the finding/section as a whole.
 export const parseIssueLocation = (location = '') => {
   const value = String(location || '').trim() || 'report';
 
   if (value === 'general' || value === 'network' || value === 'report')
-    return { type: 'page', page: value, fieldKey: null };
+    return { type: 'page', page: value };
 
   if (isGeneralInformationLocation(value))
-    return { type: 'page', page: 'general', fieldKey: null };
+    return { type: 'page', page: 'general' };
 
   const sectionMatch = value.match(/^section:(.+)$/);
   if (sectionMatch)
-    return { type: 'section', sectionName: sectionMatch[1], fieldKey: null };
+    return { type: 'section', sectionName: sectionMatch[1] };
 
   if (value.startsWith('finding:')) {
     let rest = value.slice('finding:'.length);
-    let fieldKey = null;
     let findingId = null;
 
     const idMatch = rest.match(/^([0-9a-fA-F]{24})::(.*)$/);
@@ -80,18 +58,34 @@ export const parseIssueLocation = (location = '') => {
       rest = idMatch[2];
     }
 
-    FIELD_KEYS.forEach((key) => {
-      const suffix = `/${key}`;
-      if (rest.endsWith(suffix)) {
-        fieldKey = key;
-        rest = rest.slice(0, -suffix.length);
-      }
-    });
+    // Drop any trailing "/fieldName" or "/Custom Field Label" suffix — we only need the title.
+    const slashIndex = rest.indexOf('/');
+    const findingTitle = slashIndex === -1 ? rest : rest.slice(0, slashIndex);
 
-    return { type: 'finding', findingId, findingTitle: rest, fieldKey };
+    return { type: 'finding', findingId, findingTitle };
   }
 
   return { type: 'unknown', raw: value };
+};
+
+// Resolves a parsed finding location to the actual finding object. Shared by buildIssueRoute
+// and the QA panel's grouping, so both agree on which finding an issue belongs to.
+export const resolveFindingForLocation = (parsed, findings = []) => {
+  if (parsed.type !== 'finding')
+    return null;
+
+  const title = String(parsed.findingTitle || '').trim();
+  let finding = null;
+
+  if (parsed.findingId)
+    finding = findings.find((entry) => String(entry?._id || entry?.id || '') === parsed.findingId);
+
+  // Title is a display fallback for locations that predate id-tagging, or an id that no
+  // longer resolves (finding deleted since the QA run).
+  if (!finding)
+    finding = findings.find((entry) => String(entry?.title || '').trim() === title);
+
+  return finding || null;
 };
 
 export const buildIssueRoute = (auditId, parsed, { findings = [], sections = [] } = {}) => {
@@ -118,36 +112,28 @@ export const buildIssueRoute = (auditId, parsed, { findings = [], sections = [] 
   }
 
   if (parsed.type === 'finding') {
-    const title = String(parsed.findingTitle || '').trim();
-    let finding = null;
-
-    if (parsed.findingId)
-      finding = findings.find((entry) => String(entry?._id || entry?.id || '') === parsed.findingId);
-
-    // Title is a display fallback for locations that predate id-tagging, or an id that no
-    // longer resolves (finding deleted since the QA run).
-    if (!finding)
-      finding = findings.find((entry) => String(entry?.title || '').trim() === title);
-
-    if (finding?._id) {
-      return {
-        path: `/audits/${auditId}/findings/${finding._id}`,
-        fieldName: parsed.fieldKey ? QA_FIELD_HIGHLIGHT_MAP[parsed.fieldKey] : null
-      };
-    }
+    const finding = resolveFindingForLocation(parsed, findings);
+    if (finding?._id)
+      return { path: `/audits/${auditId}/findings/${finding._id}` };
   }
 
   return { path: `/audits/${auditId}/general` };
 };
 
-export const issueNavigationType = (location = '') => {
+// Which "Go to" button (if any) a location should get: a finding gets "Go to finding"; a
+// section/general/network destination gets "Go to section"; a report-wide (global) issue gets
+// none — there's no single place to jump to for it.
+export const issueNavigationKind = (location = '') => {
   const parsed = parseIssueLocation(location);
 
   if (parsed.type === 'finding')
-    return 'field';
+    return 'finding';
 
-  if (parsed.type === 'section' || parsed.type === 'page')
+  if (parsed.type === 'section')
     return 'section';
 
-  return 'section';
+  if (parsed.type === 'page' && parsed.page !== 'report')
+    return 'section';
+
+  return null;
 };

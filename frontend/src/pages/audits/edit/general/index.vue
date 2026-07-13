@@ -291,27 +291,24 @@
             default-opened
             header-class="bg-blue-grey-5 text-white" 
             expand-icon-class="text-white">
-                <custom-fields 
-                ref="customfields" 
-                v-model="audit.customFields" 
-                custom-element="QCardSection" 
+                <custom-fields
+                ref="customfields"
+                v-model="audit.customFields"
+                custom-element="QCardSection"
                 no-sync-editor
                 :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                 :locale="audit.language"
                 :qaDrawerOpen="qaDrawerOpen"
-                :fieldHighlighted="fieldHighlighted"
                 />
             </q-expansion-item>
         </q-card>
         <q-card v-if="qaDrawerOpen" class="col-3 bg-grey-11 sidebar-comments">
-            <q-scroll-area class="scrollarea-comments">
-                <audit-qa-sidebar
-                :audit-id="auditId"
-                :findings="auditParent.findings || []"
-                :sections="auditParent.sections || []"
-                @highlight-field="highlightQaField"
-                />
-            </q-scroll-area>
+            <audit-qa-sidebar
+            :audit-id="auditId"
+            :findings="auditParent.findings || []"
+            :sections="auditParent.sections || []"
+            height="calc(100vh - 104px)"
+            />
         </q-card>
     </div>
 </template>
@@ -319,10 +316,6 @@
 <script src='./general.js'></script>
 
 <style scoped>
-.scrollarea-comments {
-    height: calc(100vh - 104px)!important;
-}
-
 .content {
     margin-top: 50px;
 }

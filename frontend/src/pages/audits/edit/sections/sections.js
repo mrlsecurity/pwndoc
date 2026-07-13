@@ -53,7 +53,8 @@ export default {
             },
             draftRecovery: null,
             saveSuccess: false,
-            saveSuccessTimer: null
+            saveSuccessTimer: null,
+            highlightScrollIntervalId: null
         }
     },
 
@@ -122,6 +123,7 @@ export default {
         if (this.draftRecovery)
             this.draftRecovery.stop()
         this.clearSaveSuccess()
+        this.clearHighlightScrollPoll()
     },
 
     beforeRouteLeave (to, from , next) {
@@ -545,21 +547,11 @@ export default {
             qaStore.open(this.auditId)
         },
 
-        highlightQaField: function(fieldName) {
-            this.fieldHighlighted = fieldName
-
-            let checkCount = 0
-            const intervalId = setInterval(() => {
-                checkCount++
-                const elementField = document.getElementById(fieldName)
-                if (elementField) {
-                    clearInterval(intervalId)
-                    elementField.scrollIntoView({block: "center"})
-                }
-                else if (checkCount >= 10) {
-                    clearInterval(intervalId)
-                }
-            }, 200)
+        clearHighlightScrollPoll: function() {
+            if (this.highlightScrollIntervalId) {
+                clearInterval(this.highlightScrollIntervalId)
+                this.highlightScrollIntervalId = null
+            }
         },
 
         focusComment: function(comment) {
@@ -602,15 +594,16 @@ export default {
                 return
             }
 
+            this.clearHighlightScrollPoll()
             let checkCount = 0
             let elementField = null
             let elementCommentEditor = null
-            const intervalId = setInterval(() => {
+            this.highlightScrollIntervalId = setInterval(() => {
                 checkCount++
                 elementField = document.getElementById(comment.fieldName)
                 elementCommentEditor = document.getElementById(comment._id)
                 if (elementField || elementCommentEditor) {
-                    clearInterval(intervalId)
+                    this.clearHighlightScrollPoll()
                     if (elementCommentEditor) {
                         elementCommentEditor.scrollIntoView({block: "center"})
                     }
@@ -619,7 +612,7 @@ export default {
                     }
                 }
                 else if (checkCount >= 10) {
-                    clearInterval(intervalId)
+                    this.clearHighlightScrollPoll()
                 }
             }, 100)
         },

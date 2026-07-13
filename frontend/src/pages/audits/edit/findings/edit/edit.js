@@ -55,7 +55,8 @@ export default {
             },
             draftRecovery: null,
             saveSuccess: false,
-            saveSuccessTimer: null
+            saveSuccessTimer: null,
+            highlightScrollIntervalId: null
         }
     },
 
@@ -133,6 +134,7 @@ export default {
         if (this.draftRecovery)
             this.draftRecovery.stop()
         this.clearSaveSuccess()
+        this.clearHighlightScrollPoll()
     },
 
     beforeRouteLeave (to, from , next) {
@@ -713,28 +715,14 @@ export default {
             })
         },
 
-        highlightQaField: function(fieldName) {
-            this.fieldHighlighted = fieldName
-
-            const targetTab = this.getFieldTab(fieldName)
-            if (targetTab && this.selectedTab !== targetTab)
-                this.selectedTab = targetTab
-
-            let checkCount = 0
-            const intervalId = setInterval(() => {
-                checkCount++
-                const elementField = document.getElementById(fieldName)
-                if (elementField) {
-                    clearInterval(intervalId)
-                    elementField.scrollIntoView({block: "center"})
-                }
-                else if (checkCount >= 10) {
-                    clearInterval(intervalId)
-                }
-            }, 200)
+        clearHighlightScrollPoll: function() {
+            if (this.highlightScrollIntervalId) {
+                clearInterval(this.highlightScrollIntervalId)
+                this.highlightScrollIntervalId = null
+            }
         },
 
-        // Shared by comment focus and QA "go to field" navigation so both land on the same tab.
+        // Used by comment focus to land on the tab containing the focused field.
         getFieldTab: function(fieldName) {
             const definitionFields = ["titleField", "typeField", "descriptionField", "observationField", "referencesField"]
             const detailsFields = ["affectedField", "cvssField", "cvss3Field", "cvss4Field", "remediationDifficultyField", "priorityField", "remediationField", "retestStatusField", "retestDescriptionField"]
@@ -793,15 +781,16 @@ export default {
             if (targetTab && this.selectedTab !== targetTab)
                 this.selectedTab = targetTab
 
+            this.clearHighlightScrollPoll()
             let checkCount = 0
             let elementField = null
             let elementCommentEditor = null
-            const intervalId = setInterval(() => {
+            this.highlightScrollIntervalId = setInterval(() => {
                 checkCount++
                 elementField = document.getElementById(comment.fieldName)
                 elementCommentEditor = document.getElementById(commentId)
                 if (elementField || elementCommentEditor) {
-                    clearInterval(intervalId)
+                    this.clearHighlightScrollPoll()
                     if (elementCommentEditor) {
                         elementCommentEditor.scrollIntoView({block: "center"})
                     }
@@ -810,7 +799,7 @@ export default {
                     }
                 }
                 else if (checkCount >= 10) {
-                    clearInterval(intervalId)
+                    this.clearHighlightScrollPoll()
                 }
             }, 200)
         },

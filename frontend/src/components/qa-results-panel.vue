@@ -144,8 +144,6 @@
               </div>
             </div>
           </div>
-
-          <div v-if="summary" class="qa-summary q-mb-md">{{ summary }}</div>
         </template>
       </q-card-section>
 
@@ -160,7 +158,7 @@
           <q-list v-else separator>
             <q-expansion-item
             v-for="group in groupedIssues"
-            :key="group.label"
+            :key="group.key || group.label"
             default-opened
             header-class="qa-group__header"
             expand-icon-class="text-grey-7"
@@ -169,11 +167,76 @@
                 <q-item-section>
                   <q-item-label>{{ group.label }}</q-item-label>
                 </q-item-section>
+                <q-item-section v-if="showNavigation && !group.findingRows && group.key !== 'report'" side>
+                  <q-btn
+                  outline
+                  dense
+                  no-caps
+                  color="primary"
+                  :label="$t('auditQa.goToSection')"
+                  icon-right="chevron_right"
+                  @click.stop="$emit('navigate', group.issues[0].location)"
+                  />
+                </q-item-section>
                 <q-item-section side>
-                  <q-badge class="qa-group__count" color="grey-4" text-color="grey-9">{{ group.issues.length }}</q-badge>
+                  <q-badge class="qa-group__count" color="grey-4" text-color="grey-9">{{ groupIssueCount(group) }}</q-badge>
                 </q-item-section>
               </template>
-              <q-card flat bordered class="q-ma-sm">
+
+              <!-- Category groups (audit findings): one row per finding aggregating every
+                   issue that finding has, with a single "Go to finding" button on the row
+                   itself — not per field, not per issue. -->
+              <q-list v-if="group.findingRows" separator class="q-ma-sm">
+                <q-card
+                v-for="row in group.findingRows"
+                :key="row.key"
+                flat
+                bordered
+                class="q-mb-sm qa-finding-row"
+                >
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label class="text-weight-medium">{{ row.title }}</q-item-label>
+                    </q-item-section>
+                    <q-item-section v-if="showNavigation" side>
+                      <q-btn
+                      outline
+                      dense
+                      no-caps
+                      color="primary"
+                      :label="$t('auditQa.goToFinding')"
+                      icon-right="chevron_right"
+                      @click="$emit('navigate', row.issues[0].location)"
+                      />
+                    </q-item-section>
+                  </q-item>
+                  <q-separator />
+                  <q-list separator>
+                    <q-item
+                    v-for="(issue, index) in row.issues"
+                    :key="`${issue.location}:${issue.title}:${index}`"
+                    class="qa-issue"
+                    >
+                      <q-item-section avatar top>
+                        <q-icon :name="severityIcon(issue.severity)" :color="severityColor(issue.severity)" />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label class="text-weight-medium">{{ issue.title }}</q-item-label>
+                        <q-item-label caption>{{ issue.message }}</q-item-label>
+                        <q-item-label caption class="q-mt-xs text-grey-7">
+                          {{ categoryLabel(issue.category) }}
+                          <span v-if="issue.source === 'ai'"> · {{ $t('auditQa.aiReview') }}</span>
+                        </q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </q-card>
+              </q-list>
+
+              <!-- Flat groups: report / general / network / sections, and the vulnerability
+                   QA panel's own groups — plain issue rows, no per-issue button (the group
+                   header above already carries the single "Go to section" action). -->
+              <q-card v-else flat bordered class="q-ma-sm">
                 <q-list separator>
                   <q-item
                   v-for="(issue, index) in group.issues"
@@ -190,17 +253,6 @@
                         {{ categoryLabel(issue.category) }}
                         <span v-if="issue.source === 'ai'"> · {{ $t('auditQa.aiReview') }}</span>
                       </q-item-label>
-                    </q-item-section>
-                    <q-item-section v-if="showNavigation" side top>
-                      <q-btn
-                      outline
-                      dense
-                      no-caps
-                      color="primary"
-                      :label="navigationLabel(issue)"
-                      icon-right="chevron_right"
-                      @click="$emit('navigate', issue)"
-                      />
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -307,10 +359,6 @@ export default {
       type: Boolean,
       default: false
     },
-    summary: {
-      type: String,
-      default: ''
-    },
     aiUnavailableMessages: {
       type: Array,
       default: () => []
@@ -318,10 +366,6 @@ export default {
     showNavigation: {
       type: Boolean,
       default: false
-    },
-    navigationLabel: {
-      type: Function,
-      default: () => ''
     }
   },
 
@@ -407,6 +451,12 @@ export default {
   },
 
   methods: {
+    groupIssueCount(group) {
+      if (group.findingRows)
+        return group.findingRows.reduce((sum, row) => sum + row.issues.length, 0)
+      return group.issues.length
+    },
+
     dismissOutdated() {
       this.dismissedOutdated = true
     },
@@ -473,13 +523,6 @@ export default {
   overflow-wrap: anywhere;
 }
 
-.qa-summary {
-  font-size: 0.85rem;
-  line-height: 1.4;
-  color: #424242;
-  overflow-wrap: anywhere;
-}
-
 .qa-run-progress {
   flex: 0 0 auto;
 }
@@ -493,8 +536,7 @@ export default {
 }
 
 /* Keep the previous report visible but clearly de-emphasised while a run is in flight. */
-.qa-results-panel--running .qa-groups,
-.qa-results-panel--running .qa-summary {
+.qa-results-panel--running .qa-groups {
   opacity: 0.5;
   transition: opacity 0.15s;
 }
@@ -668,10 +710,6 @@ export default {
 .body--dark .qa-group__count {
   background: #424242 !important;
   color: #ffffff !important;
-}
-
-.body--dark .qa-summary {
-  color: #e0e0e0;
 }
 
 .body--dark .qa-run-inprogress {

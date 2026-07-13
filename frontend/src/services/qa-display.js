@@ -1,5 +1,9 @@
 import { $t } from '@/boot/i18n';
-import { isGeneralInformationLocation } from '@/services/audit-qa-navigation';
+import {
+  isGeneralInformationLocation,
+  parseIssueLocation,
+  resolveFindingForLocation
+} from '@/services/audit-qa-navigation';
 
 const QA_FIELD_LABELS = () => ({
   description: $t('description'),
@@ -141,6 +145,141 @@ export const groupIssuesByLabel = (issues = [], formatLocationLabel) => {
   }));
 };
 
+const UNTITLED_FINDING_PATTERN = /^IDX-\d+$/i;
+
+const findingRowKey = (finding, fallbackTitle) => String(finding?._id || finding?.id || `title:${fallbackTitle}`);
+
+// Groups audit QA issues the way the left navigation drawer is laid out: Report (global,
+// audit-wide issues with no specific location) first, then General information, then Network
+// (if any), then Findings — grouped by category in the same order categories first appear in
+// `findings`, with ONE row per finding (not one per field) aggregating every issue that finding
+// has, however many different fields they touch — then Sections.
+//
+// Unlike groupIssuesByLabel (still used as-is by the vulnerability QA panel), this is specific
+// to the audit-findings shape: it needs `findings`/`sections` to resolve which finding/section
+// an issue belongs to and to mirror the sidebar's category/finding ordering.
+export const buildAuditQaGroups = (issues = [], { findings = [], sections = [] } = {}) => {
+  // Mirrors the left sidebar's `_.groupBy('category')`: category order, and finding order
+  // within a category, both follow first-appearance order in the findings array.
+  const categoryOrder = [];
+  const findingsByCategory = new Map();
+  findings.forEach((finding) => {
+    const category = String(finding?.category || '').trim() || 'No Category';
+    if (!findingsByCategory.has(category)) {
+      findingsByCategory.set(category, []);
+      categoryOrder.push(category);
+    }
+    findingsByCategory.get(category).push(finding);
+  });
+
+  const reportIssues = [];
+  const generalIssues = [];
+  const networkIssues = [];
+  const sectionIssuesByName = new Map();
+  const findingRows = new Map(); // findingRowKey -> { key, title, findingId, issues }
+
+  issues.forEach((issue) => {
+    const parsed = parseIssueLocation(issue.location);
+
+    if (parsed.type === 'page') {
+      if (parsed.page === 'network')
+        networkIssues.push(issue);
+      else if (parsed.page === 'report')
+        reportIssues.push(issue);
+      else
+        generalIssues.push(issue);
+      return;
+    }
+
+    if (parsed.type === 'section') {
+      const name = parsed.sectionName;
+      if (!sectionIssuesByName.has(name))
+        sectionIssuesByName.set(name, []);
+      sectionIssuesByName.get(name).push(issue);
+      return;
+    }
+
+    if (parsed.type === 'finding') {
+      const finding = resolveFindingForLocation(parsed, findings);
+      const rawTitle = finding?.title || parsed.findingTitle || $t('auditQa.location.untitledFinding');
+      const title = UNTITLED_FINDING_PATTERN.test(rawTitle) ? $t('auditQa.location.untitledFinding') : rawTitle;
+      const key = findingRowKey(finding, rawTitle);
+
+      if (!findingRows.has(key)) {
+        findingRows.set(key, {
+          key,
+          title,
+          findingId: finding?._id || null,
+          issues: []
+        });
+      }
+
+      findingRows.get(key).issues.push(issue);
+      return;
+    }
+
+    // Unrecognized location shape — surface it under Report rather than dropping it.
+    reportIssues.push(issue);
+  });
+
+  const groups = [];
+
+  if (reportIssues.length)
+    groups.push({ key: 'report', label: $t('auditQa.location.report'), issues: reportIssues });
+
+  if (generalIssues.length)
+    groups.push({ key: 'general', label: $t('generalInformation'), issues: generalIssues });
+
+  if (networkIssues.length)
+    groups.push({ key: 'network', label: $t('auditQa.location.network'), issues: networkIssues });
+
+  const placedRowKeys = new Set();
+
+  categoryOrder.forEach((category) => {
+    const orderedFindingRows = [];
+
+    (findingsByCategory.get(category) || []).forEach((finding) => {
+      const key = findingRowKey(finding, finding?.title);
+      const row = findingRows.get(key);
+      if (row && !placedRowKeys.has(key)) {
+        orderedFindingRows.push(row);
+        placedRowKeys.add(key);
+      }
+    });
+
+    // Issues whose finding no longer exists in `findings` (deleted since the QA run) can only
+    // be bucketed under "No Category" since their real category is unknowable.
+    if (category === 'No Category') {
+      findingRows.forEach((row, key) => {
+        if (!row.findingId && !placedRowKeys.has(key)) {
+          orderedFindingRows.push(row);
+          placedRowKeys.add(key);
+        }
+      });
+    }
+
+    if (!orderedFindingRows.length)
+      return;
+
+    groups.push({
+      key: `category:${category}`,
+      label: `${$t('findings')} > ${category}`,
+      findingRows: orderedFindingRows.map((row) => ({
+        key: row.key,
+        title: row.title,
+        findingId: row.findingId,
+        issues: row.issues
+      }))
+    });
+  });
+
+  sectionIssuesByName.forEach((sectionIssues, name) => {
+    groups.push({ key: `section:${name}`, label: name, issues: sectionIssues });
+  });
+
+  return groups;
+};
+
 export const filterIssuesBySeverity = (issues = [], severityFilter = 'all') => {
   if (severityFilter === 'all')
     return issues
@@ -161,7 +300,6 @@ export const buildQaReportViewModel = (data = {}) => {
   const issues = Array.isArray(data.issues) ? data.issues : []
 
   return {
-    summary: String(data.summary || ''),
     issues,
     cached: Boolean(data.cached),
     outdated: Boolean(data.outdated),

@@ -36,6 +36,12 @@ export const useAuditQaStore = defineStore('auditQa', {
       return useQaRunsStore().runScope(this.qaKey)
     },
 
+    // Persisted panel scroll position, so it survives navigating between findings/sections/
+    // general (which fully remounts the sidebar) instead of resetting to the top each time.
+    scrollTop() {
+      return useQaRunsStore().scrollTop(this.qaKey)
+    },
+
     // Full-panel spinner only while first fetching a report with nothing to show yet.
     loading() {
       return useQaRunsStore().isLoading(this.qaKey) && !this.hasReport && !this.running
@@ -49,7 +55,6 @@ export const useAuditQaStore = defineStore('auditQa', {
       return buildQaReportViewModel(useQaRunsStore().getRun(this.qaKey)?.report || {})
     },
 
-    summary() { return this.reportViewModel.summary },
     issues() { return this.reportViewModel.issues },
     counts() { return this.reportViewModel.counts || emptyCounts() },
     hasReport() { return this.reportViewModel.hasReport },
@@ -110,6 +115,10 @@ export const useAuditQaStore = defineStore('auditQa', {
 
     setSeverityFilter(filter) {
       this.severityFilter = filter
+    },
+
+    setScrollTop(value) {
+      useQaRunsStore().setScrollTop(this.qaKey, value)
     }
   }
 })

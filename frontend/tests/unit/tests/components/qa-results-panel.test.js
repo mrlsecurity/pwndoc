@@ -40,7 +40,10 @@ function createWrapper(props = {}) {
     },
     global: {
       stubs: {
-        'q-banner': { template: '<div><slot /><slot name="action" /></div>' }
+        'q-banner': { template: '<div><slot /><slot name="action" /></div>' },
+        // Quasar auto-stubs drop named/scoped slots by default — forward `header` explicitly
+        // so the group header (label + "Go to section" button) is actually testable.
+        'q-expansion-item': { template: '<div><div class="qa-group-header"><slot name="header" /></div><slot /></div>' }
       }
     }
   })
@@ -121,20 +124,6 @@ describe('QaResultsPanel AI-sourced issue caption', () => {
   })
 })
 
-describe('QaResultsPanel summary', () => {
-  it('renders the summary text when present', () => {
-    const wrapper = createWrapper({ summary: 'Overall, the report is well-structured with two minor issues.' })
-
-    expect(wrapper.text()).toContain('Overall, the report is well-structured with two minor issues.')
-  })
-
-  it('does not render a summary block when summary is empty', () => {
-    const wrapper = createWrapper({ summary: '' })
-
-    expect(wrapper.find('.qa-summary').exists()).toBe(false)
-  })
-})
-
 describe('QaResultsPanel info tile', () => {
   it('renders an info stat tile alongside errors, warnings, and total', () => {
     const wrapper = createWrapper({ counts: { total: 4, error: 1, warning: 1, info: 2 } })
@@ -180,6 +169,99 @@ describe('QaResultsPanel running indicator', () => {
 
     expect(wrapper.text()).toContain('Issue')
     expect(wrapper.find('.qa-run-progress').exists()).toBe(true)
+  })
+})
+
+describe('QaResultsPanel finding-row rendering', () => {
+  const findingRowsGroup = {
+    key: 'category:Injection',
+    label: 'Findings > Injection',
+    findingRows: [{
+      key: 'finding-1',
+      title: 'XSS',
+      findingId: 'finding-1',
+      issues: [
+        { location: 'finding:finding-1::XSS', title: 'Still needs redaction', message: 'msg', severity: 'warning', category: 'redaction' },
+        { location: 'finding:finding-1::XSS/description', title: 'Missing detail', message: 'msg', severity: 'error', category: 'completeness' }
+      ]
+    }]
+  }
+
+  function createFindingRowWrapper() {
+    return createWrapper({ groupedIssues: [findingRowsGroup], showNavigation: true })
+  }
+
+  it('renders exactly one Go to finding button for the whole row, on the title, not per issue', () => {
+    const wrapper = createFindingRowWrapper()
+    const findingRow = wrapper.find('.qa-finding-row')
+    const buttons = findingRow.findAll('q-btn')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].attributes('label')).toBe('auditQa.goToFinding')
+  })
+
+  it('does not render any button on individual issue rows', () => {
+    const wrapper = createFindingRowWrapper()
+    const rows = wrapper.findAll('.qa-issue')
+    expect(rows).toHaveLength(2)
+    rows.forEach((row) => expect(row.find('q-btn').exists()).toBe(false))
+  })
+
+  it('emits navigate with the first issue\'s location on click', async () => {
+    const wrapper = createFindingRowWrapper()
+
+    await wrapper.find('.qa-finding-row').find('q-btn').trigger('click')
+
+    expect(wrapper.emitted('navigate')).toEqual([['finding:finding-1::XSS']])
+  })
+})
+
+describe('QaResultsPanel flat-group navigation', () => {
+  it('renders a Go to section button on a general/section group header', () => {
+    const wrapper = createWrapper({
+      showNavigation: true,
+      groupedIssues: [{ key: 'general', label: 'General information', issues: [
+        { location: 'general', title: 'Missing scope', message: 'msg', severity: 'warning', category: 'completeness' }
+      ] }]
+    })
+
+    const buttons = wrapper.find('.qa-groups').findAll('q-btn')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].attributes('label')).toBe('auditQa.goToSection')
+  })
+
+  it('does not render any button on the Report group', () => {
+    const wrapper = createWrapper({
+      showNavigation: true,
+      groupedIssues: [{ key: 'report', label: 'Report', issues: [
+        { location: 'report', title: 'Instructions issue', message: 'msg', severity: 'warning', category: 'instructions' }
+      ] }]
+    })
+
+    expect(wrapper.find('.qa-groups').find('q-btn').exists()).toBe(false)
+  })
+
+  it('does not render a button on individual issues within a flat group', () => {
+    const wrapper = createWrapper({
+      showNavigation: true,
+      groupedIssues: [{ key: 'general', label: 'General information', issues: [
+        { location: 'general', title: 'Missing scope', message: 'msg', severity: 'warning', category: 'completeness' }
+      ] }]
+    })
+
+    expect(wrapper.find('.qa-issue q-btn').exists()).toBe(false)
+  })
+
+  it('emits navigate with the location on click', async () => {
+    const wrapper = createWrapper({
+      showNavigation: true,
+      groupedIssues: [{ key: 'section:Executive Summary', label: 'Executive Summary', issues: [
+        { location: 'section:Executive Summary', title: 'Missing detail', message: 'msg', severity: 'warning', category: 'completeness' }
+      ] }]
+    })
+
+    await wrapper.find('.qa-groups').find('q-btn').trigger('click')
+
+    expect(wrapper.emitted('navigate')).toEqual([['section:Executive Summary']])
   })
 })
 

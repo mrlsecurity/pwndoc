@@ -116,6 +116,27 @@ describe('qa-runs store', () => {
     expect(store.isRunning('draft')).toBe(false)
   })
 
+  it('persists scroll position per target and defaults to 0', async () => {
+    const store = useQaRunsStore()
+
+    expect(store.scrollTop('audit:1')).toBe(0)
+
+    store.setScrollTop('audit:1', 240)
+    expect(store.scrollTop('audit:1')).toBe(240)
+
+    // Isolated from other targets.
+    expect(store.scrollTop('audit:2')).toBe(0)
+  })
+
+  it('reset clears scroll position along with the report', async () => {
+    const store = useQaRunsStore()
+    store.setScrollTop('draft', 120)
+
+    store.reset('draft')
+
+    expect(store.scrollTop('draft')).toBe(0)
+  })
+
   it('exposes setReport so progressive runners can update mid-flight', async () => {
     const store = useQaRunsStore()
     const gate = deferred()
