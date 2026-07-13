@@ -48,8 +48,9 @@
     :outlined="!framedHeader"
     :borderless="framedHeader"
     :aria-label="label"
-    :class="{'ai-field-active': aiSessionActive || aiLoading}"
+    :class="{'ai-field-active': !framedHeader && (aiSessionActive || aiLoading)}"
     :rules="rules"
+    hide-bottom-space
     lazy-rules="ondemand"
     :readonly="readonly"
     >

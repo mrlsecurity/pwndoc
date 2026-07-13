@@ -127,6 +127,30 @@ describe('TextareaArray Component', () => {
       expect(wrapper.find('.textarea-array__header .text-red').exists()).toBe(true)
     })
 
+    it('should not reserve empty validation space inside the textarea frame', () => {
+      const wrapper = createWrapper({ props: { framedHeader: true, rules: [''] } })
+
+      expect(wrapper.find('q-input').attributes()).toHaveProperty('hide-bottom-space')
+    })
+
+    it('should highlight only the outer frame during an active AI session', () => {
+      const wrapper = createWrapper({
+        props: { framedHeader: true, aiSessionActive: true }
+      })
+
+      expect(wrapper.find('.textarea-array--ai-active').exists()).toBe(true)
+      expect(wrapper.find('q-input').classes()).not.toContain('ai-field-active')
+    })
+
+    it('should highlight the input itself without a framed header', () => {
+      const wrapper = createWrapper({
+        props: { aiSessionActive: true }
+      })
+
+      expect(wrapper.find('.textarea-array--ai-active').exists()).toBe(false)
+      expect(wrapper.find('q-input').classes()).toContain('ai-field-active')
+    })
+
     it('should keep the framed header but hide its AI action when readonly', () => {
       const wrapper = createWrapper({
         props: { framedHeader: true, showAiButton: true, readonly: true }

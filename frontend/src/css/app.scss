@@ -173,14 +173,9 @@
 }
 
 // Highlights the field currently targeted by an active AI assistant session.
-// Scoped to the input control only (not the label/hint) so it doesn't wrap
-// unrelated text below the field.
-.ai-field-active .q-field__control {
-    box-shadow: 0 0 0 1px $indigo-5;
-    border-radius: 4px;
-}
-
-.ai-field-active .q-field__control::after {
+// Reuse Quasar's outlined-field layer so the active state is a single, clean
+// border and doesn't add an extra ring around the control.
+.ai-field-active.q-field--outlined .q-field__control::after {
     border-color: $indigo-5 !important;
 }
 
