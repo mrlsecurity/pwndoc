@@ -306,7 +306,7 @@
         <div class="ProseMirror" v-html="diffContent"></div>
     </div>
     <q-inner-loading :showing="aiLoading">
-        <q-badge color="secondary">{{ $t('aiChat.generating') }}</q-badge>
+        <q-badge color="deep-purple-12">{{ $t('aiChat.generating') }}</q-badge>
     </q-inner-loading>
 </q-card>
 </template>
