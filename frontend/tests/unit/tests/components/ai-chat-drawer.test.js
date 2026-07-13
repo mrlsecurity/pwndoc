@@ -23,8 +23,13 @@ function createWrapper({ notify } = {}) {
         'q-toolbar-title': true,
         'q-toolbar': true,
         'q-separator': true,
-        'q-card-section': true,
-        'q-input': true,
+        'q-card-section': {
+          template: '<div><slot /></div>'
+        },
+        'q-input': {
+          props: ['readonly', 'disable'],
+          template: '<div><textarea :readonly="readonly" :disabled="disable" /><slot name="append" /></div>'
+        },
         'q-btn-toggle': true,
         'q-btn': {
           props: ['label'],
@@ -392,6 +397,27 @@ describe('AiChatDrawer partial apply from a preview selection', () => {
 })
 
 describe('AiChatDrawer send/stop generation', () => {
+  it('keeps the stop button interactive while making the prompt read-only', async () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
+    store.loading = true
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.find('.ai-chat-input textarea')
+    const stopButton = wrapper.find('button[aria-label="aiChat.stop"]')
+    const cancel = vi.fn()
+    wrapper.vm.cancelTokenSource = { cancel }
+
+    expect(input.attributes('readonly')).toBeDefined()
+    expect(input.attributes('disabled')).toBeUndefined()
+    expect(stopButton.exists()).toBe(true)
+
+    await stopButton.trigger('click')
+
+    expect(cancel).toHaveBeenCalled()
+  })
+
   it('passes a cancelToken to AiService.generateFieldDraft while a request is in flight', async () => {
     const wrapper = createWrapper()
     const store = useAiGenerationStore()

@@ -103,7 +103,7 @@
       dense
       class="ai-chat-input"
       :placeholder="isFieldMode ? $t('aiChat.defaultPromptPlaceholder') : $t('aiChat.inputPlaceholder')"
-      :disable="loading"
+      :readonly="loading"
       @keydown.ctrl.enter.prevent="sendMessage"
       @keydown.meta.enter.prevent="sendMessage"
       >
