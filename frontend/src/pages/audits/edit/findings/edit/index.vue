@@ -238,6 +238,7 @@
                                 <textarea-array
                                 ref="referencesField"
                                 id="referencesField"
+                                framed-header
                                 class="col-12 q-pt-none"
                                 :label="$t('references')+' '+$t('one_per_line')"
                                 v-model="finding.references"
@@ -247,10 +248,21 @@
                                 :aiLoading="isAiFieldLoading('references')"
                                 :aiSessionActive="isAiFieldSessionActive('references')"
                                 @ai-click="generateFieldDraftAI('references')"
-                                />
-                                <q-badge v-if="commentMode && canCreateComment" color="deep-purple" floating class="cursor-pointer" @click="createComment('referencesField')">
-                                    <q-icon name="add_comment" size="xs" />
-                                </q-badge>
+                                >
+                                    <template #header-actions>
+                                        <q-btn
+                                        v-if="commentMode && canCreateComment"
+                                        unelevated
+                                        size="sm"
+                                        dense
+                                        color="deep-purple"
+                                        data-testid="references-comment-action"
+                                        @click="createComment('referencesField')"
+                                        >
+                                            <q-icon name="add_comment" />
+                                        </q-btn>
+                                    </template>
+                                </textarea-array>
                             </q-field>
                         </q-card-section>
                         <q-expansion-item 
@@ -640,6 +652,7 @@
                                 </template>
                             </q-field>
                             <textarea-array
+                            framed-header
                             class="col-12"
                             :label="$t('references')+' '+$t('one_per_line')"
                             v-model="finding.references"

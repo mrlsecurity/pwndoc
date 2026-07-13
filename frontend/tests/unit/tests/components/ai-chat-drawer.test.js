@@ -78,6 +78,16 @@ function createWrapper({ notify } = {}) {
 }
 
 describe('AiChatDrawer formatDraftPreview', () => {
+  it('uses the shared gradient treatment for assisted-writing chrome and primary actions', async () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'text', requestParams: {} }
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.ai-chat-toolbar').exists()).toBe(true)
+    expect(wrapper.find('.ai-primary-btn').exists()).toBe(true)
+  })
+
   it('renders an HTML draft as formatted HTML, not escaped source', () => {
     const wrapper = createWrapper()
     const store = useAiGenerationStore()
@@ -118,6 +128,10 @@ describe('AiChatDrawer formatDraftPreview', () => {
     const preview = wrapper.find('.ai-chat-draft-preview')
     expect(preview.classes()).toEqual(expect.arrayContaining(['ProseMirror', 'draft-rendered-diff']))
     expect(preview.find('pre code.language-js').exists()).toBe(true)
+    const response = wrapper.find('.ai-chat-assistant-response')
+    const actions = wrapper.find('.ai-chat-response-actions')
+    expect(response.find('.ai-chat-response-actions').exists()).toBe(false)
+    expect(response.element.nextElementSibling).toBe(actions.element)
   })
 
   it('strips disallowed tags from an HTML draft (no script injection)', () => {

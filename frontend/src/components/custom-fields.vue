@@ -72,11 +72,10 @@
                     <template v-slot:append>
                         <q-btn
                         v-if="showAiButton(field)"
-                        class="all-pointer-events"
+                        class="all-pointer-events ai-gradient-icon-btn"
                         flat
                         size="sm"
                         dense
-                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -115,11 +114,10 @@
                     <template v-slot:append>
                         <q-btn
                         v-if="showAiButton(field)"
-                        class="all-pointer-events"
+                        class="all-pointer-events ai-gradient-icon-btn"
                         flat
                         size="sm"
                         dense
-                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -170,11 +168,10 @@
                      <template v-slot:append>
                         <q-btn
                         v-if="showAiButton(field)"
-                        class="all-pointer-events"
+                        class="all-pointer-events ai-gradient-icon-btn"
                         flat
                         size="sm"
                         dense
-                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -222,11 +219,10 @@
                      <template v-slot:append>
                         <q-btn
                         v-if="showAiButton(field)"
-                        class="all-pointer-events"
+                        class="all-pointer-events ai-gradient-icon-btn"
                         flat
                         size="sm"
                         dense
-                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -278,11 +274,10 @@
                     <template v-slot:append>
                         <q-btn
                         v-if="showAiButton(field)"
-                        class="all-pointer-events"
+                        class="all-pointer-events ai-gradient-icon-btn"
                         flat
                         size="sm"
                         dense
-                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"
@@ -331,11 +326,10 @@
                     <template v-slot:append>
                         <q-btn
                         v-if="showAiButton(field)"
-                        class="all-pointer-events"
+                        class="all-pointer-events ai-gradient-icon-btn"
                         flat
                         size="sm"
                         dense
-                        color="primary"
                         :loading="isAiLoading(field)"
                         :disable="readonly || isFieldSessionActive(field)"
                         @click.stop="triggerGenerateAi(field)"

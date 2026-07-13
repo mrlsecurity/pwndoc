@@ -341,6 +341,7 @@
             <q-card-section>
                 <textarea-array
                 ref="referencesField"
+                framed-header
                 :label="$t('references')"
                 v-model="currentVulnerability.details[currentDetailsIndex].references"
                 :showAiButton="canGenerateAi('references') && isFieldEditable('references')"
@@ -585,6 +586,7 @@
             <q-card-section>
                 <textarea-array
                 ref="referencesField"
+                framed-header
                 :label="$t('references')"
                 v-model="currentVulnerability.details[currentDetailsIndex].references"
                 :showAiButton="canGenerateAi('references') && isFieldEditable('references')"
@@ -760,7 +762,7 @@
                             />
                         </q-card-section>
                         <q-card-section>
-                            <textarea-array :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" />
+                            <textarea-array framed-header :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" />
                         </q-card-section>
 
                         <q-expansion-item 

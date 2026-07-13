@@ -239,27 +239,27 @@
                     </q-btn-dropdown>
                 </template>
 
-                <template v-if="commentMode">
+                <template v-if="commentMode || (showAiButton && editable)">
                     <q-separator vertical class="q-mx-sm" />
-                    <q-btn unelevated size="sm" dense color="deep-purple"
-                    @click="editor.chain().focus().setComment(fieldName).run()"
-                    >
-                        <q-tooltip :delay="500" class="text-bold">Add Comment</q-tooltip>
-                        <q-icon name="add_comment" />
-                    </q-btn>
-                </template>
-
-                <template v-if="showAiButton && editable">
-                    <q-space />
-                    <q-separator vertical class="q-mx-sm" />
-                    <q-btn flat size="sm" dense color="primary"
-                    :loading="aiLoading"
-                    :disable="aiLoading || aiSessionActive"
-                    @click="$emit('ai-click')"
-                    >
-                        <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
-                        <q-icon name="auto_awesome" />
-                    </q-btn>
+                    <div class="row items-center no-wrap q-gutter-xs editor-toolbar__assisted-actions">
+                        <q-btn v-if="commentMode" unelevated size="sm" dense color="deep-purple"
+                        data-testid="editor-comment-action"
+                        @click="editor.chain().focus().setComment(fieldName).run()"
+                        >
+                            <q-tooltip :delay="500" class="text-bold">Add Comment</q-tooltip>
+                            <q-icon name="add_comment" />
+                        </q-btn>
+                        <q-btn v-if="showAiButton && editable" flat size="sm" dense
+                        class="ai-gradient-icon-btn"
+                        data-testid="editor-ai-action"
+                        :loading="aiLoading"
+                        :disable="aiLoading || aiSessionActive"
+                        @click="$emit('ai-click')"
+                        >
+                            <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
+                            <q-icon name="auto_awesome" />
+                        </q-btn>
+                    </div>
                 </template>
             </q-toolbar>
         </template>
@@ -1188,16 +1188,26 @@ export default {
 
 .editor--ai-active {
     overflow: hidden;
-    border: 2px solid var(--q-color-primary, #1976d2) !important;
+    border-color: transparent !important;
+}
+
+.editor--ai-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    border-radius: inherit;
+    border: 2px solid #7986cb;
+    pointer-events: none;
 }
 
 .ai-anchor-highlight {
-    background-color: rgba(25, 118, 210, 0.18);
+    background: rgba(121, 134, 203, 0.22);
     border-radius: 2px;
 }
 
 .body--dark .ai-anchor-highlight {
-    background-color: rgba(100, 181, 246, 0.28);
+    background: rgba(159, 168, 218, 0.3);
 }
 
 .diffrem {

@@ -1,17 +1,17 @@
 <template>
   <div class="ai-chat-drawer__panel column full-height" v-if="sessionConfig">
-    <q-toolbar class="bg-grey-3">
-      <q-icon name="auto_awesome" size="sm" class="q-mr-sm" />
+    <q-toolbar class="ai-chat-toolbar">
+      <q-icon name="auto_awesome" size="sm" class="q-mr-sm ai-gradient-icon" />
       <q-toolbar-title class="text-subtitle1">{{ sessionConfig.title }}</q-toolbar-title>
       <q-btn icon="close" flat round dense @click="requestClose" />
     </q-toolbar>
 
     <q-separator v-if="!isFieldMode" />
 
-    <div ref="messagesContainer" class="ai-chat-conversation col q-pa-sm">
+    <div ref="messagesContainer" class="ai-chat-conversation col q-pa-md">
       <q-card-section v-if="!isFieldMode" class="q-pa-none q-pb-sm">
         <div class="text-caption text-grey-7 q-mb-xs">{{ $t('aiChat.selectedText') }}</div>
-        <div class="ai-chat-context text-body2">{{ sessionConfig.selectedText }}</div>
+        <div class="ai-chat-context ai-soft-surface text-body2">{{ sessionConfig.selectedText }}</div>
         <div v-if="anchorStatus === 'collapsed'" class="text-caption text-warning q-mt-xs">
           {{ $t('aiChat.anchorCollapsed') }}
         </div>
@@ -30,46 +30,46 @@
       :class="message.role === 'user' ? 'text-right' : 'text-left'"
       >
         <q-chat-message
+        :class="message.role === 'user' ? 'ai-chat-message--user' : 'ai-chat-message--assistant'"
         :name="message.role === 'user' ? $t('aiChat.you') : $t('aiChat.assistant')"
         :text="[message.content]"
         :sent="message.role === 'user'"
-        :bg-color="message.role === 'user' ? 'primary' : 'grey-3'"
-        :text-color="message.role === 'user' ? 'white' : 'black'"
+        :bg-color="message.role === 'user' ? 'indigo-1' : 'transparent'"
+        :text-color="message.role === 'user' ? 'indigo-10' : 'grey-10'"
         />
-        <div
-        v-if="message.role === 'assistant' && message.draftPreview"
-        class="q-mt-xs q-pa-sm bg-blue-grey-1 rounded-borders text-body2 ai-chat-assistant-response"
-        >
-          <draft-diff
-          v-if="message.previewDiffOpen && message.previewDiffDraft"
-          chat-preview
-          :current="message.previewDiffCurrent"
-          :draft="message.previewDiffDraft"
-          :languages="sessionConfig.diffContext.languages || []"
-          />
-          <div
-          v-else
-          class="ProseMirror draft-rendered-diff ai-chat-draft-preview"
-          :data-message-index="index"
-          v-html="message.draftPreview"
-          />
-          <div class="q-mt-sm row q-gutter-sm">
+        <template v-if="message.role === 'assistant' && message.draftPreview">
+          <div class="q-mt-sm text-body2 ai-chat-assistant-response">
+            <draft-diff
+            v-if="message.previewDiffOpen && message.previewDiffDraft"
+            chat-preview
+            :current="message.previewDiffCurrent"
+            :draft="message.previewDiffDraft"
+            :languages="sessionConfig.diffContext.languages || []"
+            />
+            <div
+            v-else
+            class="ProseMirror draft-rendered-diff ai-chat-draft-preview"
+            :data-message-index="index"
+            v-html="message.draftPreview"
+            />
+          </div>
+          <div class="ai-chat-response-actions row q-gutter-sm">
             <q-btn
             unelevated
             dense
             no-caps
+            class="ai-primary-btn"
             :label="applyLabel(index)"
-            color="primary"
             :disable="applyDisabled"
             @click="applyDraft(message, index)"
             />
             <q-btn
             v-if="canInsertAtCursor"
-            outline
             dense
+            outline
             no-caps
+            class="ai-secondary-btn"
             :label="$t('aiChat.insertAtCursor')"
-            color="primary"
             :disable="loading"
             @click="insertAtCursor(message, index)"
             />
@@ -78,23 +78,23 @@
             outline
             dense
             no-caps
+            class="ai-secondary-btn"
             :label="message.previewDiffOpen ? $t('aiChat.originalResponse') : $t('aiChat.previewChanges')"
-            color="primary"
             :disable="loading"
             @click="togglePreviewDiff(message)"
             />
           </div>
-        </div>
+        </template>
       </div>
       <div v-if="loading" class="text-center q-pa-sm">
-        <q-spinner-dots color="primary" size="2em" />
+        <q-spinner-dots color="deep-purple-12" size="2em" />
         <div class="text-caption text-grey-7 q-mt-sm">{{ $t('aiChat.generating') }}</div>
       </div>
     </div>
 
     <q-separator />
 
-    <q-card-section class="q-pt-sm col-auto">
+    <q-card-section class="ai-chat-composer q-pt-sm col-auto">
       <q-input
       v-model="conversation.userInput"
       type="textarea"
@@ -115,7 +115,7 @@
             dense
             round
             icon="arrow_drop_down"
-            class="ai-chat-input__prompt-toggle"
+            class="ai-chat-input__prompt-toggle text-deep-purple-12"
             :aria-label="$t('aiChat.promptSelectLabel')"
             :disable="loading"
             >
@@ -127,7 +127,7 @@
                   clickable
                   v-close-popup
                   :active="selectedPromptId === option.id"
-                  active-class="text-primary"
+                  active-class="text-deep-purple-12 text-weight-medium"
                   @click="selectPrompt(option.id)"
                   >
                     <q-item-section>{{ option.label }}</q-item-section>
@@ -150,8 +150,8 @@
             round
             dense
             unelevated
-            icon="send"
-            color="primary"
+            icon="arrow_upward"
+            class="ai-primary-btn q-pa-12"
             :disable="!canSend"
             :aria-label="$t('aiChat.send')"
             @click="sendMessage"
@@ -574,14 +574,22 @@ export default {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: #fcfcff;
+  color: #17152f;
+}
+
+.ai-chat-toolbar {
+  min-height: 52px;
+  background: #fafaff;
+  border-bottom: 1px solid #e8eaf6;
 }
 
 .ai-chat-context {
-  border: 1px solid #d7d7d7;
-  border-radius: 4px;
-  padding: 8px;
+  border: 1px solid #dfe3f8;
+  border-radius: 8px;
+  padding: 10px 12px;
   white-space: pre-wrap;
-  background: #fafafa;
+  background: #f4f5ff !important;
 }
 
 .ai-chat-conversation {
@@ -589,6 +597,7 @@ export default {
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  background: #fcfcff;
 }
 
 .ai-chat-conversation :deep(.q-message-text),
@@ -597,6 +606,23 @@ export default {
   max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.ai-chat-message--user :deep(.q-message-text-content) {
+  color: #24204f !important;
+  border-radius: 10px;
+}
+
+.ai-chat-message--assistant :deep(.q-message-text),
+.ai-chat-message--assistant :deep(.q-message-text-content) {
+  padding-left: 0;
+  background: transparent !important;
+  box-shadow: none;
+  color: #29263f !important;
+}
+
+.ai-chat-message--assistant :deep(.q-message-text:last-child::before) {
+  display: none;
 }
 
 .ai-chat-draft-preview {
@@ -610,6 +636,24 @@ export default {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  padding: 10px 12px;
+  border: 1px solid #dfe3f8;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 1px 2px rgba(49, 46, 129, 0.035);
+}
+
+.ai-chat-draft-preview :deep(> :first-child) {
+  margin-top: 0;
+}
+
+.ai-chat-draft-preview :deep(> :last-child) {
+  margin-bottom: 0;
+}
+
+.ai-chat-response-actions {
+  margin-top: 12px;
+  margin-bottom: 4px;
 }
 
 .ai-chat-draft-preview :deep(pre) {
@@ -659,9 +703,18 @@ export default {
   overflow-y: auto;
 }
 
+.ai-chat-input :deep(.q-field__control) {
+  background: white;
+}
+
+.ai-chat-input.q-field--focused :deep(.q-field__control::after) {
+  border-color: #7c4dff;
+}
+
 .ai-chat-input :deep(.q-field__append) {
   align-self: flex-end;
-  padding-bottom: 2px;
+  height: auto;
+  padding: 6px 0;
 }
 
 .ai-chat-input__actions {
@@ -672,11 +725,51 @@ export default {
   min-width: 180px;
   max-width: 280px;
 }
+
+.ai-chat-composer {
+  background: #fafaff;
+  border-top: 1px solid #ececf6;
+}
 </style>
 
 <style>
 .body--dark .ai-chat-context {
-  border-color: #444;
-  background: #2a2a2a;
+  border-color: #4b4b6b;
+  background: #303047 !important;
+}
+
+.body--dark .ai-chat-drawer__panel,
+.body--dark .ai-chat-conversation {
+  background: #242333;
+  color: #f3f1ff;
+}
+
+.body--dark .ai-chat-toolbar,
+.body--dark .ai-chat-composer {
+  background: #29283b;
+  border-color: #41405a;
+}
+
+.body--dark .ai-chat-message--user .q-message-text-content {
+  background: #383755 !important;
+  border-color: #4b4a70;
+  color: #f4f2ff !important;
+}
+
+.body--dark .ai-chat-message--user .q-message-text--sent:last-child::before {
+  border-left-color: #383755;
+}
+
+.body--dark .ai-chat-message--assistant .q-message-text-content {
+  color: #efedff !important;
+}
+
+.body--dark .ai-chat-assistant-response {
+  border-color: #484765;
+  background: #2d2c41;
+}
+
+.body--dark .ai-chat-input .q-field__control {
+  background: #29283b !important;
 }
 </style>

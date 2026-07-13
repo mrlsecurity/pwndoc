@@ -1,9 +1,37 @@
 <template>
-    <div>
-    <div v-if="showAiButton && !readonly" class="bg-grey-4 row items-center justify-end q-px-sm q-py-xs">
-        <q-btn flat size="sm" dense color="primary"
+    <div
+    class="textarea-array"
+    :class="{
+        'textarea-array--framed': framedHeader,
+        'textarea-array--ai-active': framedHeader && (aiSessionActive || aiLoading)
+    }"
+    >
+    <div v-if="framedHeader" class="textarea-array__header row items-center no-wrap q-px-sm q-py-xs">
+        <div class="col text-caption text-grey-8">
+            {{label}} <span v-if="rules && rules[0] !== ''" class="text-red">*</span>
+        </div>
+        <div class="row items-center no-wrap q-gutter-xs">
+            <slot name="header-actions" />
+            <q-btn v-if="showAiButton && !readonly" flat size="sm" dense
+            class="ai-gradient-icon-btn"
+            data-testid="textarea-array-ai-action"
+            :aria-label="$t('aiChat.tooltip')"
+            :loading="aiLoading"
+            :disable="aiLoading || readonly || aiSessionActive"
+            @click="$emit('ai-click')"
+            >
+                <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
+                <q-icon name="auto_awesome" />
+            </q-btn>
+        </div>
+    </div>
+    <q-separator v-if="framedHeader" />
+    <div v-else-if="showAiButton && !readonly" class="bg-grey-4 row items-center justify-end q-px-sm q-py-xs">
+        <q-btn flat size="sm" dense class="ai-gradient-icon-btn"
+        data-testid="textarea-array-ai-action"
+        :aria-label="$t('aiChat.tooltip')"
         :loading="aiLoading"
-        :disable="aiLoading || readonly"
+        :disable="aiLoading || readonly || aiSessionActive"
         @click="$emit('ai-click')"
         >
             <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
@@ -12,18 +40,20 @@
     </div>
     <q-input
     ref="textareaField"
-    label-slot
-    stack-label
+    :label-slot="!framedHeader"
+    :stack-label="!framedHeader"
     v-model="dataString"
     type="textarea"
     @update:model-value="updateParent"
-    outlined
+    :outlined="!framedHeader"
+    :borderless="framedHeader"
+    :aria-label="label"
     :class="{'ai-field-active': aiSessionActive || aiLoading}"
     :rules="rules"
     lazy-rules="ondemand"
     :readonly="readonly"
     >
-    <template v-slot:label>
+    <template v-if="!framedHeader" v-slot:label>
         {{label}} <span v-if="rules && rules[0] !== ''" class="text-red">*</span>
     </template>
     </q-input>
@@ -55,6 +85,10 @@ export default {
             default: false
         },
         aiSessionActive: {
+            type: Boolean,
+            default: false
+        },
+        framedHeader: {
             type: Boolean,
             default: false
         }

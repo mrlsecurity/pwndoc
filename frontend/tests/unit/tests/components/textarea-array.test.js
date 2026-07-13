@@ -11,6 +11,7 @@ describe('TextareaArray Component', () => {
   const createWrapper = (overrides = {}) => {
     return createTestWrapper(TextareaArray, {
       props: { ...defaultProps, ...overrides.props },
+      slots: overrides.slots,
       global: {
         mocks: {
           ...(overrides.mocks || {})
@@ -104,11 +105,57 @@ describe('TextareaArray Component', () => {
       expect(wrapper.find('.bg-grey-4').exists()).toBe(true)
     })
 
-    it('should right-align the AI button and use the primary color', () => {
+    it('should right-align the AI button and use the shared gradient treatment', () => {
       const wrapper = createWrapper({ props: { showAiButton: true, readonly: false } })
       const bar = wrapper.find('.bg-grey-4')
       expect(bar.classes()).toContain('justify-end')
-      expect(bar.find('q-btn').attributes('color')).toBe('primary')
+      expect(bar.find('q-btn').classes()).toContain('ai-gradient-icon-btn')
+    })
+
+    it('should default framedHeader to false', () => {
+      const wrapper = createWrapper()
+      expect(wrapper.vm.framedHeader).toBe(false)
+      expect(wrapper.find('.textarea-array--framed').exists()).toBe(false)
+    })
+
+    it('should render a permanent framed header with its label and required marker', () => {
+      const rules = [val => !!val || 'Required']
+      const wrapper = createWrapper({ props: { framedHeader: true, rules } })
+
+      expect(wrapper.find('.textarea-array--framed').exists()).toBe(true)
+      expect(wrapper.find('.textarea-array__header').text()).toContain('Test Label')
+      expect(wrapper.find('.textarea-array__header .text-red').exists()).toBe(true)
+    })
+
+    it('should keep the framed header but hide its AI action when readonly', () => {
+      const wrapper = createWrapper({
+        props: { framedHeader: true, showAiButton: true, readonly: true }
+      })
+
+      expect(wrapper.find('.textarea-array__header').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="textarea-array-ai-action"]').exists()).toBe(false)
+    })
+
+    it('should emit ai-click from the icon-only framed-header action', async () => {
+      const wrapper = createWrapper({
+        props: { framedHeader: true, showAiButton: true }
+      })
+
+      const action = wrapper.find('[data-testid="textarea-array-ai-action"]')
+      expect(action.find('q-icon').attributes('name')).toBe('auto_awesome')
+      await action.trigger('click')
+      expect(wrapper.emitted('ai-click')).toHaveLength(1)
+    })
+
+    it('should render contextual header actions before the AI action', () => {
+      const wrapper = createWrapper({
+        props: { framedHeader: true, showAiButton: true },
+        slots: { 'header-actions': '<button class="comment-action">Comment</button>' }
+      })
+
+      const actions = wrapper.find('.textarea-array__header .q-gutter-xs')
+      expect(actions.find('.comment-action').exists()).toBe(true)
+      expect(actions.element.firstElementChild).toBe(actions.find('.comment-action').element)
     })
   })
 

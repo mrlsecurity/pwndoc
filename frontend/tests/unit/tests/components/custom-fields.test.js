@@ -564,13 +564,13 @@ describe('CustomFields Component', () => {
       expect(wrapper.vm.showAiButton(aiField)).toBe(true)
     })
 
-    it('should render the AI button with the primary color', () => {
+    it('should render the AI button with the shared gradient treatment', () => {
       const wrapper = createAiWrapper({
         stubs: {
           'q-input': { template: '<div><slot name="append" /></div>' }
         }
       })
-      expect(wrapper.find('q-btn').attributes('color')).toBe('primary')
+      expect(wrapper.find('q-btn').classes()).toContain('ai-gradient-icon-btn')
     })
   })
 })
