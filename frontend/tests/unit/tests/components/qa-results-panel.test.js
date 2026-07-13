@@ -140,6 +140,65 @@ describe('QaResultsPanel info tile', () => {
   })
 })
 
+describe('QaResultsPanel group expansion', () => {
+  const groupedIssues = [
+    { key: 'report', label: 'Report', issues: [] },
+    { key: 'general', label: 'General', issues: [] }
+  ]
+
+  it('shows one collapse-all toolbar action when every group is expanded', () => {
+    const wrapper = createWrapper({ groupedIssues })
+    const toggle = wrapper.get('[data-testid="qa-groups-toggle"]')
+
+    expect(wrapper.vm.expandedGroups).toEqual({ report: true, general: true })
+    expect(toggle.attributes('aria-label')).toBe('collapseAll')
+    expect(toggle.attributes('icon')).toBe('unfold_less')
+  })
+
+  it('collapses all groups, then offers to expand them again', async () => {
+    const wrapper = createWrapper({ groupedIssues })
+
+    await wrapper.get('[data-testid="qa-groups-toggle"]').trigger('click')
+
+    expect(wrapper.vm.expandedGroups).toEqual({ report: false, general: false })
+    expect(wrapper.get('[data-testid="qa-groups-toggle"]').attributes('aria-label')).toBe('expandAll')
+    expect(wrapper.get('[data-testid="qa-groups-toggle"]').attributes('icon')).toBe('unfold_more')
+
+    await wrapper.get('[data-testid="qa-groups-toggle"]').trigger('click')
+    expect(wrapper.vm.expandedGroups).toEqual({ report: true, general: true })
+  })
+
+  it('expands every group from a partially expanded state', async () => {
+    const wrapper = createWrapper({ groupedIssues })
+    wrapper.vm.expandedGroups.general = false
+    await wrapper.vm.$nextTick()
+
+    await wrapper.get('[data-testid="qa-groups-toggle"]').trigger('click')
+
+    expect(wrapper.vm.expandedGroups).toEqual({ report: true, general: true })
+  })
+
+  it('preserves existing group state and opens newly arriving groups', async () => {
+    const wrapper = createWrapper({ groupedIssues })
+    wrapper.vm.expandedGroups.report = false
+
+    await wrapper.setProps({
+      groupedIssues: [
+        groupedIssues[0],
+        { key: 'network', label: 'Network', issues: [] }
+      ]
+    })
+
+    expect(wrapper.vm.expandedGroups).toEqual({ report: false, network: true })
+  })
+
+  it('hides the bulk action when fewer than two groups are visible', () => {
+    const wrapper = createWrapper({ groupedIssues: [groupedIssues[0]] })
+
+    expect(wrapper.find('[data-testid="qa-groups-toggle"]').exists()).toBe(false)
+  })
+})
+
 describe('QaResultsPanel running indicator', () => {
   it('shows the progress bar and in-progress line while a run is in flight', () => {
     const wrapper = createWrapper({ running: true, startedAt: Date.now() })

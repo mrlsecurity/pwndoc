@@ -298,17 +298,8 @@
                 no-sync-editor
                 :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                 :locale="audit.language"
-                :qaDrawerOpen="qaDrawerOpen"
                 />
             </q-expansion-item>
-        </q-card>
-        <q-card v-if="qaDrawerOpen" class="col-3 bg-grey-11 sidebar-comments">
-            <audit-qa-sidebar
-            :audit-id="auditId"
-            :findings="auditParent.findings || []"
-            :sections="auditParent.sections || []"
-            height="calc(100vh - 104px)"
-            />
         </q-card>
     </div>
 </template>

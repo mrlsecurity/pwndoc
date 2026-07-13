@@ -3,6 +3,18 @@
     <q-toolbar class="bg-grey-3" @mousedown.prevent>
       <q-icon name="fas fa-list-check" size="sm" class="q-mr-sm" />
       <q-toolbar-title class="text-subtitle1">{{ title }}</q-toolbar-title>
+      <q-btn
+      v-if="showGroupToggle"
+      data-testid="qa-groups-toggle"
+      :icon="groupToggleIcon"
+      :aria-label="groupToggleLabel"
+      flat
+      round
+      dense
+      @click="toggleAllGroups"
+      >
+        <q-tooltip>{{ groupToggleLabel }}</q-tooltip>
+      </q-btn>
       <q-btn icon="close" flat round dense @click="$emit('close')" />
     </q-toolbar>
 
@@ -159,7 +171,7 @@
             <q-expansion-item
             v-for="group in groupedIssues"
             :key="group.key || group.label"
-            default-opened
+            v-model="expandedGroups[groupKey(group)]"
             header-class="qa-group__header"
             expand-icon-class="text-grey-7"
             >
@@ -373,7 +385,8 @@ export default {
 
   data() {
     return {
-      dismissedOutdated: false
+      dismissedOutdated: false,
+      expandedGroups: {}
     }
   },
 
@@ -381,6 +394,20 @@ export default {
     loading(isLoading, wasLoading) {
       if (wasLoading && !isLoading)
         this.dismissedOutdated = false
+    },
+
+    groupedIssues: {
+      immediate: true,
+      handler(groups) {
+        const nextExpandedGroups = {}
+        groups.forEach((group) => {
+          const key = this.groupKey(group)
+          nextExpandedGroups[key] = Object.prototype.hasOwnProperty.call(this.expandedGroups, key)
+            ? this.expandedGroups[key]
+            : true
+        })
+        this.expandedGroups = nextExpandedGroups
+      }
     }
   },
 
@@ -447,10 +474,41 @@ export default {
       return this.programmaticActionVisible ||
         this.aiActionVisible ||
         this.allActionVisible
+    },
+
+    showGroupToggle() {
+      return this.hasReportData && this.groupedIssues.length > 1
+    },
+
+    allGroupsExpanded() {
+      return this.groupedIssues.length > 0 && this.groupedIssues.every((group) =>
+        this.expandedGroups[this.groupKey(group)] !== false
+      )
+    },
+
+    groupToggleIcon() {
+      return this.allGroupsExpanded ? 'unfold_less' : 'unfold_more'
+    },
+
+    groupToggleLabel() {
+      return $t(this.allGroupsExpanded ? 'collapseAll' : 'expandAll')
     }
   },
 
   methods: {
+    groupKey(group) {
+      return String(group.key || group.label)
+    },
+
+    toggleAllGroups() {
+      const expanded = !this.allGroupsExpanded
+      const nextExpandedGroups = { ...this.expandedGroups }
+      this.groupedIssues.forEach((group) => {
+        nextExpandedGroups[this.groupKey(group)] = expanded
+      })
+      this.expandedGroups = nextExpandedGroups
+    },
+
     groupIssueCount(group) {
       if (group.findingRows)
         return group.findingRows.reduce((sum, row) => sum + row.issues.length, 0)

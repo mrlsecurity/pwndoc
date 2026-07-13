@@ -273,8 +273,37 @@ export const buildAuditQaGroups = (issues = [], { findings = [], sections = [] }
     });
   });
 
+  const placedSectionNames = new Set();
+
+  // The audit's sections are already in audit-type order (the same order used by the
+  // left navigation). A QA location can identify a section by either its display name
+  // or field, so accept both while presenting the current display name.
+  sections.forEach((section) => {
+    const name = String(section?.name || '').trim();
+    const field = String(section?.field || '').trim();
+    const locationNames = [...new Set([name, field].filter(Boolean))];
+    const matchingNames = locationNames.filter((locationName) => sectionIssuesByName.has(locationName));
+
+    if (!matchingNames.length)
+      return;
+
+    const sectionIssues = matchingNames.flatMap((locationName) => {
+      placedSectionNames.add(locationName);
+      return sectionIssuesByName.get(locationName);
+    });
+    const locationName = matchingNames[0];
+
+    groups.push({
+      key: `section:${locationName}`,
+      label: name || locationName,
+      issues: sectionIssues
+    });
+  });
+
+  // Preserve issues for sections that have since been removed from the audit type.
   sectionIssuesByName.forEach((sectionIssues, name) => {
-    groups.push({ key: `section:${name}`, label: name, issues: sectionIssues });
+    if (!placedSectionNames.has(name))
+      groups.push({ key: `section:${name}`, label: name, issues: sectionIssues });
   });
 
   return groups;

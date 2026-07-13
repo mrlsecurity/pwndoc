@@ -116,27 +116,6 @@ describe('qa-runs store', () => {
     expect(store.isRunning('draft')).toBe(false)
   })
 
-  it('persists scroll position per target and defaults to 0', async () => {
-    const store = useQaRunsStore()
-
-    expect(store.scrollTop('audit:1')).toBe(0)
-
-    store.setScrollTop('audit:1', 240)
-    expect(store.scrollTop('audit:1')).toBe(240)
-
-    // Isolated from other targets.
-    expect(store.scrollTop('audit:2')).toBe(0)
-  })
-
-  it('reset clears scroll position along with the report', async () => {
-    const store = useQaRunsStore()
-    store.setScrollTop('draft', 120)
-
-    store.reset('draft')
-
-    expect(store.scrollTop('draft')).toBe(0)
-  })
-
   it('exposes setReport so progressive runners can update mid-flight', async () => {
     const store = useQaRunsStore()
     const gate = deferred()
@@ -156,5 +135,14 @@ describe('qa-runs store', () => {
     await startPromise
     expect(store.getRun('all:en').report.summary).toBe('final')
     expect(store.getRun('all:en').report.issues).toHaveLength(2)
+  })
+
+  it('keys are isolated from one another', async () => {
+    const store = useQaRunsStore()
+    await store.start('audit:1', () => Promise.resolve({ summary: 'A' }))
+    await store.start('audit:2', () => Promise.resolve({ summary: 'B' }))
+
+    expect(store.getRun('audit:1').report).toEqual({ summary: 'A' })
+    expect(store.getRun('audit:2').report).toEqual({ summary: 'B' })
   })
 })

@@ -72,7 +72,6 @@
         :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
         :locale="auditParent.language"
         :commentMode="commentMode"
-        :qaDrawerOpen="qaDrawerOpen"
         :focusedComment="focusedComment"
         :commentIdList="commentIdList"
         :fieldHighlighted="fieldHighlighted"
@@ -103,14 +102,6 @@
             >
             </comments-list>
         </q-scroll-area>
-    </q-card>
-    <q-card v-else-if="qaDrawerOpen" class="col-3 bg-grey-11 sidebar-comments" style="margin-top:2px">
-        <audit-qa-sidebar
-        :audit-id="auditId"
-        :findings="auditParent.findings || []"
-        :sections="auditParent.sections || []"
-        height="calc(100vh - 104px)"
-        />
     </q-card>
     <q-card v-else-if="aiDrawerOpen" class="col-3 bg-grey-11 sidebar-comments sidebar-ai" style="margin-top:2px">
         <ai-chat-drawer />

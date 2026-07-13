@@ -3,7 +3,6 @@ import { Notify, Dialog } from 'quasar';
 import Breadcrumb from 'components/breadcrumb';
 import TextareaArray from 'components/textarea-array'
 import CustomFields from 'components/custom-fields'
-import AuditQaSidebar from '@/components/audit-qa-sidebar.vue';
 
 import AuditService from '@/services/audit';
 import ClientService from '@/services/client';
@@ -83,8 +82,7 @@ export default {
     components: {
         Breadcrumb,
         TextareaArray,
-        CustomFields,
-        AuditQaSidebar
+        CustomFields
     },
 
     mounted: function() {

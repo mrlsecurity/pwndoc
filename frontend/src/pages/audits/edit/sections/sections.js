@@ -4,7 +4,6 @@ import BasicEditor from 'components/editor/Editor.vue';
 import Breadcrumb from 'components/breadcrumb';
 import CustomFields from 'components/custom-fields';
 import CommentsList from 'components/comments-list';
-import AuditQaSidebar from '@/components/audit-qa-sidebar.vue';
 import AiChatDrawer from '@/components/ai-chat-drawer.vue';
 
 import AuditService from '@/services/audit';
@@ -75,7 +74,6 @@ export default {
         Breadcrumb,
         CustomFields,
         CommentsList,
-        AuditQaSidebar,
         AiChatDrawer
     },
 

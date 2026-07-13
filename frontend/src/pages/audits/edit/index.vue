@@ -367,6 +367,19 @@
 		</q-splitter>
 	</q-drawer>
 	<router-view :key="$route.fullPath"/>
+	<q-card
+		v-if="qaSidebarVisible"
+		data-testid="audit-qa-sidebar-host"
+		class="col-3 bg-grey-11 sidebar-comments audit-qa-sidebar-host"
+		:class="qaSidebarPositionClass"
+	>
+		<audit-qa-sidebar
+			:audit-id="auditId"
+			:findings="audit.findings || []"
+			:sections="audit.sections || []"
+			:height="qaSidebarHeight"
+		/>
+	</q-card>
 </template>
 
 <script>
@@ -376,7 +389,7 @@ import { useAiGenerationStore } from '@/stores/ai-generation'
 import { confirmRouterLeaveIfAiGenerating } from '@/composables/confirmLeaveIfAiGenerating'
 import { computed, ref } from 'vue';
 import draggable from 'vuedraggable'
-import CommentsList from 'components/comments-list'
+import AuditQaSidebar from '@/components/audit-qa-sidebar.vue'
 
 import AuditService from '@/services/audit';
 import { useUserStore } from 'src/stores/user'
@@ -392,7 +405,7 @@ import { Cvss3P1 } from 'ae-cvss-calculator'
 const userStore = useUserStore()
 
 // 2-way reactive values to provide
-const auditR = ref({findings: {}, comments: []})
+const auditR = ref({findings: [], comments: []})
 const retestSplitViewR = ref(false)
 const retestSplitRatioR = ref(100)
 const retestSplitLimitsR = ref([100, 100])
@@ -408,7 +421,6 @@ export default {
 			auditId: "",
 			desktopDrawerOpen: true,
 			mobileDrawerOpen: false,
-			findings: [],
 			users: [],
 			audit: auditR,
 			sections: [],
@@ -458,7 +470,7 @@ export default {
 
 	components: {
 		draggable,
-		CommentsList
+		AuditQaSidebar
 	},
 
 	created: function() {
@@ -483,7 +495,7 @@ export default {
 		}
 
 		// Reset reactive values
-		auditR.value = {findings: {}, comments: []}
+		auditR.value = {findings: [], comments: []}
 		retestSplitViewR.value = false
 		retestSplitRatioR.value = 100
 		retestSplitLimitsR.value = [100, 100]
@@ -501,9 +513,7 @@ export default {
 			return
 		}
 
-		// General also hosts the audit-qa-sidebar, so arriving there must not force-close the
-		// QA drawer the way leaving the report entirely (network, audit list, ...) should.
-		const hostsQaSidebar = /\/audits\/[^/]+\/general/.test(to.path)
+		const hostsQaSidebar = ['general', 'editFinding', 'editSection'].includes(to.name)
 
 		confirmRouterLeaveIfAiGenerating((result) => {
 			if (result !== false && !hostsQaSidebar)
@@ -586,6 +596,28 @@ export default {
 	},
 
 	computed: {
+		qaDrawerOpen: function() {
+			return useAuditQaStore().drawerOpen
+		},
+
+		qaSidebarVisible: function() {
+			return this.qaDrawerOpen && ['general', 'editFinding', 'editSection'].includes(this.$route.name)
+		},
+
+		qaSidebarHeight: function() {
+			if (this.$route.name === 'editFinding' && this.audit.type !== 'retest')
+				return 'calc(100vh - 152px)'
+			return 'calc(100vh - 104px)'
+		},
+
+		qaSidebarPositionClass: function() {
+			if (['general', 'editSection'].includes(this.$route.name))
+				return 'audit-qa-sidebar-host--standard'
+			if (this.$route.name === 'editFinding' && this.audit.type !== 'retest')
+				return 'audit-qa-sidebar-host--finding'
+			return 'audit-qa-sidebar-host--retest'
+		},
+
 		isDesktop: function() {
 			return this.$q.screen.gt.sm
 		},
@@ -1260,6 +1292,22 @@ export default {
 .sidebar-comments {
     position: fixed;
     right: 8px;
+}
+
+.audit-qa-sidebar-host {
+	width: 25%;
+}
+
+.audit-qa-sidebar-host--standard {
+	top: 102px;
+}
+
+.audit-qa-sidebar-host--finding {
+	top: 150px;
+}
+
+.audit-qa-sidebar-host--retest {
+	top: 100px;
 }
 
 .audit-drawer-close {

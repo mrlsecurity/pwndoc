@@ -38,6 +38,12 @@ describe('qa-display', () => {
       { _id: MISC_ID, title: 'Misc finding' } // no category -> 'No Category'
     ]
 
+    const sections = [
+      { field: 'executiveSummary', name: 'Executive Summary' },
+      { field: 'attackScenario', name: 'Attack Scenario' },
+      { field: 'cleanup', name: 'Cleanup' }
+    ]
+
     it('orders groups Report, General, Network, then categories in sidebar (findings-array) order', () => {
       const auditIssues = [
         { location: 'report', title: 'Report issue', severity: 'warning' },
@@ -115,6 +121,45 @@ describe('qa-display', () => {
 
       // findings array order is [XSS, SQLi] within Injection, regardless of issue order
       expect(injectionGroup.findingRows.map((row) => row.title)).toEqual(['XSS', 'SQLi'])
+    })
+
+    it('orders sections like the audit type instead of the order issues arrive in', () => {
+      const auditIssues = [
+        { location: 'section:Cleanup', title: 'Cleanup issue', severity: 'warning' },
+        { location: 'section:Attack Scenario', title: 'Attack issue', severity: 'warning' },
+        { location: 'section:Executive Summary', title: 'Summary issue', severity: 'warning' }
+      ]
+
+      const groups = buildAuditQaGroups(auditIssues, { findings, sections })
+
+      expect(groups.map((group) => group.key)).toEqual([
+        'section:Executive Summary',
+        'section:Attack Scenario',
+        'section:Cleanup'
+      ])
+    })
+
+    it('matches section locations by field and uses the section display name', () => {
+      const groups = buildAuditQaGroups([
+        { location: 'section:attackScenario', title: 'Attack issue', severity: 'warning' }
+      ], { findings, sections })
+
+      expect(groups[0]).toMatchObject({
+        key: 'section:attackScenario',
+        label: 'Attack Scenario'
+      })
+    })
+
+    it('keeps historical sections that are no longer present in the audit type', () => {
+      const groups = buildAuditQaGroups([
+        { location: 'section:Removed Section', title: 'Historical issue', severity: 'warning' },
+        { location: 'section:Cleanup', title: 'Cleanup issue', severity: 'warning' }
+      ], { findings, sections })
+
+      expect(groups.map((group) => group.key)).toEqual([
+        'section:Cleanup',
+        'section:Removed Section'
+      ])
     })
 
     it('buckets an uncategorized finding under No Category', () => {

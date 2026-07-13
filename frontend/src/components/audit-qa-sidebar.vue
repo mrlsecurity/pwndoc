@@ -1,8 +1,6 @@
 <template>
   <q-scroll-area
-  ref="scrollArea"
   :style="{ height }"
-  @scroll="onScroll"
   >
     <qa-results-panel
     :title="$t('auditQa.title')"
@@ -55,9 +53,8 @@ export default {
       type: Array,
       default: () => []
     },
-    // The panel fills a fixed-height q-scroll-area (its actual scroll mechanism — an inner
-    // overflow region wouldn't get a definite height, and Quasar's scroll area doesn't use
-    // native scrollTop, so the caller passes the same height it used to give that area).
+    // The panel fills a fixed-height q-scroll-area; the caller supplies the route-specific
+    // height used by the audit editor layout.
     height: {
       type: String,
       required: true
@@ -77,8 +74,7 @@ export default {
       'errorMessage',
       'severityFilter',
       'counts',
-      'outdated',
-      'scrollTop'
+      'outdated'
     ]),
 
     filteredIssues() {
@@ -98,25 +94,11 @@ export default {
     }
   },
 
-  watch: {
-    // The report (and with it, enough scrollable height to land on a non-zero position) may
-    // arrive after mount — re-apply the restore once it does.
-    hasReport(loaded) {
-      if (loaded)
-        this.restoreScrollPosition()
-    }
-  },
-
-  mounted() {
-    this.restoreScrollPosition()
-  },
-
   methods: {
     ...mapActions(useAuditQaStore, {
       closeStore: 'close',
       runQa: 'runQa',
-      setSeverityFilter: 'setSeverityFilter',
-      setScrollTop: 'setScrollTop'
+      setSeverityFilter: 'setSeverityFilter'
     }),
 
     closeDrawer() {
@@ -139,19 +121,6 @@ export default {
 
       if (route?.path)
         this.$router.push(route.path).catch(() => {})
-    },
-
-    restoreScrollPosition() {
-      if (!this.scrollTop)
-        return
-
-      this.$nextTick(() => {
-        this.$refs.scrollArea?.setScrollPosition('vertical', this.scrollTop, 0)
-      })
-    },
-
-    onScroll(info) {
-      this.setScrollTop(info.verticalPosition)
     }
   }
 }

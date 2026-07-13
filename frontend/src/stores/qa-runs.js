@@ -8,8 +8,7 @@ import { defineStore } from 'pinia'
 //   draft                      the unsaved vulnerability currently in the modal
 //
 // A run holds the raw report payload plus its lifecycle flags; consumers build their own
-// view models from `report`. `scrollTop` persists the results panel's scroll position across
-// remounts (route changes, tab switches) so re-rendering the same target doesn't reset it.
+// view models from `report`.
 const emptyRun = () => ({
   running: false,
   loading: false,
@@ -17,8 +16,7 @@ const emptyRun = () => ({
   startedAt: null,
   scope: null,
   report: null,
-  error: '',
-  scrollTop: 0
+  error: ''
 })
 
 const resolveError = (err, fallback) => {
@@ -43,8 +41,7 @@ export const useQaRunsStore = defineStore('qaRuns', {
     isRunning: (state) => (key) => Boolean(key && state.runs[key]?.running),
     isLoading: (state) => (key) => Boolean(key && state.runs[key]?.loading),
     startedAt: (state) => (key) => (key && state.runs[key]?.startedAt) || null,
-    runScope: (state) => (key) => (key && state.runs[key]?.scope) || null,
-    scrollTop: (state) => (key) => (key && state.runs[key]?.scrollTop) || 0
+    runScope: (state) => (key) => (key && state.runs[key]?.scope) || null
   },
 
   actions: {
@@ -109,11 +106,6 @@ export const useQaRunsStore = defineStore('qaRuns', {
         run.scope = null
         run.startedAt = null
       }
-    },
-
-    setScrollTop(key, value) {
-      if (key)
-        this.ensureRun(key).scrollTop = value
     },
 
     reset(key) {
