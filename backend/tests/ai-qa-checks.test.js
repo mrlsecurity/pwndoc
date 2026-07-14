@@ -127,9 +127,35 @@ module.exports = function() {
                 { title: 'Issue', source: 'structural', severity: 'error', category: 'completeness', message: 'x', location: 'report' }
             ]);
 
-            expect(merged.summary).toBe('Updated');
+            expect(merged.summary).toBe('1 issue(s) flagged, 1 error(s). Updated');
             expect(merged.counts.total).toBe(1);
             expect(merged.aiAnalysis).toBe(true);
+        });
+
+        it('should rebuild summary from merged issues across chunks', () => {
+            const merged = finalizeMergedQaResult({
+                summary: 'No issues were flagged across 3 vulnerability templates.'
+            }, {
+                summary: 'No issues were flagged across 3 vulnerability templates.',
+                vulnerabilityCount: 3,
+                progress: { done: false, offset: 2, total: 3 }
+            }, [
+                { title: 'Dup', source: 'structural', severity: 'warning', category: 'duplicates', message: 'x', location: 'vulnerability:A' }
+            ]);
+
+            expect(merged.summary).toBe('1 issue(s) flagged, 1 warning(s).');
+            expect(merged.counts.total).toBe(1);
+        });
+
+        it('should omit empty catalog summary while progress is incomplete', () => {
+            const merged = finalizeMergedQaResult({}, {
+                summary: 'No issues were flagged across 3 vulnerability templates.',
+                vulnerabilityCount: 3,
+                progress: { done: false, offset: 1, total: 3 }
+            }, []);
+
+            expect(merged.summary).toBe('');
+            expect(merged.counts.total).toBe(0);
         });
     });
 };

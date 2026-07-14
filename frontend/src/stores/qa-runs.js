@@ -103,6 +103,8 @@ export const useQaRunsStore = defineStore('qaRuns', {
         run.error = resolveError(err, errorFallback)
       } finally {
         run.running = false
+        run.scope = null
+        run.startedAt = null
       }
     },
 

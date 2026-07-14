@@ -127,18 +127,64 @@ const buildIssueCounts = (issues = []) => ({
     info: issues.filter((issue) => issue.severity === 'info').length
 });
 
-const finalizeMergedQaResult = (existingStored = {}, partialResult = {}, mergedIssues = []) => ({
-    summary: partialResult.summary || existingStored.summary || '',
-    issues: mergedIssues,
-    aiAnalysis: Boolean(
-        partialResult.aiAnalysis ||
-        existingStored.aiAnalysis ||
-        mergedIssues.some(isAiQaIssue)
-    ),
-    provider: partialResult.provider || existingStored.provider || null,
-    model: partialResult.model || existingStored.model || null,
-    counts: buildIssueCounts(mergedIssues)
-});
+// Count line for saved/merged reports. Empty fallbacks stay generic — callers that need
+// template-vs-report wording pass emptyFallback.
+const buildIssueSummary = (issues = [], { aiSummary = '', emptyFallback = 'No issues were flagged.' } = {}) => {
+    const counts = buildIssueCounts(issues);
+    const narrative = String(aiSummary || '').trim();
+
+    if (!issues.length)
+        return narrative || emptyFallback;
+
+    const parts = [`${issues.length} issue(s) flagged`];
+    if (counts.error)
+        parts.push(`${counts.error} error(s)`);
+    if (counts.warning)
+        parts.push(`${counts.warning} warning(s)`);
+    if (counts.info)
+        parts.push(`${counts.info} info(s)`);
+
+    return narrative ? `${parts.join(', ')}. ${narrative}` : `${parts.join(', ')}.`;
+};
+
+const resolveMergedEmptyFallback = (partialResult = {}) => {
+    const vulnerabilityCount = Number(partialResult.vulnerabilityCount) || 0;
+    if (vulnerabilityCount > 1)
+        return `No issues were flagged across ${vulnerabilityCount} vulnerability templates.`;
+    if (vulnerabilityCount === 1 || partialResult.mode === 'single')
+        return 'No issues were flagged. The vulnerability template looks ready to use.';
+    return 'No issues were flagged. The report appears ready for generation.';
+};
+
+const finalizeMergedQaResult = (existingStored = {}, partialResult = {}, mergedIssues = []) => {
+    const progressIncomplete = partialResult.progress && partialResult.progress.done === false;
+    // Keep AI prose only when this pass contributed AI analysis; otherwise counts alone.
+    const aiSummary = partialResult.aiAnalysis ?
+        String(partialResult.summary || '').replace(/^\d+ issue\(s\) flagged[^.]*\.\s*/i, '').trim() :
+        '';
+
+    let summary = buildIssueSummary(mergedIssues, {
+        aiSummary: aiSummary,
+        emptyFallback: resolveMergedEmptyFallback(partialResult)
+    });
+
+    // Don't claim "no issues across the catalog" while chunks are still running.
+    if (progressIncomplete && !mergedIssues.length)
+        summary = '';
+
+    return {
+        summary: summary,
+        issues: mergedIssues,
+        aiAnalysis: Boolean(
+            partialResult.aiAnalysis ||
+            existingStored.aiAnalysis ||
+            mergedIssues.some(isAiQaIssue)
+        ),
+        provider: partialResult.provider || existingStored.provider || null,
+        model: partialResult.model || existingStored.model || null,
+        counts: buildIssueCounts(mergedIssues)
+    };
+};
 
 module.exports = {
     QA_CHECK_KEYS,
@@ -160,5 +206,6 @@ module.exports = {
     mergeQaIssues,
     emptyQaCounts,
     buildIssueCounts,
+    buildIssueSummary,
     finalizeMergedQaResult
 };

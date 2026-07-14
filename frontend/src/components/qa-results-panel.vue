@@ -10,7 +10,7 @@
 
     <q-card-section v-if="loading" class="text-center q-py-xl col" @mousedown.prevent>
       <q-spinner color="primary" size="3em" />
-      <div class="q-mt-md text-grey-7">{{ runningLabel }}</div>
+      <div class="q-mt-md text-grey-7">{{ loadingLabel }}</div>
     </q-card-section>
 
     <template v-else>
@@ -266,9 +266,9 @@ export default {
       type: String,
       default: () => $t('auditQa.noResultsYet')
     },
-    runningLabel: {
+    loadingLabel: {
       type: String,
-      default: () => $t('auditQa.running')
+      default: () => $t('auditQa.loading')
     },
     showProgrammaticAction: {
       type: Boolean,

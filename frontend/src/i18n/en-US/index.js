@@ -944,6 +944,7 @@ export default {
     warning: 'Warning',
     auditQa: {
         title: 'QA Review',
+        loading: 'Loading QA results…',
         running: 'Running QA checks...',
         runInProgress: 'QA in progress… started {time}',
         runInProgressNoTime: 'QA in progress…',
@@ -995,6 +996,7 @@ export default {
     vulnerabilityQa: {
         titleSingle: 'QA: {title}',
         titleAll: 'Vulnerability database QA',
+        loading: 'Loading QA results…',
         running: 'Reviewing vulnerabilities for completeness, duplicate entries, reference links, and content guidelines...',
         failed: 'Unable to run vulnerability QA review',
         runAll: 'QA all vulnerabilities',
