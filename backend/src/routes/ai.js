@@ -16,7 +16,8 @@ const {
 
 const DRAFT_VULNERABILITY_ID = '__draft__';
 
-const normalizeDraftVulnerability = (raw = {}) => {
+const normalizeDraftVulnerability = (raw) => {
+    // Default `{}` here would falsely treat missing body.vulnerability as a draft.
     if (!raw || typeof raw !== 'object' || Array.isArray(raw))
         return null;
 
