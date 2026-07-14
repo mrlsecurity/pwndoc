@@ -1,4 +1,5 @@
 const { AI_PROVIDER_DEFAULTS } = require('./ai-prompts');
+const { stringifyLlmPayload } = require('./ai-qa-shared');
 const {
     resolveRedactionGuidelinesForRequest,
     getRedactionGuidelinesText,
@@ -410,7 +411,7 @@ const generateWithProvider = async ({
 
     let response = null;
     try {
-        response = await chat.ask(JSON.stringify(userPayload), {
+        response = await chat.ask(stringifyLlmPayload(userPayload), {
             requestTimeout: providerConfig.timeoutMs
         });
     } catch (err) {
@@ -561,14 +562,14 @@ const runQaWithProvider = async ({
     const userPayload = {
         task: 'audit_report_qa',
         audit: auditSnapshot,
-        enabledChecks: qaChecks,
+        enabledChecks: Object.keys(qaChecks || {}).filter((key) => qaChecks[key] !== false),
         redactionGuidelines: redactionGuidelinesText,
         qaInstructions: qaInstructionsText
     };
 
     let response = null;
     try {
-        response = await chat.ask(JSON.stringify(userPayload), {
+        response = await chat.ask(stringifyLlmPayload(userPayload), {
             requestTimeout: providerConfig.timeoutMs
         });
     } catch (err) {
@@ -674,14 +675,14 @@ const runVulnerabilityTemplateQaWithProvider = async ({
     const userPayload = {
         task: 'vulnerability_template_qa',
         template: templateSnapshot,
-        enabledChecks: qaChecks,
+        enabledChecks: Object.keys(qaChecks || {}).filter((key) => qaChecks[key] !== false),
         redactionGuidelines: redactionGuidelinesText,
         qaInstructions: qaInstructionsText
     };
 
     let response = null;
     try {
-        response = await chat.ask(JSON.stringify(userPayload), {
+        response = await chat.ask(stringifyLlmPayload(userPayload), {
             requestTimeout: providerConfig.timeoutMs
         });
     } catch (err) {
@@ -792,7 +793,7 @@ const runVulnerabilityUnlinkedTranslationQaWithProvider = async ({
 
     let response = null;
     try {
-        response = await chat.ask(JSON.stringify(userPayload), {
+        response = await chat.ask(stringifyLlmPayload(userPayload), {
             requestTimeout: providerConfig.timeoutMs
         });
     } catch (err) {
@@ -902,7 +903,7 @@ const runVulnerabilityDuplicateQaWithProvider = async ({
 
     let response = null;
     try {
-        response = await chat.ask(JSON.stringify(userPayload), {
+        response = await chat.ask(stringifyLlmPayload(userPayload), {
             requestTimeout: providerConfig.timeoutMs
         });
     } catch (err) {

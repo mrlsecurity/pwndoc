@@ -58,11 +58,56 @@ const summarizeCustomFields = (customFields = []) => {
         .filter(Boolean);
 };
 
+const isPlainObject = (value) => (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    !(value instanceof Date)
+);
+
+// Drop null/false/blank/empty containers before LLM prompts — keeps tokens on signal only.
+const isLlmEmpty = (value) => {
+    if (value == null || value === false)
+        return true;
+    if (typeof value === 'string' && !value.trim())
+        return true;
+    if (Array.isArray(value) && value.length === 0)
+        return true;
+    if (isPlainObject(value) && Object.keys(value).length === 0)
+        return true;
+    return false;
+};
+
+const compactLlmValue = (value) => {
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => compactLlmValue(entry))
+            .filter((entry) => !isLlmEmpty(entry));
+    }
+
+    if (isPlainObject(value)) {
+        const out = {};
+        Object.keys(value).forEach((key) => {
+            const compacted = compactLlmValue(value[key]);
+            if (!isLlmEmpty(compacted))
+                out[key] = compacted;
+        });
+        return out;
+    }
+
+    return value;
+};
+
+const stringifyLlmPayload = (value) => JSON.stringify(compactLlmValue(value));
+
 module.exports = {
     QA_SEVERITIES,
     QA_CATEGORIES,
     stripHtml,
     isEmptyContent,
     normalizeIssue,
-    summarizeCustomFields
+    summarizeCustomFields,
+    isLlmEmpty,
+    compactLlmValue,
+    stringifyLlmPayload
 };
