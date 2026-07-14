@@ -11,7 +11,7 @@
     <div
     ref="messagesContainer"
     class="ai-chat-conversation col q-pa-md"
-    :class="{ 'ai-chat-conversation--prompt-browser': isFieldMode && !conversation.messages.length }"
+    :class="{ 'ai-chat-conversation--prompt-browser': !conversation.messages.length }"
     >
       <q-card-section v-if="!isFieldMode" class="q-pa-none q-pb-sm">
         <div class="text-caption text-grey-7 q-mb-xs">{{ $t('aiChat.selectedText') }}</div>
@@ -24,10 +24,7 @@
         </div>
       </q-card-section>
 
-      <div v-if="!conversation.messages.length && !isFieldMode" class="text-grey-6 text-center q-pa-md">
-        {{ $t('aiChat.startPrompt') }}
-      </div>
-      <div v-else-if="!conversation.messages.length" class="ai-chat-prompt-browser">
+      <div v-if="!conversation.messages.length" class="ai-chat-prompt-browser">
         <div class="ai-chat-prompt-greeting text-h6 text-weight-medium">
           {{ $t('aiChat.howCanIHelp') }}
         </div>
@@ -164,7 +161,7 @@
         </template>
       </q-input>
       <q-btn
-      v-if="isFieldMode && conversation.messages.length"
+      v-if="conversation.messages.length && promptOptions.length"
       ref="promptSelector"
       outline
       no-caps
@@ -287,16 +284,17 @@ export default {
     },
 
     promptOptions() {
-      if (!this.isFieldMode)
-        return []
+      const options = []
 
-      const options = [{
-        id: DEFAULT_PROMPT_ID,
-        label: this.$t('aiChat.defaultPromptOption'),
-        prompt: String(this.sessionConfig?.defaultPrompt || ''),
-        isDefault: true,
-        configuredIndex: -1
-      }]
+      if (this.isFieldMode) {
+        options.push({
+          id: DEFAULT_PROMPT_ID,
+          label: this.$t('aiChat.defaultPromptOption'),
+          prompt: String(this.sessionConfig?.defaultPrompt || ''),
+          isDefault: true,
+          configuredIndex: -1
+        })
+      }
 
       const globalPrompts = this.$settings?.ai?.public?.globalPrompts || []
       globalPrompts.forEach((entry, configuredIndex) => {
@@ -333,7 +331,7 @@ export default {
       const query = String(this.promptSearch || '').trim().toLocaleLowerCase()
       if (query) {
         const matches = this.promptOptions.filter((option) => {
-          return `${option.label}\n${option.prompt}`.toLocaleLowerCase().includes(query)
+          return !option.isDefault && option.label.toLocaleLowerCase().includes(query)
         })
         return matches.length ? [{ id: 'results', label: this.$t('aiChat.searchResults'), icon: 'search', options: matches }] : []
       }

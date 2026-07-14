@@ -143,6 +143,43 @@ describe('AiChatDrawer prompt selection', () => {
     expect(wrapper.find('.ai-chat-prompt-browser').element.children[1].classList).toContain('ai-chat-prompt-search')
   })
 
+  it('shows global prompts when assisting selected text', async () => {
+    const wrapper = createWrapper({ settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = {
+      title: 'AI - Description',
+      selectedText: 'text to improve',
+      outputType: 'html',
+      mode: 'selection',
+      requestParams: {}
+    }
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.ai-chat-prompt-browser').exists()).toBe(true)
+    expect(wrapper.find('.ai-chat-prompt-results').exists()).toBe(true)
+    expect(wrapper.vm.promptOptions.map(({ id }) => id)).toEqual(globalPrompts.map(({ id }) => id))
+    expect(wrapper.vm.promptSections[0].options).toHaveLength(5)
+    expect(wrapper.vm.promptSections.some(({ id }) => id === 'default')).toBe(false)
+    expect(wrapper.find('.ai-chat-input textarea').attributes('placeholder')).toBe('Ask the AI to rewrite the selection...')
+  })
+
+  it('keeps global prompts browsable after a selected-text discussion starts', async () => {
+    const wrapper = createWrapper({ settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = {
+      title: 'AI - Description',
+      selectedText: 'text to improve',
+      outputType: 'html',
+      mode: 'selection',
+      requestParams: {}
+    }
+    store.conversation.messages.push({ role: 'user', content: 'Make this clearer' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.ai-chat-prompt-browser').exists()).toBe(false)
+    expect(wrapper.find('.ai-chat-prompt-selector').exists()).toBe(true)
+  })
+
   it('pins the field default, ranks five globals, and leaves remaining prompts browsable', () => {
     const wrapper = createWrapper({ settings: promptSettings() })
     const store = useAiGenerationStore()
@@ -158,7 +195,7 @@ describe('AiChatDrawer prompt selection', () => {
     expect(wrapper.vm.promptSections[2]).toMatchObject({ label: 'All prompts', icon: 'format_list_bulleted' })
   })
 
-  it('searches prompt labels and instruction text across the full prompt list', () => {
+  it('searches prompt labels without matching instruction text', () => {
     const wrapper = createWrapper({ settings: promptSettings() })
     const store = useAiGenerationStore()
     store.sessionConfig = { title: 'AI', defaultPrompt: 'Field instruction', mode: 'field', requestParams: {} }
@@ -166,8 +203,11 @@ describe('AiChatDrawer prompt selection', () => {
     wrapper.vm.promptSearch = 'prompt 2'
     expect(wrapper.vm.promptSections[0].options.map(({ id }) => id)).toEqual(['prompt-2'])
 
+    wrapper.vm.promptSearch = 'field default'
+    expect(wrapper.vm.promptSections).toEqual([])
+
     wrapper.vm.promptSearch = 'into french'
-    expect(wrapper.vm.promptSections[0].options.map(({ id }) => id)).toEqual(['prompt-7'])
+    expect(wrapper.vm.promptSections).toEqual([])
 
     wrapper.vm.promptSearch = 'does not exist'
     expect(wrapper.vm.promptSections).toEqual([])
