@@ -949,6 +949,7 @@ export default {
   border-color: #41405a;
 }
 
+.body--dark .ai-chat-message--user .q-message-text,
 .body--dark .ai-chat-message--user .q-message-text-content {
   background: #383755 !important;
   border-color: #4b4a70;
@@ -956,7 +957,7 @@ export default {
 }
 
 .body--dark .ai-chat-message--user .q-message-text--sent:last-child::before {
-  border-left-color: #383755;
+  border-bottom-color: #383755;
 }
 
 .body--dark .ai-chat-message--assistant .q-message-text-content {
