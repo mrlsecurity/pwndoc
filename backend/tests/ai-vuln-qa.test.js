@@ -3,7 +3,8 @@ const {
     runVulnerabilityStructuralChecks,
     getVulnerabilityDetail,
     formatVulnerabilityLocation,
-    buildVulnerabilitySnapshot
+    buildVulnerabilitySnapshot,
+    runAllVulnerabilitiesQa
 } = require('../src/lib/ai-vuln-qa');
 
 module.exports = function() {
@@ -18,7 +19,8 @@ module.exports = function() {
                     title: 'SQL Injection',
                     description: '<p>SQLi in login form.</p>',
                     observation: '<p>Observed during testing.</p>',
-                    remediation: '<p>Use parameterized queries.</p>'
+                    remediation: '<p>Use parameterized queries.</p>',
+                    references: ['https://example.com/a', 'https://example.com/shared']
                 }]
             },
             {
@@ -29,7 +31,8 @@ module.exports = function() {
                     title: 'sql injection',
                     description: '<p>Different content.</p>',
                     observation: '<p>Other observation.</p>',
-                    remediation: '<p>Other remediation.</p>'
+                    remediation: '<p>Other remediation.</p>',
+                    references: ['https://example.com/shared']
                 }]
             },
             {
@@ -40,7 +43,8 @@ module.exports = function() {
                     title: 'Stored XSS',
                     description: '<p>SQLi in login form.</p>',
                     observation: '<p>Observed during testing.</p>',
-                    remediation: '<p>Use parameterized queries.</p>'
+                    remediation: '<p>Use parameterized queries.</p>',
+                    references: ['https://example.com/b']
                 }]
             }
         ];
@@ -98,17 +102,124 @@ module.exports = function() {
 
         it('should flag missing core vulnerability fields', () => {
             const issues = runVulnerabilityStructuralChecks({
-                status: 2,
-                details: [{
-                    locale: 'en',
-                    title: 'Incomplete Template'
-                }]
+                details: [{ locale: 'en', title: 'Incomplete' }]
             }, {
                 locale: 'en',
-                title: 'Incomplete Template'
+                title: 'Incomplete',
+                description: '',
+                observation: '',
+                remediation: ''
             });
 
-            expect(issues.some((issue) => issue.title === 'Missing description')).toBe(true);
+            expect(issues.some((issue) => /description/i.test(issue.title))).toBe(true);
+            expect(issues.some((issue) => /remediation/i.test(issue.title))).toBe(true);
+        });
+
+        it('should batch programmatical checks across the vulnerability catalog', async () => {
+            const result = await runAllVulnerabilitiesQa({
+                vulnerabilities: sampleVulnerabilities,
+                locale: 'en',
+                settings: {
+                    ai: {
+                        public: {
+                            qaChecks: {
+                                completeness: true,
+                                references: false,
+                                imageCaptions: false,
+                                duplicates: true,
+                                aiDuplicates: false,
+                                aiUnlinkedTranslations: false,
+                                redaction: false,
+                                customer: false,
+                                instructions: false
+                            }
+                        }
+                    }
+                },
+                provider: 'openai',
+                scope: 'programmatic'
+            });
+
+            expect(result.mode).toBe('all');
+            expect(result.vulnerabilityCount).toBe(3);
+            expect(result.progress).toEqual({
+                done: true,
+                offset: 3,
+                total: 3,
+                processed: 3,
+                phase: 'templates'
+            });
+            expect(result.issues.some((issue) => issue.category === 'duplicates')).toBe(true);
+            expect(result.issues.some((issue) => issue.source === 'ai')).toBe(false);
+        });
+
+        it('should return partial progress for chunked catalog runs', async () => {
+            const settings = {
+                ai: {
+                    public: {
+                        qaChecks: {
+                            completeness: true,
+                            references: false,
+                            imageCaptions: false,
+                            duplicates: true,
+                            aiDuplicates: false,
+                            aiUnlinkedTranslations: false,
+                            redaction: false,
+                            customer: false,
+                            instructions: false
+                        }
+                    }
+                }
+            };
+
+            const first = await runAllVulnerabilitiesQa({
+                vulnerabilities: sampleVulnerabilities,
+                locale: 'en',
+                settings,
+                provider: 'openai',
+                scope: 'programmatic',
+                offset: 0,
+                limit: 1
+            });
+            expect(first.progress).toEqual({
+                done: false,
+                offset: 1,
+                total: 3,
+                processed: 1,
+                phase: 'templates'
+            });
+            expect(first.issues.some((issue) => issue.category === 'duplicates')).toBe(false);
+
+            const mid = await runAllVulnerabilitiesQa({
+                vulnerabilities: sampleVulnerabilities,
+                locale: 'en',
+                settings,
+                provider: 'openai',
+                scope: 'programmatic',
+                offset: 1,
+                limit: 2
+            });
+            expect(mid.progress).toEqual({
+                done: false,
+                offset: 3,
+                total: 3,
+                processed: 3,
+                phase: 'templates'
+            });
+            expect(mid.issues.some((issue) => issue.category === 'duplicates')).toBe(false);
+
+            const catalog = await runAllVulnerabilitiesQa({
+                vulnerabilities: sampleVulnerabilities,
+                locale: 'en',
+                settings,
+                provider: 'openai',
+                scope: 'programmatic',
+                offset: 3,
+                limit: 1
+            });
+            expect(catalog.progress.done).toBe(true);
+            expect(catalog.progress.phase).toBe('catalog');
+            expect(catalog.issues.some((issue) => issue.category === 'duplicates')).toBe(true);
         });
     });
 };

@@ -116,12 +116,24 @@ describe('qa-runs store', () => {
     expect(store.isRunning('draft')).toBe(false)
   })
 
-  it('keys are isolated from one another', async () => {
+  it('exposes setReport so progressive runners can update mid-flight', async () => {
     const store = useQaRunsStore()
-    await store.start('audit:1', () => Promise.resolve({ summary: 'A' }))
-    await store.start('audit:2', () => Promise.resolve({ summary: 'B' }))
+    const gate = deferred()
 
-    expect(store.getRun('audit:1').report).toEqual({ summary: 'A' })
-    expect(store.getRun('audit:2').report).toEqual({ summary: 'B' })
+    const startPromise = store.start('all:en', async ({ setReport }) => {
+      setReport({ summary: 'partial', issues: [{ title: 'A' }], progress: { done: false, processed: 1, total: 2 } })
+      await gate.promise
+      return { summary: 'final', issues: [{ title: 'A' }, { title: 'B' }], progress: { done: true, processed: 2, total: 2 } }
+    })
+
+    await Promise.resolve()
+    expect(store.isRunning('all:en')).toBe(true)
+    expect(store.getRun('all:en').report.summary).toBe('partial')
+    expect(store.getRun('all:en').report.issues).toHaveLength(1)
+
+    gate.resolve()
+    await startPromise
+    expect(store.getRun('all:en').report.summary).toBe('final')
+    expect(store.getRun('all:en').report.issues).toHaveLength(2)
   })
 })

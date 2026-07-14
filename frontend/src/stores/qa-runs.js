@@ -18,7 +18,14 @@ const emptyRun = () => ({
   error: ''
 })
 
-const resolveError = (err, fallback) => err?.response?.data?.datas || fallback || ''
+const resolveError = (err, fallback) => {
+  const datas = err?.response?.data?.datas
+  if (typeof datas === 'string' && datas.trim())
+    return datas
+  if (err?.code === 'ECONNABORTED' || /timeout/i.test(String(err?.message || '')))
+    return fallback || 'Request timed out'
+  return fallback || err?.message || ''
+}
 
 export const useQaRunsStore = defineStore('qaRuns', {
   state: () => ({
@@ -64,6 +71,7 @@ export const useQaRunsStore = defineStore('qaRuns', {
 
     // Start a QA run for a target. Ignored if that target already has a run in flight
     // (double-run guard). The report stays visible while running so panels can dim it.
+    // Runner may call setReport() to push partial results before finishing.
     async start(key, runner, { errorFallback = '' } = {}) {
       const run = this.ensureRun(key)
       if (run.running)
@@ -73,7 +81,14 @@ export const useQaRunsStore = defineStore('qaRuns', {
       run.startedAt = Date.now()
       run.error = ''
       try {
-        run.report = await runner() || {}
+        const result = await runner({
+          setReport: (data) => {
+            run.report = data || {}
+            run.loaded = true
+          }
+        })
+        if (result !== undefined)
+          run.report = result || {}
         run.loaded = true
       } catch (err) {
         run.error = resolveError(err, errorFallback)

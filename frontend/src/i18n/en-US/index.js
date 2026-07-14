@@ -997,6 +997,7 @@ export default {
         allWarningTitle: 'Run QA on all vulnerabilities?',
         allWarningMessage: 'This will run QA on {count} vulnerabilities for the current language. AI-enabled checks, including AI duplicate and unlinked translation detection, may consume a large number of tokens.',
         reviewedCount: 'Reviewed {count} vulnerabilities for the selected language.',
+        progressCount: 'Reviewed {processed} of {total} vulnerabilities…',
         location: {
             database: 'Vulnerability database'
         }

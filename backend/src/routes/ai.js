@@ -46,7 +46,8 @@ const {
     normalizeQaScope,
     mergeQaIssues,
     emptyQaCounts,
-    finalizeMergedQaResult
+    finalizeMergedQaResult,
+    isAiQaIssue
 } = require('../lib/ai-qa-checks');
 const {
     AI_PROVIDERS,
@@ -197,6 +198,38 @@ const handleAiGenerate = async function(req, res) {
     } catch (err) {
         Response.Internal(res, err);
     }
+};
+
+const appendScopedQaIssues = (existingIssues = [], incomingIssues = [], scope = 'all') => {
+    const existing = Array.isArray(existingIssues) ? existingIssues : [];
+    const incoming = Array.isArray(incomingIssues) ? incomingIssues : [];
+
+    if (scope === 'programmatic')
+        return [
+            ...existing.filter(isAiQaIssue),
+            ...existing.filter((issue) => !isAiQaIssue(issue)),
+            ...incoming.filter((issue) => !isAiQaIssue(issue))
+        ];
+
+    if (scope === 'ai')
+        return [
+            ...existing.filter((issue) => !isAiQaIssue(issue)),
+            ...existing.filter(isAiQaIssue),
+            ...incoming.filter(isAiQaIssue)
+        ];
+
+    return [...existing, ...incoming];
+};
+
+const parseQaChunkLimit = (value) => {
+    if (value === undefined || value === null || value === '')
+        return null;
+
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed))
+        return 40;
+
+    return Math.max(1, Math.min(100, parsed));
 };
 
 const emptyAuditQaResponse = () => ({
@@ -469,14 +502,20 @@ const handleVulnerabilityQa = async function(req, res) {
             vulnerabilityObjects,
             locale
         ) || {};
+        const offset = Math.max(0, Number.parseInt(req.body.offset, 10) || 0);
+        const limit = parseQaChunkLimit(req.body.limit);
         const partialResult = await runAllVulnerabilitiesQa({
             vulnerabilities: vulnerabilityObjects,
             locale: locale,
             settings: settings,
             provider: provider,
-            scope: scope
+            scope: scope,
+            offset: offset,
+            limit: limit
         });
-        const mergedIssues = mergeQaIssues(existingReport.issues || [], partialResult.issues || [], scope);
+        const mergedIssues = offset === 0 ?
+            mergeQaIssues(existingReport.issues || [], partialResult.issues || [], scope) :
+            appendScopedQaIssues(existingReport.issues || [], partialResult.issues || [], scope);
         const mergedResult = finalizeMergedQaResult(existingReport, partialResult, mergedIssues);
         const fingerprint = computeAllVulnerabilitiesQaFingerprint(vulnerabilityObjects, locale);
         const qaReport = buildVulnerabilityQaReportCache(fingerprint, mergedResult, {
@@ -489,10 +528,18 @@ const handleVulnerabilityQa = async function(req, res) {
         });
         await Settings.saveVulnerabilityQaReportForLocale(locale, qaReport);
 
-        Response.Ok(res, respondVulnerabilityQaReport(
-            formatVulnerabilityQaReportResponse(qaReport, { cached: false, outdated: false }),
-            { mode: 'all' }
-        ));
+        Response.Ok(res, {
+            ...respondVulnerabilityQaReport(
+                formatVulnerabilityQaReportResponse(qaReport, { cached: false, outdated: false }),
+                { mode: 'all' }
+            ),
+            progress: partialResult.progress || {
+                done: true,
+                offset: partialResult.vulnerabilityCount || 0,
+                total: partialResult.vulnerabilityCount || 0,
+                processed: partialResult.vulnerabilityCount || 0
+            }
+        });
     } catch (err) {
         Response.Internal(res, err);
     }
