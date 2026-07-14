@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { createTestWrapper } from '../../test-utils'
 import AiChatDrawer from '@/components/ai-chat-drawer.vue'
 import { useAiGenerationStore } from '@/stores/ai-generation'
@@ -14,7 +14,7 @@ vi.mock('@/boot/i18n', () => ({
   $t: (key) => key
 }))
 
-function createWrapper({ notify } = {}) {
+function createWrapper({ notify, settings = {} } = {}) {
   return createTestWrapper(AiChatDrawer, {
     global: {
       stubs: {
@@ -27,25 +27,33 @@ function createWrapper({ notify } = {}) {
           template: '<div><slot /></div>'
         },
         'q-input': {
-          props: ['readonly', 'disable'],
-          template: '<div><textarea :readonly="readonly" :disabled="disable" /><slot name="append" /></div>'
+          props: ['readonly', 'disable', 'placeholder'],
+          template: '<div><textarea :readonly="readonly" :disabled="disable" :placeholder="placeholder" /><slot name="prepend" /><slot name="append" /></div>'
         },
         'q-btn-toggle': true,
         'q-btn': {
           props: ['label'],
-          template: '<button @click="$emit(\'click\')">{{ label }}</button>'
+          template: '<button @click="$emit(\'click\')">{{ label }}<slot /></button>'
         },
-        'q-menu': true,
+        'q-menu': {
+          template: '<div class="ai-chat-prompt-menu"><slot /></div>',
+          methods: {
+            updatePosition() {}
+          }
+        },
         'q-list': true,
+        'q-card': true,
+        'q-avatar': true,
         'q-item': true,
         'q-item-section': true,
+        'q-item-label': true,
         'q-spinner-dots': true
       },
       directives: {
         'close-popup': {}
       },
       mocks: {
-        $settings: {},
+        $settings: settings,
         // The shared test setup doesn't install Quasar's Notify plugin, so $q.notify
         // isn't a real function unless a test needs to assert on it.
         ...(notify ? { $q: { notify } } : {})
@@ -62,13 +70,31 @@ function createWrapper({ notify } = {}) {
           anchorCollapsed: 'The selected text was removed. The draft will be inserted at its original position.',
           anchorLost: 'The original selection could not be tracked.',
           defaultPromptPlaceholder: 'Ask the AI to update this field...',
+          askAnything: 'Ask anything',
+          defaultPromptOption: 'Field default',
+          promptSelectLabel: 'Prompt template',
+          howCanIHelp: 'How can I help?',
           inputPlaceholder: 'Ask the AI to rewrite the selection...',
           originalResponse: 'Original response',
           previewChanges: 'Preview changes',
           reviewDefaultPrompt: 'Ask the AI to help with this field.',
+          quickPrompts: 'Quick prompts',
+          quickPromptsHint: 'Choose a prompt.',
+          searchPrompts: 'Search prompts...',
+          searchResults: 'Search results',
+          fieldPrompt: 'Field prompt',
+          defaultPromptHint: 'Uses the predefined instructions configured for this field.',
+          usePrompt: 'Use',
+          recentPrompts: 'Recent',
+          allPrompts: 'All prompts',
+          browsePrompts: 'Browse prompts',
+          noPromptsFound: 'No prompts match your search.',
           selectedText: 'Selected text',
           send: 'Send',
           sendHint: 'Tip: Press Ctrl+Enter to send.',
+          stop: 'Stop generating',
+          generating: 'Generating content...',
+          updatedDraft: 'Updated draft',
           startPrompt: 'Ask the AI to rewrite or improve the selected text.',
           you: 'You'
         }
@@ -76,6 +102,125 @@ function createWrapper({ notify } = {}) {
     }
   })
 }
+
+beforeEach(() => {
+  localStorage.clear()
+  vi.clearAllMocks()
+})
+
+const globalPrompts = Array.from({ length: 7 }, (_, index) => ({
+  id: `prompt-${index + 1}`,
+  label: `Prompt ${index + 1}`,
+  prompt: index === 6 ? 'Translate this content into French.' : `Instruction ${index + 1}`,
+  enabled: true
+}))
+
+function promptSettings(prompts = globalPrompts) {
+  return { ai: { public: { globalPrompts: prompts } } }
+}
+
+describe('AiChatDrawer prompt selection', () => {
+  it('shows the searchable empty-state browser with a blank Ask anything input', async () => {
+    const wrapper = createWrapper({ settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = {
+      title: 'AI - Description',
+      defaultPrompt: 'Write the field description.',
+      outputType: 'html',
+      mode: 'field',
+      requestParams: {}
+    }
+    await wrapper.vm.$nextTick()
+
+    expect(store.conversation.userInput).toBe('')
+    expect(wrapper.find('.ai-chat-prompt-browser').exists()).toBe(true)
+    expect(wrapper.find('.ai-chat-prompt-greeting').text()).toBe('How can I help?')
+    expect(wrapper.find('.ai-chat-conversation').classes()).toContain('ai-chat-conversation--prompt-browser')
+    expect(wrapper.find('.ai-chat-prompt-results').classes()).toContain('ai-chat-prompt-results--fill')
+    expect(wrapper.find('.ai-chat-prompt-selector').exists()).toBe(false)
+    expect(wrapper.find('.ai-chat-input textarea').attributes('placeholder')).toBe('Ask anything')
+    expect(wrapper.find('.ai-chat-input__prompt-toggle').exists()).toBe(false)
+    expect(wrapper.find('.ai-chat-prompt-browser').element.children[1].classList).toContain('ai-chat-prompt-search')
+  })
+
+  it('pins the field default, ranks five globals, and leaves remaining prompts browsable', () => {
+    const wrapper = createWrapper({ settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', defaultPrompt: 'Field instruction', mode: 'field', requestParams: {} }
+    wrapper.vm.promptUsage = { 'prompt-7': 4, 'prompt-6': 2 }
+
+    expect(wrapper.vm.promptSections[0].options.map(({ id }) => id)).toEqual(['__default__'])
+    expect(wrapper.vm.promptSections[1].options.map(({ id }) => id)).toEqual([
+      'prompt-7', 'prompt-6', 'prompt-1', 'prompt-2', 'prompt-3'
+    ])
+    expect(wrapper.vm.promptSections[2].options.map(({ id }) => id)).toEqual(['prompt-4', 'prompt-5'])
+    expect(wrapper.vm.promptSections[1]).toMatchObject({ label: 'Recent', icon: 'history' })
+    expect(wrapper.vm.promptSections[2]).toMatchObject({ label: 'All prompts', icon: 'format_list_bulleted' })
+  })
+
+  it('searches prompt labels and instruction text across the full prompt list', () => {
+    const wrapper = createWrapper({ settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', defaultPrompt: 'Field instruction', mode: 'field', requestParams: {} }
+
+    wrapper.vm.promptSearch = 'prompt 2'
+    expect(wrapper.vm.promptSections[0].options.map(({ id }) => id)).toEqual(['prompt-2'])
+
+    wrapper.vm.promptSearch = 'into french'
+    expect(wrapper.vm.promptSections[0].options.map(({ id }) => id)).toEqual(['prompt-7'])
+
+    wrapper.vm.promptSearch = 'does not exist'
+    expect(wrapper.vm.promptSections).toEqual([])
+  })
+
+  it('fills but does not send the selected prompt', () => {
+    const wrapper = createWrapper({ settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', defaultPrompt: 'Field instruction', mode: 'field', requestParams: {} }
+
+    wrapper.vm.selectPrompt('prompt-2')
+
+    expect(store.conversation.userInput).toBe('Instruction 2')
+    expect(store.conversation.messages).toEqual([])
+    expect(wrapper.vm.selectedPromptId).toBe('prompt-2')
+  })
+
+  it('replaces the empty-state browser with the below-input selector after discussion starts', async () => {
+    const wrapper = createWrapper({ settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', defaultPrompt: 'Field instruction', mode: 'field', requestParams: {} }
+    store.conversation.messages.push({ role: 'user', content: 'Question' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.ai-chat-prompt-browser').exists()).toBe(false)
+    expect(wrapper.find('.ai-chat-prompt-selector').exists()).toBe(true)
+    expect(wrapper.find('.ai-chat-prompt-menu').element.firstElementChild.classList).toContain('ai-chat-prompt-results')
+    expect(wrapper.find('.ai-chat-prompt-menu').element.lastElementChild.querySelector('.ai-chat-prompt-search')).not.toBeNull()
+
+    wrapper.find('.ai-chat-prompt-selector').element.getBoundingClientRect = () => ({ width: 288 })
+    wrapper.vm.preparePromptMenu()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.ai-chat-prompt-menu').attributes('style')).toContain('width: 288px')
+    expect(wrapper.find('.ai-chat-prompt-menu').attributes('style')).toContain('max-width: 288px')
+
+    const updatePosition = vi.spyOn(wrapper.vm.$refs.promptMenu, 'updatePosition')
+    wrapper.vm.promptSearch = 'prompt 2'
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(updatePosition).toHaveBeenCalled()
+  })
+
+  it('ignores malformed usage history', () => {
+    localStorage.setItem('ai_prompt_usage', '{broken')
+    const wrapper = createWrapper({ settings: promptSettings() })
+
+    wrapper.vm.loadPromptUsage()
+
+    expect(wrapper.vm.promptUsage).toEqual({})
+  })
+})
 
 describe('AiChatDrawer formatDraftPreview', () => {
   it('uses the shared gradient treatment for assisted-writing chrome and primary actions', async () => {
@@ -411,6 +556,47 @@ describe('AiChatDrawer partial apply from a preview selection', () => {
 })
 
 describe('AiChatDrawer send/stop generation', () => {
+  it('records a selected global prompt only after a successful response and resets the selection', async () => {
+    const wrapper = createWrapper({ settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = {
+      title: 'AI',
+      defaultPrompt: 'Field instruction',
+      outputType: 'html',
+      mode: 'field',
+      requestParams: {}
+    }
+    wrapper.vm.selectPrompt('prompt-3')
+    AiService.generateFieldDraft.mockResolvedValue({ data: { datas: { draft: '<p>ok</p>', reply: '' } } })
+
+    await wrapper.vm.sendMessage()
+
+    expect(JSON.parse(localStorage.getItem('ai_prompt_usage'))).toEqual({ 'prompt-3': 1 })
+    expect(wrapper.vm.promptUsage).toEqual({ 'prompt-3': 1 })
+    expect(wrapper.vm.selectedPromptId).toBeNull()
+  })
+
+  it('does not record prompt usage when generation fails and preserves the selection for retry', async () => {
+    const notify = vi.fn()
+    const wrapper = createWrapper({ notify, settings: promptSettings() })
+    const store = useAiGenerationStore()
+    store.sessionConfig = {
+      title: 'AI',
+      defaultPrompt: 'Field instruction',
+      outputType: 'html',
+      mode: 'field',
+      requestParams: {}
+    }
+    wrapper.vm.selectPrompt('prompt-4')
+    AiService.generateFieldDraft.mockRejectedValue(new Error('boom'))
+
+    await wrapper.vm.sendMessage()
+
+    expect(localStorage.getItem('ai_prompt_usage')).toBeNull()
+    expect(wrapper.vm.selectedPromptId).toBe('prompt-4')
+    expect(store.conversation.userInput).toBe('Instruction 4')
+  })
+
   it('keeps the stop button interactive while making the prompt read-only', async () => {
     const wrapper = createWrapper()
     const store = useAiGenerationStore()
@@ -419,7 +605,7 @@ describe('AiChatDrawer send/stop generation', () => {
     await wrapper.vm.$nextTick()
 
     const input = wrapper.find('.ai-chat-input textarea')
-    const stopButton = wrapper.find('button[aria-label="aiChat.stop"]')
+    const stopButton = wrapper.find('button[aria-label="Stop generating"]')
     const cancel = vi.fn()
     wrapper.vm.cancelTokenSource = { cancel }
 
@@ -454,10 +640,10 @@ describe('AiChatDrawer send/stop generation', () => {
 
   it('stopGeneration cancels the in-flight request, restores the input, and shows no error notify', async () => {
     const notify = vi.fn()
-    const wrapper = createWrapper({ notify })
+    const wrapper = createWrapper({ notify, settings: promptSettings() })
     const store = useAiGenerationStore()
-    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
-    store.conversation.userInput = 'do it'
+    store.sessionConfig = { title: 'AI', defaultPrompt: 'Field instruction', outputType: 'html', mode: 'field', requestParams: {} }
+    wrapper.vm.selectPrompt('prompt-5')
 
     AiService.generateFieldDraft.mockImplementation((payload, config) => {
       return new Promise((_resolve, reject) => {
@@ -475,7 +661,9 @@ describe('AiChatDrawer send/stop generation', () => {
 
     expect(store.loading).toBe(false)
     expect(store.conversation.messages).toHaveLength(0)
-    expect(store.conversation.userInput).toBe('do it')
+    expect(store.conversation.userInput).toBe('Instruction 5')
+    expect(wrapper.vm.selectedPromptId).toBe('prompt-5')
+    expect(localStorage.getItem('ai_prompt_usage')).toBeNull()
     expect(notify).not.toHaveBeenCalled()
   })
 

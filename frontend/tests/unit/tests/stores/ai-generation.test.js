@@ -13,6 +13,19 @@ beforeEach(() => {
 })
 
 describe('Apply does not end the session', () => {
+  it('opens a field session with blank input while retaining its default prompt', () => {
+    const store = useAiGenerationStore()
+    store.openSession({
+      title: 'AI - Description',
+      lockKey: 'finding:1:description',
+      mode: 'field',
+      defaultPrompt: 'Write a concise description.'
+    }).catch(() => {})
+
+    expect(store.sessionConfig.defaultPrompt).toBe('Write a concise description.')
+    expect(store.conversation.userInput).toBe('')
+  })
+
   it('applyFieldValue invokes onApply as many times as it is called, without closing the drawer', () => {
     const onApply = vi.fn()
     const store = useAiGenerationStore()

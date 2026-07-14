@@ -8,7 +8,11 @@
 
     <q-separator v-if="!isFieldMode" />
 
-    <div ref="messagesContainer" class="ai-chat-conversation col q-pa-md">
+    <div
+    ref="messagesContainer"
+    class="ai-chat-conversation col q-pa-md"
+    :class="{ 'ai-chat-conversation--prompt-browser': isFieldMode && !conversation.messages.length }"
+    >
       <q-card-section v-if="!isFieldMode" class="q-pa-none q-pb-sm">
         <div class="text-caption text-grey-7 q-mb-xs">{{ $t('aiChat.selectedText') }}</div>
         <div class="ai-chat-context ai-soft-surface text-body2">{{ sessionConfig.selectedText }}</div>
@@ -20,8 +24,33 @@
         </div>
       </q-card-section>
 
-      <div v-if="!conversation.messages.length" class="text-grey-6 text-center q-pa-md">
-        {{ isFieldMode ? $t('aiChat.reviewDefaultPrompt') : $t('aiChat.startPrompt') }}
+      <div v-if="!conversation.messages.length && !isFieldMode" class="text-grey-6 text-center q-pa-md">
+        {{ $t('aiChat.startPrompt') }}
+      </div>
+      <div v-else-if="!conversation.messages.length" class="ai-chat-prompt-browser">
+        <div class="ai-chat-prompt-greeting text-h6 text-weight-medium">
+          {{ $t('aiChat.howCanIHelp') }}
+        </div>
+        <q-input
+        v-model="promptSearch"
+        dense
+        outlined
+        clearable
+        class="ai-chat-prompt-search"
+        :placeholder="$t('aiChat.searchPrompts')"
+        :aria-label="$t('aiChat.searchPrompts')"
+        >
+          <template #prepend><q-icon name="search" /></template>
+        </q-input>
+        <ai-prompt-list
+        fill-available
+        :sections="promptSections"
+        :selected-prompt-id="selectedPromptId"
+        :no-results-label="$t('aiChat.noPromptsFound')"
+        :default-hint="$t('aiChat.defaultPromptHint')"
+        :use-label="$t('aiChat.usePrompt')"
+        @select="selectPrompt"
+        />
       </div>
       <div
       v-for="(message, index) in conversation.messages"
@@ -102,39 +131,14 @@
       outlined
       dense
       class="ai-chat-input"
-      :placeholder="isFieldMode ? $t('aiChat.defaultPromptPlaceholder') : $t('aiChat.inputPlaceholder')"
+      ref="messageInput"
+      :placeholder="isFieldMode ? $t('aiChat.askAnything') : $t('aiChat.inputPlaceholder')"
       :readonly="loading"
       @keydown.ctrl.enter.prevent="sendMessage"
       @keydown.meta.enter.prevent="sendMessage"
       >
         <template #append>
           <div class="ai-chat-input__actions row items-end no-wrap">
-            <q-btn
-            v-if="showPromptSelect"
-            flat
-            dense
-            round
-            icon="arrow_drop_down"
-            class="ai-chat-input__prompt-toggle text-deep-purple-12"
-            :aria-label="$t('aiChat.promptSelectLabel')"
-            :disable="loading"
-            >
-              <q-menu anchor="top right" self="bottom right">
-                <q-list dense class="ai-chat-prompt-menu">
-                  <q-item
-                  v-for="option in promptOptions"
-                  :key="option.id"
-                  clickable
-                  v-close-popup
-                  :active="selectedPromptId === option.id"
-                  active-class="text-deep-purple-12 text-weight-medium"
-                  @click="selectPrompt(option.id)"
-                  >
-                    <q-item-section>{{ option.label }}</q-item-section>
-                  </q-item>
-                </q-list>
-              </q-menu>
-            </q-btn>
             <q-btn
             v-if="loading"
             round
@@ -159,6 +163,52 @@
           </div>
         </template>
       </q-input>
+      <q-btn
+      v-if="isFieldMode && conversation.messages.length"
+      ref="promptSelector"
+      outline
+      no-caps
+      dense
+      icon="auto_awesome"
+      icon-right="expand_more"
+      class="ai-chat-prompt-selector full-width q-mt-sm"
+      :label="$t('aiChat.browsePrompts')"
+      :disable="loading"
+      :aria-label="$t('aiChat.promptSelectLabel')"
+      >
+        <q-menu
+        ref="promptMenu"
+        anchor="top left"
+        self="bottom left"
+        class="ai-chat-prompt-menu"
+        :style="promptMenuStyle"
+        @before-show="preparePromptMenu"
+        >
+          <ai-prompt-list
+          close-on-select
+          :sections="promptSections"
+          :selected-prompt-id="selectedPromptId"
+          :no-results-label="$t('aiChat.noPromptsFound')"
+          :default-hint="$t('aiChat.defaultPromptHint')"
+          :use-label="$t('aiChat.usePrompt')"
+          @select="selectPrompt"
+          />
+          <div class="q-pa-sm">
+            <q-input
+            v-model="promptSearch"
+            dense
+            outlined
+            clearable
+            autofocus
+            class="ai-chat-prompt-search"
+            :placeholder="$t('aiChat.searchPrompts')"
+            :aria-label="$t('aiChat.searchPrompts')"
+            >
+              <template #prepend><q-icon name="search" /></template>
+            </q-input>
+          </div>
+        </q-menu>
+      </q-btn>
       <div class="text-caption text-grey-6 q-mt-xs">{{ $t('aiChat.sendHint') }}</div>
     </q-card-section>
   </div>
@@ -173,18 +223,27 @@ import AiService from '@/services/ai'
 import AiFieldHelper from '@/services/ai-field-helper'
 import { normalizeEditorHtml, denormalizeEditorHtml } from '@/services/editor-html-renderer'
 import DraftDiff from '@/components/draft-diff.vue'
+import AiPromptList from '@/components/ai-prompt-list.vue'
 import { $t } from '@/boot/i18n'
+
+const PROMPT_USAGE_STORAGE_KEY = 'ai_prompt_usage'
+const DEFAULT_PROMPT_ID = '__default__'
+const MOST_USED_PROMPT_LIMIT = 5
 
 export default {
   name: 'AiChatDrawer',
 
   components: {
-    DraftDiff
+    DraftDiff,
+    AiPromptList
   },
 
   data() {
     return {
-      selectedPromptId: '__default__',
+      selectedPromptId: null,
+      promptSearch: '',
+      promptMenuWidth: null,
+      promptUsage: {},
       previewSelection: null,
       cancelTokenSource: null
     }
@@ -232,13 +291,15 @@ export default {
         return []
 
       const options = [{
-        id: '__default__',
+        id: DEFAULT_PROMPT_ID,
         label: this.$t('aiChat.defaultPromptOption'),
-        prompt: String(this.sessionConfig?.defaultPrompt || '')
+        prompt: String(this.sessionConfig?.defaultPrompt || ''),
+        isDefault: true,
+        configuredIndex: -1
       }]
 
       const globalPrompts = this.$settings?.ai?.public?.globalPrompts || []
-      globalPrompts.forEach((entry) => {
+      globalPrompts.forEach((entry, configuredIndex) => {
         if (entry?.enabled === false)
           return
 
@@ -250,21 +311,56 @@ export default {
         options.push({
           id: String(entry.id || label),
           label,
-          prompt
+          prompt,
+          isDefault: false,
+          configuredIndex
         })
       })
 
       return options
     },
 
-    showPromptSelect() {
-      return this.promptOptions.length > 1
+    rankedGlobalPrompts() {
+      return this.promptOptions
+        .filter((option) => !option.isDefault)
+        .sort((left, right) => {
+          const usageDifference = this.promptUsageCount(right.id) - this.promptUsageCount(left.id)
+          return usageDifference || left.configuredIndex - right.configuredIndex
+        })
+    },
+
+    promptSections() {
+      const query = String(this.promptSearch || '').trim().toLocaleLowerCase()
+      if (query) {
+        const matches = this.promptOptions.filter((option) => {
+          return `${option.label}\n${option.prompt}`.toLocaleLowerCase().includes(query)
+        })
+        return matches.length ? [{ id: 'results', label: this.$t('aiChat.searchResults'), icon: 'search', options: matches }] : []
+      }
+
+      const defaultPrompt = this.promptOptions.find((option) => option.isDefault)
+      const mostUsed = this.rankedGlobalPrompts.slice(0, MOST_USED_PROMPT_LIMIT)
+      const remaining = this.rankedGlobalPrompts.slice(MOST_USED_PROMPT_LIMIT)
+      return [
+        { id: 'default', label: this.$t('aiChat.fieldPrompt'), options: defaultPrompt ? [defaultPrompt] : [] },
+        { id: 'most-used', label: this.$t('aiChat.recentPrompts'), icon: 'history', options: mostUsed },
+        { id: 'all', label: this.$t('aiChat.allPrompts'), icon: 'format_list_bulleted', options: remaining }
+      ].filter((section) => section.options.length)
+    },
+
+    promptMenuStyle() {
+      if (!this.promptMenuWidth)
+        return undefined
+
+      const width = `${this.promptMenuWidth}px`
+      return { width, minWidth: width, maxWidth: width }
     }
   },
 
   watch: {
     sessionId() {
-      this.selectedPromptId = '__default__'
+      this.selectedPromptId = null
+      this.promptSearch = ''
       this.previewSelection = null
     },
 
@@ -276,10 +372,15 @@ export default {
     loading(value) {
       if (!value)
         this.scrollMessagesToBottom()
+    },
+
+    promptSearch() {
+      this.$nextTick(() => this.$refs.promptMenu?.updatePosition?.())
     }
   },
 
   mounted() {
+    this.loadPromptUsage()
     document.addEventListener('selectionchange', this.captureDraftSelection)
   },
 
@@ -326,6 +427,57 @@ export default {
         .replace(/>/g, '&gt;')
     },
 
+    loadPromptUsage() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(PROMPT_USAGE_STORAGE_KEY) || '{}')
+        if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+          this.promptUsage = {}
+          return
+        }
+
+        this.promptUsage = Object.fromEntries(Object.entries(parsed).filter(([, count]) => {
+          return Number.isInteger(count) && count >= 0
+        }))
+      } catch (_err) {
+        this.promptUsage = {}
+      }
+    },
+
+    promptUsageCount(promptId) {
+      return Number(this.promptUsage[promptId]) || 0
+    },
+
+    recordPromptUsage(promptId) {
+      if (!promptId || promptId === DEFAULT_PROMPT_ID)
+        return
+
+      const option = this.promptOptions.find((entry) => entry.id === promptId && !entry.isDefault)
+      if (!option)
+        return
+
+      this.promptUsage = {
+        ...this.promptUsage,
+        [promptId]: this.promptUsageCount(promptId) + 1
+      }
+
+      try {
+        localStorage.setItem(PROMPT_USAGE_STORAGE_KEY, JSON.stringify(this.promptUsage))
+      } catch (_err) {
+        // Prompt selection must keep working when browser storage is unavailable.
+      }
+    },
+
+    resetPromptSearch() {
+      this.promptSearch = ''
+    },
+
+    preparePromptMenu() {
+      this.resetPromptSearch()
+      const selector = this.$refs.promptSelector?.$el || this.$refs.promptSelector
+      const width = selector?.getBoundingClientRect?.().width
+      this.promptMenuWidth = Number.isFinite(width) && width > 0 ? Math.floor(width) : null
+    },
+
     selectPrompt(promptId) {
       const option = this.promptOptions.find((entry) => entry.id === promptId)
       if (!option)
@@ -335,6 +487,7 @@ export default {
       this.selectedPromptId = promptId
       store.conversation.userInput = option.prompt
       store.conversation.confirmedPromptInstruction = ''
+      this.$nextTick(() => this.$refs.messageInput?.focus?.())
     },
 
     async sendMessage() {
@@ -347,6 +500,7 @@ export default {
       // session starts while this request is in flight (including via Stop), a late
       // response or the abort itself must not touch a conversation that has moved on.
       const requestSessionId = store.sessionId
+      const requestPromptId = this.selectedPromptId
 
       store.conversation.messages.push({ role: 'user', content: prompt })
       store.conversation.userInput = ''
@@ -401,6 +555,8 @@ export default {
           previewDiffDraft: null,
           previewDiffCurrent: null
         })
+        this.recordPromptUsage(requestPromptId)
+        this.selectedPromptId = null
       } catch (err) {
         if (store.sessionId !== requestSessionId)
           return
@@ -600,6 +756,12 @@ export default {
   background: #fcfcff;
 }
 
+.ai-chat-conversation--prompt-browser {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .ai-chat-conversation :deep(.q-message-text),
 .ai-chat-conversation :deep(.q-message-text-content) {
   min-width: 0;
@@ -721,9 +883,33 @@ export default {
   gap: 2px;
 }
 
+.ai-chat-prompt-browser {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.ai-chat-prompt-greeting {
+  margin: 4px 0 14px;
+  color: #30275d;
+}
+
+.ai-chat-prompt-search :deep(.q-field__control) {
+  background: white;
+}
+
+.ai-chat-prompt-selector {
+  color: #512da8;
+  border-color: #d4cced;
+  background: #f8f7ff;
+}
+
 .ai-chat-prompt-menu {
-  min-width: 180px;
-  max-width: 280px;
+  max-width: calc(100vw - 32px);
+  max-height: min(70vh, 560px);
+  background: #fcfcff;
 }
 
 .ai-chat-composer {
@@ -733,6 +919,19 @@ export default {
 </style>
 
 <style>
+.ai-chat-prompt-section + .ai-chat-prompt-section {
+  margin-top: 8px;
+}
+
+.ai-chat-prompt-section__label {
+  padding: 4px 8px;
+}
+
+.ai-chat-prompt-item--active {
+  color: #4527a0;
+  background: #ede7f6;
+}
+
 .body--dark .ai-chat-context {
   border-color: #4b4b6b;
   background: #303047 !important;
@@ -771,5 +970,29 @@ export default {
 
 .body--dark .ai-chat-input .q-field__control {
   background: #29283b !important;
+}
+
+.body--dark .ai-chat-prompt-menu {
+  border-color: #484765;
+  background: #2d2c41;
+}
+
+.body--dark .ai-chat-prompt-greeting {
+  color: #f3f1ff;
+}
+
+.body--dark .ai-chat-prompt-search .q-field__control {
+  background: #29283b !important;
+}
+
+.body--dark .ai-chat-prompt-selector {
+  color: #d8ccff;
+  border-color: #555172;
+  background: #302e45;
+}
+
+.body--dark .ai-chat-prompt-item--active {
+  color: #d9ccff;
+  background: #3b3855;
 }
 </style>

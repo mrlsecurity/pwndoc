@@ -111,10 +111,6 @@ export const useAiGenerationStore = defineStore('aiGeneration', {
         this.selectionAnchor = null
         this.clearConversation()
 
-        const isFieldMode = !String(config.selectedText || '').trim()
-        if (isFieldMode)
-          this.conversation.userInput = String(config.defaultPrompt || '')
-
         this.sessionId += 1
         useAuditQaStore().close()
         this.drawerOpen = true
