@@ -50,7 +50,7 @@
                     color="secondary"
                     no-caps
                     :disable="vulnerabilityQaCount === 0"
-                    @click="confirmRunAllVulnerabilityQa()"
+                    @click="openRunAllQaModal()"
                     />
                     <q-space />
                     <q-btn-dropdown 

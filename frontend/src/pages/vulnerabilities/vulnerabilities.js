@@ -718,27 +718,13 @@ export default {
         },
 
         openRunAllQaModal: function() {
+            if (!this.vulnerabilityQaCount)
+                return
+
             this.runAllQaKey += 1
             this.runAllQaOpen = true
             this.$nextTick(() => {
                 this.$refs.runAllQaModal?.show()
-            })
-        },
-
-        confirmRunAllVulnerabilityQa: function() {
-            const count = this.vulnerabilityQaCount
-            if (!count)
-                return
-
-            Dialog.create({
-                title: $t('vulnerabilityQa.allWarningTitle'),
-                message: $t('vulnerabilityQa.allWarningMessage', { count: count }),
-                ok: { label: $t('vulnerabilityQa.runAll'), color: 'warning' },
-                cancel: { label: $t('btn.cancel'), color: 'white' },
-                focus: 'cancel'
-            })
-            .onOk(() => {
-                this.openRunAllQaModal()
             })
         },
 
