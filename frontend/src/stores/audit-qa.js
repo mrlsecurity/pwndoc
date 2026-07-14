@@ -32,6 +32,10 @@ export const useAuditQaStore = defineStore('auditQa', {
       return useQaRunsStore().startedAt(this.qaKey)
     },
 
+    runScope() {
+      return useQaRunsStore().runScope(this.qaKey)
+    },
+
     // Full-panel spinner only while first fetching a report with nothing to show yet.
     loading() {
       return useQaRunsStore().isLoading(this.qaKey) && !this.hasReport && !this.running
@@ -100,7 +104,7 @@ export const useAuditQaStore = defineStore('auditQa', {
       return useQaRunsStore().start(
         `audit:${auditId}`,
         () => AiService.runAuditQa(auditId, { scope }).then((response) => response.data.datas || {}),
-        { errorFallback: $t('auditQa.failed') }
+        { errorFallback: $t('auditQa.failed'), scope }
       )
     },
 

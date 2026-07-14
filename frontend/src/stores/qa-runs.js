@@ -14,6 +14,7 @@ const emptyRun = () => ({
   loading: false,
   loaded: false,
   startedAt: null,
+  scope: null,
   report: null,
   error: ''
 })
@@ -22,8 +23,11 @@ const resolveError = (err, fallback) => {
   const datas = err?.response?.data?.datas
   if (typeof datas === 'string' && datas.trim())
     return datas
-  if (err?.code === 'ECONNABORTED' || /timeout/i.test(String(err?.message || '')))
-    return fallback || 'Request timed out'
+
+  const status = err?.response?.status
+  if (status === 502 || status === 504 || err?.code === 'ECONNABORTED' || /timeout/i.test(String(err?.message || '')))
+    return 'The QA request timed out. Partial results may already be saved — try running again.'
+
   return fallback || err?.message || ''
 }
 
@@ -36,7 +40,8 @@ export const useQaRunsStore = defineStore('qaRuns', {
     getRun: (state) => (key) => (key ? state.runs[key] || null : null),
     isRunning: (state) => (key) => Boolean(key && state.runs[key]?.running),
     isLoading: (state) => (key) => Boolean(key && state.runs[key]?.loading),
-    startedAt: (state) => (key) => (key && state.runs[key]?.startedAt) || null
+    startedAt: (state) => (key) => (key && state.runs[key]?.startedAt) || null,
+    runScope: (state) => (key) => (key && state.runs[key]?.scope) || null
   },
 
   actions: {
@@ -72,14 +77,18 @@ export const useQaRunsStore = defineStore('qaRuns', {
     // Start a QA run for a target. Ignored if that target already has a run in flight
     // (double-run guard). The report stays visible while running so panels can dim it.
     // Runner may call setReport() to push partial results before finishing.
-    async start(key, runner, { errorFallback = '' } = {}) {
+    async start(key, runner, { errorFallback = '', scope = null } = {}) {
       const run = this.ensureRun(key)
       if (run.running)
         return
 
       run.running = true
       run.startedAt = Date.now()
+      run.scope = scope || null
       run.error = ''
+      // Drop finished progress so a new run doesn't show e.g. "394 of 394" from the previous pass.
+      if (run.report?.progress)
+        run.report = { ...run.report, progress: null }
       try {
         const result = await runner({
           setReport: (data) => {

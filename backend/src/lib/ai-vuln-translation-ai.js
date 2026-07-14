@@ -186,6 +186,13 @@ const runAiUnlinkedTranslationChecks = async ({
         .trim()
         .toLowerCase();
 
+    // full-catalog translation prompt ceiling (~proxy/LLM context); upgrade: batch the catalog
+    if (!targetEntry && catalog.length > 75) {
+        throw new Error(
+            `Catalog has ${catalog.length} templates; AI unlinked-translation review is skipped above 75 (upgrade: batched catalog prompts).`
+        );
+    }
+
     const aiResult = await runVulnerabilityUnlinkedTranslationQaWithProvider({
         provider: selectedProvider,
         settings: settings,

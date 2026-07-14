@@ -4,6 +4,7 @@
   :loading="loading"
   :running="running"
   :started-at="startedAt"
+  :run-scope="runScope"
   :error-message="errorMessage"
   :has-report-data="hasReport"
   :programmatic-ran-at="programmaticRanAt"
@@ -63,6 +64,7 @@ export default {
       'loading',
       'running',
       'startedAt',
+      'runScope',
       'issues',
       'hasReport',
       'programmaticRanAt',

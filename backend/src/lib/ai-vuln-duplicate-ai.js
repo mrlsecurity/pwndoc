@@ -9,6 +9,9 @@ const {
 
 const AI_DUPLICATE_SEVERITIES = ['error', 'warning', 'info'];
 const FIELD_SLICE_LENGTH = 2500;
+// per-type prompt ceiling (~proxy/LLM context). Pairs that span chunks of the
+// same oversized type may be missed — upgrade: overlapping windows or hierarchical merge.
+const TYPE_BATCH_CEILING = 75;
 
 const pushIssue = (issues, issue, source = 'ai') => {
     const normalized = normalizeIssue({
@@ -41,6 +44,48 @@ const buildVulnerabilityCatalog = (vulnerabilities = [], locale = '') => {
             return buildCatalogEntry(vulnerability, detail);
         })
         .filter(Boolean);
+};
+
+const normalizeTypeKey = (vulnType = '') => String(vulnType || '').trim() || '(no type)';
+
+const groupCatalogByType = (catalog = []) => {
+    const groups = new Map();
+
+    catalog.forEach((entry) => {
+        const key = normalizeTypeKey(entry.vulnType);
+        if (!groups.has(key))
+            groups.set(key, []);
+        groups.get(key).push(entry);
+    });
+
+    return groups;
+};
+
+const chunkByCeiling = (entries = [], ceiling = TYPE_BATCH_CEILING) => {
+    if (entries.length < 2)
+        return [];
+
+    if (entries.length <= ceiling)
+        return [entries];
+
+    const chunks = [];
+    for (let index = 0; index < entries.length; index += ceiling) {
+        const chunk = entries.slice(index, index + ceiling);
+        if (chunk.length >= 2)
+            chunks.push(chunk);
+    }
+    return chunks;
+};
+
+// Build prompt-sized batches: group by vulnType, then split oversized types.
+const buildDuplicateBatches = (catalog = []) => {
+    const batches = [];
+
+    groupCatalogByType(catalog).forEach((entries) => {
+        chunkByCeiling(entries).forEach((batch) => batches.push(batch));
+    });
+
+    return batches;
 };
 
 const normalizeAiDuplicateLocation = (location = '', fallbackTitle = '') => {
@@ -121,8 +166,8 @@ const normalizeAiDuplicateIssues = (issues = [], {
                 return;
 
             if (targetVulnerabilityId) {
-                const targetId = String(targetVulnerabilityId);
-                if (focalId !== targetId && resolvedRelatedId !== targetId)
+                const scopedTargetId = String(targetVulnerabilityId);
+                if (focalId !== scopedTargetId && resolvedRelatedId !== scopedTargetId)
                     return;
             }
 
@@ -160,11 +205,12 @@ const runAiDuplicateChecks = async ({
     locale = '',
     targetVulnerabilityId = null,
     settings = {},
-    provider = null
+    provider = null,
+    typeBatchIndex = null
 } = {}) => {
     const catalog = buildVulnerabilityCatalog(vulnerabilities, locale);
     if (catalog.length < 2)
-        return { issues: [], summary: '', model: null, provider: null };
+        return { issues: [], summary: '', model: null, provider: null, typeBatchCount: 0 };
 
     const targetId = String(targetVulnerabilityId || '').trim();
     const targetEntry = targetId ?
@@ -172,47 +218,108 @@ const runAiDuplicateChecks = async ({
         null;
 
     if (targetId && !targetEntry)
-        return { issues: [], summary: '', model: null, provider: null };
-
-    const candidates = targetEntry ?
-        catalog.filter((entry) => entry.vulnerabilityId !== targetEntry.vulnerabilityId) :
-        catalog;
-
-    if (targetEntry && !candidates.length)
-        return { issues: [], summary: '', model: null, provider: null };
+        return { issues: [], summary: '', model: null, provider: null, typeBatchCount: 0 };
 
     const selectedProvider = String(provider || settings?.ai?.public?.defaultProvider || AI_DEFAULT_PROVIDER)
         .trim()
         .toLowerCase();
 
-    const aiResult = await runVulnerabilityDuplicateQaWithProvider({
-        provider: selectedProvider,
-        settings: settings,
-        locale: locale,
-        mode: targetEntry ? 'single' : 'all',
-        target: targetEntry,
-        templates: targetEntry ? candidates : catalog
-    });
-
     const catalogById = new Map(catalog.map((entry) => [entry.vulnerabilityId, entry]));
     const catalogByTitle = new Map(catalog.map((entry) => [entry.title.toLowerCase(), entry]));
-    const issues = normalizeAiDuplicateIssues(aiResult.issues || [], {
-        targetVulnerabilityId: targetId || null,
-        catalogById: catalogById,
-        catalogByTitle: catalogByTitle
+
+    let batches = [];
+    if (targetEntry) {
+        const typeKey = normalizeTypeKey(targetEntry.vulnType);
+        const typeCandidates = catalog.filter((entry) => (
+            entry.vulnerabilityId !== targetEntry.vulnerabilityId &&
+            normalizeTypeKey(entry.vulnType) === typeKey
+        ));
+        batches = chunkByCeiling(typeCandidates).map((candidateBatch) => ({
+            mode: 'single',
+            target: targetEntry,
+            templates: candidateBatch
+        }));
+    } else {
+        batches = buildDuplicateBatches(catalog).map((batch) => ({
+            mode: 'all',
+            target: null,
+            templates: batch
+        }));
+    }
+
+    if (!batches.length)
+        return { issues: [], summary: '', model: null, provider: selectedProvider, typeBatchCount: 0 };
+
+    const selectedBatches = typeBatchIndex === null || typeBatchIndex === undefined ?
+        batches :
+        (batches[typeBatchIndex] ? [batches[typeBatchIndex]] : []);
+
+    if (!selectedBatches.length) {
+        return {
+            issues: [],
+            summary: '',
+            model: null,
+            provider: selectedProvider,
+            typeBatchCount: batches.length,
+            typeBatchIndex: typeBatchIndex
+        };
+    }
+
+    const allIssues = [];
+    const summaries = [];
+    let modelUsed = null;
+
+    for (const batch of selectedBatches) {
+        const aiResult = await runVulnerabilityDuplicateQaWithProvider({
+            provider: selectedProvider,
+            settings: settings,
+            locale: locale,
+            mode: batch.mode,
+            target: batch.target,
+            templates: batch.templates
+        });
+
+        allIssues.push(...normalizeAiDuplicateIssues(aiResult.issues || [], {
+            targetVulnerabilityId: targetId || null,
+            catalogById: catalogById,
+            catalogByTitle: catalogByTitle
+        }));
+
+        const summary = String(aiResult.summary || '').trim();
+        if (summary)
+            summaries.push(summary);
+
+        if (!modelUsed && aiResult.model)
+            modelUsed = aiResult.model;
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    allIssues.forEach((issue) => {
+        const key = `${issue.location}|${issue.title}|${issue.message}`;
+        if (seen.has(key))
+            return;
+        seen.add(key);
+        deduped.push(issue);
     });
 
     return {
-        issues: issues,
-        summary: String(aiResult.summary || '').trim(),
-        model: aiResult.model || null,
-        provider: selectedProvider
+        issues: deduped,
+        summary: summaries.join(' ').trim(),
+        model: modelUsed,
+        provider: selectedProvider,
+        typeBatchCount: batches.length,
+        typeBatchIndex: typeBatchIndex
     };
 };
 
 module.exports = {
+    TYPE_BATCH_CEILING,
     buildCatalogEntry,
     buildVulnerabilityCatalog,
+    normalizeTypeKey,
+    groupCatalogByType,
+    buildDuplicateBatches,
     normalizeAiDuplicateIssues,
     runAiDuplicateChecks
 };

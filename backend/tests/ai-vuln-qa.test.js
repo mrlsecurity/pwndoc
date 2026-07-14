@@ -186,7 +186,9 @@ module.exports = function() {
                 offset: 1,
                 total: 3,
                 processed: 1,
-                phase: 'templates'
+                phase: 'templates',
+                catalogBatch: 0,
+                typeBatchCount: 0
             });
             expect(first.issues.some((issue) => issue.category === 'duplicates')).toBe(false);
 
@@ -204,7 +206,9 @@ module.exports = function() {
                 offset: 3,
                 total: 3,
                 processed: 3,
-                phase: 'templates'
+                phase: 'templates',
+                catalogBatch: 0,
+                typeBatchCount: 0
             });
             expect(mid.issues.some((issue) => issue.category === 'duplicates')).toBe(false);
 
@@ -219,6 +223,7 @@ module.exports = function() {
             });
             expect(catalog.progress.done).toBe(true);
             expect(catalog.progress.phase).toBe('catalog');
+            expect(catalog.progress.catalogBatch).toBe(0);
             expect(catalog.issues.some((issue) => issue.category === 'duplicates')).toBe(true);
         });
     });

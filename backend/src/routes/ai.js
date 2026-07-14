@@ -504,6 +504,7 @@ const handleVulnerabilityQa = async function(req, res) {
         ) || {};
         const offset = Math.max(0, Number.parseInt(req.body.offset, 10) || 0);
         const limit = parseQaChunkLimit(req.body.limit);
+        const catalogBatch = Math.max(0, Number.parseInt(req.body.catalogBatch, 10) || 0);
         const partialResult = await runAllVulnerabilitiesQa({
             vulnerabilities: vulnerabilityObjects,
             locale: locale,
@@ -511,7 +512,8 @@ const handleVulnerabilityQa = async function(req, res) {
             provider: provider,
             scope: scope,
             offset: offset,
-            limit: limit
+            limit: limit,
+            catalogBatch: catalogBatch
         });
         const mergedIssues = offset === 0 ?
             mergeQaIssues(existingReport.issues || [], partialResult.issues || [], scope) :

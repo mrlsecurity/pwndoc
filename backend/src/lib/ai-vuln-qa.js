@@ -602,7 +602,8 @@ const runAllVulnerabilitiesQa = async ({
     provider,
     scope = 'all',
     offset = 0,
-    limit = null
+    limit = null,
+    catalogBatch = 0
 }) => {
     const qaChecks = getQaChecksFromSettings(settings);
 
@@ -655,10 +656,12 @@ const runAllVulnerabilitiesQa = async ({
 
     // Chunked: catalog-wide AI/refs/dups get their own final request so they don't share the
     // last template LLM batch. One-shot keeps legacy all-in-one behaviour for tests.
+    // Duplicate AI is batched by vulnType; chunked runs one type-batch (or unlinked) per HTTP request.
     const runCatalogNow = oneShot ? templatesDone : catalogOnly;
     const done = oneShot ?
         templatesDone :
         (catalogOnly || (templatesDone && !needsCatalogChecks));
+    const catalogBatchIndex = Math.max(0, Number(catalogBatch) || 0);
 
     const results = [];
     for (const entry of slice) {
@@ -678,7 +681,8 @@ const runAllVulnerabilitiesQa = async ({
     }
 
     let referenceLinkIssues = [];
-    if (runCatalogNow && runProgrammatic && isQaCheckEnabled(qaChecks, 'references') && targets.length) {
+    const runProgrammaticCatalog = runCatalogNow && (oneShot || catalogBatchIndex === 0);
+    if (runProgrammaticCatalog && runProgrammatic && isQaCheckEnabled(qaChecks, 'references') && targets.length) {
         try {
             const batchAudit = {
                 name: `Vulnerability templates (${locale})`,
@@ -700,27 +704,50 @@ const runAllVulnerabilitiesQa = async ({
         }
     }
 
-    const duplicateIssues = runCatalogNow && runProgrammatic && isQaCheckEnabled(qaChecks, 'duplicates') ?
+    const duplicateIssues = runProgrammaticCatalog && runProgrammatic && isQaCheckEnabled(qaChecks, 'duplicates') ?
         runDuplicateChecks({
             vulnerabilities: vulnerabilities,
             locale: locale
         }) :
         [];
 
+    const aiDuplicatesEnabled = runAi && isQaCheckEnabled(qaChecks, 'aiDuplicates');
+    const aiUnlinkedEnabled = runAi && isQaCheckEnabled(qaChecks, 'aiUnlinkedTranslations');
+
+    let typeBatchCount = 0;
+    if (runCatalogNow && aiDuplicatesEnabled) {
+        const {
+            buildVulnerabilityCatalog,
+            buildDuplicateBatches
+        } = require('./ai-vuln-duplicate-ai');
+        typeBatchCount = buildDuplicateBatches(buildVulnerabilityCatalog(vulnerabilities, locale)).length;
+    }
+
+    // Chunked catalog indices: [0..typeBatchCount) = type batches; typeBatchCount = unlinked (when enabled).
+    const unlinkedBatchIndex = typeBatchCount;
+    const catalogEndIndex = aiUnlinkedEnabled ?
+        unlinkedBatchIndex :
+        (typeBatchCount > 0 ? typeBatchCount - 1 : 0);
+    const moreCatalogBatches = !oneShot && catalogBatchIndex < catalogEndIndex;
+
     let aiDuplicateIssues = [];
     let aiDuplicateResult = null;
     let aiDuplicateSkippedReason = '';
+    const runDupBatchNow = runCatalogNow && aiDuplicatesEnabled &&
+        (oneShot || (typeBatchCount > 0 && catalogBatchIndex < typeBatchCount));
 
-    if (runCatalogNow && runAi && isQaCheckEnabled(qaChecks, 'aiDuplicates')) {
+    if (runDupBatchNow) {
         try {
             const { runAiDuplicateChecks } = require('./ai-vuln-duplicate-ai');
             aiDuplicateResult = await runAiDuplicateChecks({
                 vulnerabilities: vulnerabilities,
                 locale: locale,
                 settings: settings,
-                provider: provider
+                provider: provider,
+                typeBatchIndex: oneShot ? null : catalogBatchIndex
             });
             aiDuplicateIssues = aiDuplicateResult.issues || [];
+            typeBatchCount = aiDuplicateResult.typeBatchCount || typeBatchCount;
         } catch (err) {
             aiDuplicateSkippedReason = err?.message || String(err);
         }
@@ -729,8 +756,10 @@ const runAllVulnerabilitiesQa = async ({
     let aiUnlinkedTranslationIssues = [];
     let aiUnlinkedTranslationResult = null;
     let aiUnlinkedTranslationSkippedReason = '';
+    const runUnlinkedNow = runCatalogNow && aiUnlinkedEnabled &&
+        (oneShot || catalogBatchIndex === unlinkedBatchIndex);
 
-    if (runCatalogNow && runAi && isQaCheckEnabled(qaChecks, 'aiUnlinkedTranslations')) {
+    if (runUnlinkedNow) {
         try {
             const { runAiUnlinkedTranslationChecks } = require('./ai-vuln-translation-ai');
             aiUnlinkedTranslationResult = await runAiUnlinkedTranslationChecks({
@@ -752,7 +781,7 @@ const runAllVulnerabilitiesQa = async ({
         ...aiUnlinkedTranslationIssues
     ]));
 
-    if (runCatalogNow && runAi && isQaCheckEnabled(qaChecks, 'aiDuplicates') && !aiDuplicateResult && aiDuplicateSkippedReason) {
+    if (runDupBatchNow && !aiDuplicateResult && aiDuplicateSkippedReason) {
         pushIssue(issues, {
             severity: 'info',
             category: 'other',
@@ -762,7 +791,7 @@ const runAllVulnerabilitiesQa = async ({
         }, 'structural');
     }
 
-    if (runCatalogNow && runAi && isQaCheckEnabled(qaChecks, 'aiUnlinkedTranslations') && !aiUnlinkedTranslationResult && aiUnlinkedTranslationSkippedReason) {
+    if (runUnlinkedNow && !aiUnlinkedTranslationResult && aiUnlinkedTranslationSkippedReason) {
         pushIssue(issues, {
             severity: 'info',
             category: 'other',
@@ -784,6 +813,20 @@ const runAllVulnerabilitiesQa = async ({
         aiUnlinkedTranslationResult?.model ||
         null;
 
+    const progress = {
+        done: catalogOnly ? !moreCatalogBatches : done,
+        offset: nextOffset,
+        total: targets.length,
+        processed: nextOffset,
+        phase: catalogOnly ? 'catalog' : 'templates'
+    };
+    if (!oneShot) {
+        progress.catalogBatch = catalogOnly && moreCatalogBatches ?
+            catalogBatchIndex + 1 :
+            catalogBatchIndex;
+        progress.typeBatchCount = typeBatchCount;
+    }
+
     return {
         mode: 'all',
         locale: locale,
@@ -795,13 +838,7 @@ const runAllVulnerabilitiesQa = async ({
         provider: providerUsed,
         model: modelUsed,
         counts: buildIssueCounts(issues),
-        progress: {
-            done: done,
-            offset: nextOffset,
-            total: targets.length,
-            processed: nextOffset,
-            phase: catalogOnly ? 'catalog' : 'templates'
-        }
+        progress: progress
     };
 };
 

@@ -242,6 +242,10 @@ export default {
       type: [Number, String, Date],
       default: null
     },
+    runScope: {
+      type: String,
+      default: null
+    },
     errorMessage: {
       type: String,
       default: ''
@@ -349,9 +353,15 @@ export default {
     },
 
     inProgressLabel() {
+      const key = this.runScope === 'programmatic'
+        ? 'auditQa.runInProgressProgrammatic'
+        : this.runScope === 'ai'
+          ? 'auditQa.runInProgressAi'
+          : 'auditQa.runInProgress'
+
       return this.startedAtLabel
-        ? $t('auditQa.runInProgress', { time: this.startedAtLabel })
-        : $t('auditQa.runInProgressNoTime')
+        ? $t(`${key}`, { time: this.startedAtLabel })
+        : $t(`${key}NoTime`)
     },
 
     showOutdatedBanner() {
