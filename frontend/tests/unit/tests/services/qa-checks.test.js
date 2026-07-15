@@ -28,7 +28,7 @@ describe('qa-checks service', () => {
         expect(hasAnyQaCheckEnabled({})).toBe(true)
     })
 
-    it('detects when all programmatic checks are disabled', () => {
+    it('detects when all built-in checks are disabled', () => {
         expect(hasAnyProgrammaticQaCheckEnabled({
             completeness: false,
             references: false,

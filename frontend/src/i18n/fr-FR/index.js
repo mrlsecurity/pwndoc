@@ -565,7 +565,7 @@ export default {
         loadFailed: 'Failed to load AI integration settings',
         tabPrompts: 'Prompts',
         tabGuidelines: 'Writing Guidelines',
-        tabProgrammaticChecks: 'Programmatic Checks',
+        tabProgrammaticChecks: 'Built-in Checks',
         tabAiChecks: 'AI Checks',
         prompts: {
             description: "Configure generic prompts for the AI chat and field-specific generation prompts. Provider and model settings are managed in Settings.",
@@ -625,15 +625,17 @@ export default {
             saveFailed: 'Failed to update writing guidelines'
         },
         qa: {
-            description: 'Configure which automated checks run when validating audit reports and vulnerability templates.',
+            description: 'Configure which automated checks run when reviewing audit reports and vulnerability templates.',
             readOnly: 'Read-only: you do not have permission to update QA settings.',
             instructionsTitle: 'QA instructions',
             instructionsDescription: 'Organization-wide QA checklist provided to the AI reviewer. Use plain text or Markdown to define additional required sections, fields, and report rules beyond the minimum completeness check.',
             instructionsLabel: 'QA instructions',
             instructionsHint: 'Examples: require executive summary and scope sections, mandate remediation text, verify customer naming, retest wording.',
             save: 'Save QA settings',
+            saveInstructions: 'Save instructions',
             saveSuccess: 'QA settings updated successfully',
             saveFailed: 'Failed to update QA settings',
+            saved: 'Saved',
             checkCompletenessLabel: 'Report completeness',
             checkCompletenessDescription: 'Minimum report requirements only: audit name, at least one finding, and finding titles. Findings still in redaction are flagged as warnings.',
             checkReferencesLabel: 'Reference links',

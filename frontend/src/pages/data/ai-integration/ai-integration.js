@@ -93,6 +93,18 @@ const QA_CHECK_I18N_KEYS = {
     instructions: 'checkInstructions'
 };
 
+const QA_CHECK_ICONS = {
+    completeness: 'fact_check',
+    references: 'link',
+    imageCaptions: 'image',
+    duplicates: 'content_copy',
+    aiDuplicates: 'auto_awesome',
+    aiUnlinkedTranslations: 'language',
+    redaction: 'edit_note',
+    customer: 'business',
+    instructions: 'checklist'
+};
+
 // Mirrors what the backend actually scopes each check to (backend/src/lib/ai-qa.js and
 // ai-vuln-qa.js): only the duplicate-detection checks are vulnerability-database-only,
 // everything else runs against both audit reports and vulnerability templates.
@@ -113,6 +125,7 @@ const buildQaCheckOptions = (keys) => {
         key: key,
         label: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Label`),
         description: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Description`),
+        icon: QA_CHECK_ICONS[key],
         scopes: QA_CHECK_SCOPES[key] || []
     }));
 };
@@ -219,7 +232,10 @@ export default {
             qaInstructions: defaultMarkdownInstructions(),
             qaChecks: defaultQaChecks(),
             writingTab: 'prompts',
-            qaTab: 'programmatic',
+            qaInstructionsExpanded: false,
+            qaToggleSaveKey: null,
+            qaToggleSaveState: null,
+            qaToggleSaveTimer: null,
             treeFilter: '',
             tableFilter: '',
             selectedNode: 'generic',
@@ -239,6 +255,11 @@ export default {
 
     mounted: function() {
         this.getAiIntegration();
+    },
+
+    beforeUnmount: function() {
+        if (this.qaToggleSaveTimer)
+            clearTimeout(this.qaToggleSaveTimer);
     },
 
     watch: {
@@ -512,17 +533,6 @@ export default {
 
         hasQaChanges: function() {
             return this.hasQaInstructionChanges || this.hasQaCheckChanges;
-        },
-
-        programmaticQaTabDirty: function() {
-            return QA_PROGRAMMATIC_CHECK_KEYS.some((key) => this.qaChecks[key] !== this.orig.qaChecks[key]);
-        },
-
-        // The instructions textarea lives in the AI tab alongside the AI checks, so a
-        // change to either one is enough to mark this tab dirty.
-        aiQaTabDirty: function() {
-            return QA_AI_CHECK_KEYS.some((key) => this.qaChecks[key] !== this.orig.qaChecks[key]) ||
-                this.hasQaInstructionChanges;
         },
 
         qaDirtyCount: function() {
@@ -1017,6 +1027,53 @@ export default {
         refreshPublicSettings: async function() {
             if (this.$settings?.refresh)
                 await this.$settings.refresh();
+        },
+
+        clearQaToggleSaveStatus: function() {
+            if (this.qaToggleSaveTimer)
+                clearTimeout(this.qaToggleSaveTimer);
+            this.qaToggleSaveTimer = null;
+            this.qaToggleSaveKey = null;
+            this.qaToggleSaveState = null;
+        },
+
+        toggleQaCheck: function(key, enabled) {
+            if (!this.canEditQa || this.savingQaSettings)
+                return;
+
+            const previous = this.qaChecks[key];
+            this.qaChecks[key] = enabled;
+            this.savingQaSettings = true;
+            this.clearQaToggleSaveStatus();
+            this.qaToggleSaveKey = key;
+            this.qaToggleSaveState = 'saving';
+
+            return DataService.updateAiIntegration({
+                qaChecks: serializeQaChecks(this.qaChecks)
+            })
+            .then(async (data) => {
+                const returnedChecks = data.data.datas?.qaChecks;
+                this.qaChecks = returnedChecks ? serializeQaChecks(returnedChecks) : serializeQaChecks(this.qaChecks);
+                this.orig.qaChecks = serializeQaChecks(this.qaChecks);
+                await this.refreshPublicSettings();
+                this.qaToggleSaveState = 'saved';
+                this.qaToggleSaveTimer = setTimeout(() => {
+                    this.clearQaToggleSaveStatus();
+                }, 2000);
+            })
+            .catch((err) => {
+                this.qaChecks[key] = previous;
+                this.clearQaToggleSaveStatus();
+                Notify.create({
+                    message: err.response?.data?.datas || this.$t('aiIntegration.qa.saveFailed'),
+                    color: 'negative',
+                    textColor: 'white',
+                    position: 'top-right'
+                });
+            })
+            .finally(() => {
+                this.savingQaSettings = false;
+            });
         },
 
         saveQaSettings: function() {

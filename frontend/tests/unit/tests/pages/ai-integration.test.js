@@ -180,6 +180,8 @@ describe('AI Integration Page', () => {
           'q-item': true,
           'q-item-label': true,
           'q-item-section': true,
+          'q-avatar': true,
+          'q-expansion-item': true,
           'q-input': true,
           'q-toggle': true,
           'q-checkbox': true,
@@ -720,7 +722,7 @@ describe('AI Integration Page', () => {
     })
   })
 
-  describe('QA tab scope/dirty tracking', () => {
+  describe('QA checks', () => {
     it('should label check scopes for audit-vs-vulnerability', () => {
       const wrapper = createWrapper()
       expect(wrapper.vm.scopeLabel('audit')).toBe('aiIntegration.qa.scopeAudit')
@@ -744,49 +746,85 @@ describe('AI Integration Page', () => {
       expect(byKey.instructions).toEqual(['audit', 'vulnerability'])
     })
 
-    it('should be clean with no changes', async () => {
-      const wrapper = createWrapper()
+    it('should save a toggled check immediately without overwriting instruction edits', async () => {
+      const response = mockPayload()
+      response.qaChecks.completeness = false
+      DataService.updateAiIntegration.mockResolvedValueOnce({ data: { datas: response } })
+      const refresh = vi.fn().mockResolvedValue()
+      const wrapper = createWrapper({ props: { section: 'qa' }, mocks: { $settings: { refresh } } })
       await wrapper_flushPromises()
 
-      expect(wrapper.vm.programmaticQaTabDirty).toBe(false)
-      expect(wrapper.vm.aiQaTabDirty).toBe(false)
-      expect(wrapper.vm.qaDirtyCount).toBe(0)
+      wrapper.vm.qaInstructions.content = 'Unsaved instruction edit.'
+      vi.useFakeTimers()
+      const save = wrapper.vm.toggleQaCheck('completeness', false)
+
+      expect(wrapper.vm.qaToggleSaveKey).toBe('completeness')
+      expect(wrapper.vm.qaToggleSaveState).toBe('saving')
+      await save
+
+      expect(DataService.updateAiIntegration).toHaveBeenCalledWith({
+        qaChecks: expect.objectContaining({ completeness: false })
+      })
+      expect(wrapper.vm.qaChecks.completeness).toBe(false)
+      expect(wrapper.vm.orig.qaChecks.completeness).toBe(false)
+      expect(wrapper.vm.qaInstructions.content).toBe('Unsaved instruction edit.')
+      expect(wrapper.vm.qaToggleSaveState).toBe('saved')
+      expect(refresh).toHaveBeenCalled()
+
+      vi.advanceTimersByTime(1999)
+      expect(wrapper.vm.qaToggleSaveKey).toBe('completeness')
+      vi.advanceTimersByTime(1)
+      expect(wrapper.vm.qaToggleSaveKey).toBe(null)
+      expect(wrapper.vm.qaToggleSaveState).toBe(null)
+      vi.useRealTimers()
     })
 
-    it('should flag the programmatic tab when a programmatic check changes', async () => {
-      const wrapper = createWrapper()
+    it('should roll back a toggled check when automatic saving fails', async () => {
+      DataService.updateAiIntegration.mockRejectedValueOnce({ response: { data: { datas: 'Save failed' } } })
+      const wrapper = createWrapper({ props: { section: 'qa' } })
       await wrapper_flushPromises()
 
-      wrapper.vm.qaChecks.completeness = false
-      await wrapper.vm.$nextTick()
+      wrapper.vm.toggleQaCheck('completeness', false)
+      await wrapper_flushPromises()
 
-      expect(wrapper.vm.programmaticQaTabDirty).toBe(true)
-      expect(wrapper.vm.aiQaTabDirty).toBe(false)
-      expect(wrapper.vm.qaDirtyCount).toBe(1)
+      expect(wrapper.vm.qaChecks.completeness).toBe(true)
+      expect(wrapper.vm.qaToggleSaveKey).toBe(null)
+      expect(wrapper.vm.qaToggleSaveState).toBe(null)
+      expect(Notify.create).toHaveBeenCalledWith(expect.objectContaining({ message: 'Save failed' }))
     })
 
-    it('should flag the AI tab when an AI check changes', async () => {
-      const wrapper = createWrapper()
+    it('should render toggle save feedback without the old save footer', async () => {
+      let resolveSave
+      DataService.updateAiIntegration.mockReturnValueOnce(new Promise((resolve) => {
+        resolveSave = resolve
+      }))
+      const wrapper = createWrapper({
+        props: { section: 'qa' },
+        stubs: {
+          'q-card': { template: '<div><slot /></div>' },
+          'q-card-section': { template: '<div><slot /></div>' }
+        }
+      })
       await wrapper_flushPromises()
 
-      wrapper.vm.qaChecks.redaction = false
+      wrapper.vm.toggleQaCheck('completeness', false)
       await wrapper.vm.$nextTick()
 
-      expect(wrapper.vm.aiQaTabDirty).toBe(true)
-      expect(wrapper.vm.programmaticQaTabDirty).toBe(false)
-      expect(wrapper.vm.qaDirtyCount).toBe(1)
-    })
+      const savingStatus = wrapper.find('.qa-toggle-save-status')
+      expect(savingStatus.classes()).toContain('text-positive')
+      expect(savingStatus.text()).toBe('')
+      expect(savingStatus.find('q-spinner-stub').exists()).toBe(true)
+      expect(wrapper.html().indexOf('qa-toggle-save-status')).toBeLessThan(wrapper.html().indexOf('q-toggle-stub'))
+      expect(wrapper.find('.ai-integration-save-bar').exists()).toBe(false)
 
-    it('should flag the AI tab when only the QA instructions textarea changes', async () => {
-      const wrapper = createWrapper()
+      const response = mockPayload()
+      response.qaChecks.completeness = false
+      resolveSave({ data: { datas: response } })
       await wrapper_flushPromises()
 
-      wrapper.vm.qaInstructions.content = 'Always check the retest section.'
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.vm.aiQaTabDirty).toBe(true)
-      expect(wrapper.vm.programmaticQaTabDirty).toBe(false)
-      expect(wrapper.vm.qaDirtyCount).toBe(1)
+      const savedStatus = wrapper.find('.qa-toggle-save-status')
+      expect(savedStatus.text()).toBe('aiIntegration.qa.saved')
+      expect(savedStatus.find('q-icon-stub').attributes('name')).toBe('check_circle')
     })
   })
 

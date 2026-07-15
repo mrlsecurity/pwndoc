@@ -1,7 +1,12 @@
 <template>
     <div class="row">
         <div class="col-md-10 col-12 offset-md-1 q-mt-md ai-integration-page">
-            <div class="text-h5 text-weight-bold q-mb-md">{{ pageTitle }}</div>
+            <div
+            v-if="section !== 'qa' || loading || !aiEnabled || !canViewPage"
+            class="text-h5 text-weight-bold q-mb-md"
+            >
+                {{ pageTitle }}
+            </div>
 
             <div v-if="loading" class="q-pa-xl text-center">
                 <q-spinner color="primary" size="2em" />
@@ -435,42 +440,29 @@
             </template>
 
             <template v-else-if="section === 'qa'">
-                <div class="text-grey-8">
-                    {{ $t('aiIntegration.qa.description') }}
-                </div>
-                <div v-if="!canEditQa" class="text-orange q-mt-sm">
-                    {{ $t('aiIntegration.qa.readOnly') }}
-                </div>
-
-                <q-tabs
-                v-model="qaTab"
-                dense
-                no-caps
-                class="text-grey-8 ai-integration-tabs q-mt-md q-mb-sm"
-                active-color="primary"
-                indicator-color="primary"
-                align="left"
-                >
-                    <q-tab name="programmatic">
-                        <div class="row items-center no-wrap">
-                            <span>{{ $t('aiIntegration.tabProgrammaticChecks') }}</span>
-                            <q-badge v-if="programmaticQaTabDirty" rounded color="orange" class="q-ml-xs" />
+                <q-card bordered flat class="ai-integration-card qa-settings-card q-mb-md">
+                    <q-card-section class="q-pa-md">
+                        <div class="text-h5 text-weight-bold q-mb-md">{{ pageTitle }}</div>
+                        <div class="text-grey-8">
+                            {{ $t('aiIntegration.qa.description') }}
                         </div>
-                    </q-tab>
-                    <q-tab name="ai">
-                        <div class="row items-center no-wrap">
-                            <span>{{ $t('aiIntegration.tabAiChecks') }}</span>
-                            <q-badge v-if="aiQaTabDirty" rounded color="orange" class="q-ml-xs" />
+                        <div v-if="!canEditQa" class="text-orange q-mt-sm">
+                            {{ $t('aiIntegration.qa.readOnly') }}
                         </div>
-                    </q-tab>
-                </q-tabs>
 
-                <q-tab-panels v-model="qaTab" animated class="bg-transparent">
-                    <q-tab-panel name="programmatic" class="q-pa-none">
-                        <div class="row q-col-gutter-sm">
+                <section class="q-mt-lg" aria-labelledby="builtin-checks-heading">
+                    <div id="builtin-checks-heading" class="text-subtitle1 text-weight-bold q-mb-sm">
+                        {{ $t('aiIntegration.tabProgrammaticChecks') }}
+                    </div>
+                    <div class="row q-col-gutter-sm">
                             <div v-for="check in programmaticQaCheckOptions" :key="check.key" class="col-12">
                                 <q-card bordered flat class="q-pa-md ai-integration-card">
                                     <div class="row items-center q-col-gutter-md">
+                                        <div class="col-auto">
+                                            <q-avatar rounded size="44px" class="qa-check-avatar qa-check-avatar--builtin">
+                                                <q-icon :name="check.icon" size="22px" />
+                                            </q-avatar>
+                                        </div>
                                         <div class="col">
                                             <div class="text-subtitle2">{{ check.label }}</div>
                                             <div class="text-caption text-grey-7">{{ check.description }}</div>
@@ -488,32 +480,50 @@
                                                 </q-chip>
                                             </div>
                                         </div>
-                                        <div class="col-auto">
+                                        <div class="col-auto row items-center no-wrap">
+                                            <span
+                                            v-if="qaToggleSaveKey === check.key"
+                                            class="qa-toggle-save-status text-caption text-positive q-mr-sm row items-center no-wrap"
+                                            >
+                                                <q-spinner
+                                                v-if="qaToggleSaveState === 'saving'"
+                                                color="positive"
+                                                size="16px"
+                                                />
+                                                <template v-else>
+                                                    <q-icon name="check_circle" size="18px" class="q-mr-xs" />
+                                                    {{ $t('aiIntegration.qa.saved') }}
+                                                </template>
+                                            </span>
                                             <q-toggle
                                             color="green"
-                                            v-model="qaChecks[check.key]"
+                                            :model-value="qaChecks[check.key]"
                                             :label="$t('aiIntegration.prompts.enabled')"
-                                            :disable="!canEditQa"
+                                            :disable="!canEditQa || savingQaSettings"
+                                            @update:model-value="toggleQaCheck(check.key, $event)"
                                             />
                                         </div>
                                     </div>
                                 </q-card>
                             </div>
                         </div>
-                    </q-tab-panel>
+                </section>
 
-                    <q-tab-panel name="ai" class="q-pa-none">
-                        <div class="row q-col-gutter-sm q-mb-md">
+                <section class="q-mt-md" aria-labelledby="ai-checks-heading">
+                    <div id="ai-checks-heading" class="text-subtitle1 text-weight-bold q-mb-sm">
+                        {{ $t('aiIntegration.tabAiChecks') }}
+                    </div>
+                    <div class="row q-col-gutter-sm">
                             <div v-for="check in aiQaCheckOptions" :key="check.key" class="col-12">
-                                <q-card bordered flat class="q-pa-md ai-integration-card">
+                                <q-card v-if="check.key !== 'instructions'" bordered flat class="q-pa-md ai-integration-card">
                                     <div class="row items-center q-col-gutter-md">
+                                        <div class="col-auto">
+                                            <q-avatar rounded size="44px" class="qa-check-avatar qa-check-avatar--ai ai-soft-surface">
+                                                <q-icon :name="check.icon" size="22px" class="ai-gradient-icon" />
+                                            </q-avatar>
+                                        </div>
                                         <div class="col">
-                                            <div class="text-subtitle2">
-                                                {{ check.label }}
-                                                <q-chip dense square color="blue-1" text-color="blue-9" class="q-ml-sm">
-                                                    {{ $t('aiIntegration.qa.usesTokens') }}
-                                                </q-chip>
-                                            </div>
+                                            <div class="text-subtitle2">{{ check.label }}</div>
                                             <div class="text-caption text-grey-7">{{ check.description }}</div>
                                             <div class="q-mt-xs">
                                                 <q-chip
@@ -529,26 +539,89 @@
                                                 </q-chip>
                                             </div>
                                         </div>
-                                        <div class="col-auto">
+                                        <div class="col-auto row items-center no-wrap">
+                                            <span
+                                            v-if="qaToggleSaveKey === check.key"
+                                            class="qa-toggle-save-status text-caption text-positive q-mr-sm row items-center no-wrap"
+                                            >
+                                                <q-spinner
+                                                v-if="qaToggleSaveState === 'saving'"
+                                                color="positive"
+                                                size="16px"
+                                                />
+                                                <template v-else>
+                                                    <q-icon name="check_circle" size="18px" class="q-mr-xs" />
+                                                    {{ $t('aiIntegration.qa.saved') }}
+                                                </template>
+                                            </span>
                                             <q-toggle
                                             color="green"
-                                            v-model="qaChecks[check.key]"
+                                            :model-value="qaChecks[check.key]"
                                             :label="$t('aiIntegration.prompts.enabled')"
-                                            :disable="!canEditQa"
+                                            :disable="!canEditQa || savingQaSettings"
+                                            @update:model-value="toggleQaCheck(check.key, $event)"
                                             />
                                         </div>
                                     </div>
                                 </q-card>
-                            </div>
-                        </div>
 
-                        <q-card bordered flat class="q-pa-md ai-integration-card">
-                            <div class="text-subtitle2 q-mb-sm">{{ $t('aiIntegration.qa.instructionsTitle') }}</div>
-                            <div class="text-grey-8 q-mb-md">
-                                {{ $t('aiIntegration.qa.instructionsDescription') }}
-                            </div>
+                                <q-card v-else bordered flat class="ai-integration-card">
+                                    <q-expansion-item v-model="qaInstructionsExpanded" expand-separator>
+                                        <template v-slot:header>
+                                            <q-item-section avatar>
+                                                <q-avatar rounded size="44px" class="qa-check-avatar qa-check-avatar--ai ai-soft-surface">
+                                                    <q-icon :name="check.icon" size="22px" class="ai-gradient-icon" />
+                                                </q-avatar>
+                                            </q-item-section>
+                                            <q-item-section>
+                                                <q-item-label class="text-subtitle2">{{ check.label }}</q-item-label>
+                                                <q-item-label caption>{{ check.description }}</q-item-label>
+                                                <div class="q-mt-xs">
+                                                    <q-chip
+                                                    v-for="scope in check.scopes"
+                                                    :key="scope"
+                                                    dense
+                                                    square
+                                                    outline
+                                                    color="grey-7"
+                                                    class="q-mr-xs"
+                                                    >
+                                                        {{ scopeLabel(scope) }}
+                                                    </q-chip>
+                                                </div>
+                                            </q-item-section>
+                                            <q-item-section side @click.stop>
+                                                <div class="row items-center no-wrap">
+                                                    <span
+                                                    v-if="qaToggleSaveKey === check.key"
+                                                    class="qa-toggle-save-status text-caption text-positive q-mr-sm row items-center no-wrap"
+                                                    >
+                                                        <q-spinner
+                                                        v-if="qaToggleSaveState === 'saving'"
+                                                        color="positive"
+                                                        size="16px"
+                                                        />
+                                                        <template v-else>
+                                                            <q-icon name="check_circle" size="18px" class="q-mr-xs" />
+                                                            {{ $t('aiIntegration.qa.saved') }}
+                                                        </template>
+                                                    </span>
+                                                    <q-toggle
+                                                    color="green"
+                                                    :model-value="qaChecks[check.key]"
+                                                    :label="$t('aiIntegration.prompts.enabled')"
+                                                    :disable="!canEditQa || savingQaSettings"
+                                                    @update:model-value="toggleQaCheck(check.key, $event)"
+                                                    />
+                                                </div>
+                                            </q-item-section>
+                                        </template>
 
-                            <div class="q-gutter-md">
+                                        <q-card-section class="q-pt-md">
+                                            <div class="text-grey-8 q-mb-md">
+                                                {{ $t('aiIntegration.qa.instructionsDescription') }}
+                                            </div>
+                                            <div class="q-gutter-md">
                                 <q-input
                                 outlined
                                 type="textarea"
@@ -570,25 +643,27 @@
                                         ({{ qaInstructions.bedrockPromptCache.region }})
                                     </span>
                                 </q-banner>
+                                            </div>
+                                            <div class="row justify-end q-mt-md">
+                                                <q-btn
+                                                color="secondary"
+                                                unelevated
+                                                no-caps
+                                                :label="$t('aiIntegration.qa.saveInstructions')"
+                                                :disable="!canEditQa || !hasQaInstructionChanges || qaInstructions.delivery !== 'inline'"
+                                                :loading="savingQaSettings"
+                                                @click="saveQaSettings()"
+                                                />
+                                            </div>
+                                        </q-card-section>
+                                    </q-expansion-item>
+                                </q-card>
                             </div>
-                        </q-card>
-                    </q-tab-panel>
-                </q-tab-panels>
+                    </div>
+                </section>
+                    </q-card-section>
 
-                <div class="row justify-end items-center ai-integration-save-bar q-mt-md q-pa-md">
-                    <span v-if="qaDirtyCount > 0" class="text-caption text-grey-7 q-mr-md">
-                        {{ $t('aiIntegration.prompts.unsavedChanges', { count: qaDirtyCount }) }}
-                    </span>
-                    <q-btn
-                    color="secondary"
-                    unelevated
-                    no-caps
-                    :label="$t('aiIntegration.qa.save')"
-                    :disable="!canEditQa || !hasQaChanges || (hasQaInstructionChanges && qaInstructions.delivery !== 'inline')"
-                    :loading="savingQaSettings"
-                    @click="saveQaSettings()"
-                    />
-                </div>
+                </q-card>
             </template>
         </div>
     </div>
@@ -603,6 +678,15 @@
 
 .body--dark .ai-integration-card {
     background: var(--q-dark-page);
+}
+
+.qa-check-avatar--builtin {
+    background: rgba(0, 77, 64, 0.09);
+    color: #00695c;
+}
+
+.qa-check-avatar--ai {
+    color: var(--ai-gradient-end);
 }
 
 .ai-integration-columns {
@@ -629,18 +713,6 @@
 .redaction-guidelines-editor :deep(textarea),
 .qa-instructions-editor :deep(textarea) {
     line-height: 1.5;
-}
-
-.ai-integration-save-bar {
-    position: sticky;
-    bottom: 0;
-    background: white;
-    z-index: 1;
-    border-top: 1px solid rgba(0, 0, 0, 0.12);
-}
-
-.body--dark .ai-integration-save-bar {
-    background: var(--q-dark-page);
 }
 
 .prompt-row-active {
