@@ -1,247 +1,400 @@
 <template>
     <div class="row">
-        <div class="col-md-10 col-12 offset-md-1 q-mt-md">
-            <q-card>
-                <q-card-section class="bg-blue-grey-5 text-white">
-                    <div class="text-h6">{{ pageTitle }}</div>
-                </q-card-section>
+        <div class="col-md-10 col-12 offset-md-1 q-mt-md ai-integration-page">
+            <div class="text-h5 text-weight-bold q-mb-md">{{ pageTitle }}</div>
 
-                <q-card-section v-if="loading">
-                    <q-spinner color="primary" size="2em" />
-                </q-card-section>
+            <div v-if="loading" class="q-pa-xl text-center">
+                <q-spinner color="primary" size="2em" />
+            </div>
 
-                <template v-else-if="!aiEnabled">
-                    <q-card-section>
-                        <q-banner dense class="bg-orange-1 text-orange-10">
-                            {{ $t('aiIntegration.disabledBanner') }}
-                        </q-banner>
-                    </q-card-section>
-                </template>
+            <template v-else-if="!aiEnabled">
+                <q-banner dense rounded class="bg-orange-1 text-orange-10">
+                    {{ $t('aiIntegration.disabledBanner') }}
+                </q-banner>
+            </template>
 
-                <template v-else-if="!canViewPage">
-                    <q-card-section>
-                        <q-banner dense class="bg-orange-1 text-orange-10">
-                            {{ $t('aiIntegration.noPermissionBanner', { page: pageTitle }) }}
-                        </q-banner>
-                    </q-card-section>
-                </template>
+            <template v-else-if="!canViewPage">
+                <q-banner dense rounded class="bg-orange-1 text-orange-10">
+                    {{ $t('aiIntegration.noPermissionBanner', { page: pageTitle }) }}
+                </q-banner>
+            </template>
 
-                <template v-else-if="section === 'writing'">
-                    <q-tabs
-                    v-if="canReadPrompts || canReadGuidelines"
-                    v-model="writingTab"
-                    dense
-                    class="text-grey-8"
-                    active-color="primary"
-                    indicator-color="primary"
-                    align="left"
-                    >
-                        <q-tab v-if="canReadPrompts" name="prompts" :label="$t('aiIntegration.tabPrompts')" />
-                        <q-tab v-if="canReadGuidelines" name="guidelines" :label="$t('aiIntegration.tabGuidelines')" />
-                    </q-tabs>
+            <template v-else-if="section === 'writing'">
+                <q-tabs
+                v-if="canReadPrompts || canReadGuidelines"
+                v-model="writingTab"
+                dense
+                no-caps
+                class="text-grey-8 ai-integration-tabs q-mb-sm"
+                active-color="primary"
+                indicator-color="primary"
+                align="left"
+                >
+                    <q-tab v-if="canReadPrompts" name="prompts" :label="$t('aiIntegration.tabPrompts')" />
+                    <q-tab v-if="canReadGuidelines" name="guidelines" :label="$t('aiIntegration.tabGuidelines')" />
+                </q-tabs>
 
-                    <q-separator v-if="canReadPrompts || canReadGuidelines" />
+                <q-tab-panels
+                v-if="canReadPrompts || canReadGuidelines"
+                v-model="writingTab"
+                animated
+                class="bg-transparent"
+                >
+                    <q-tab-panel v-if="canReadPrompts" name="prompts" class="q-pa-none">
+                        <div class="text-grey-8 q-mt-md q-mb-md">
+                            {{ $t('aiIntegration.prompts.description') }}
+                        </div>
+                        <div v-if="!canEditPrompts" class="text-orange q-mt-sm q-mb-md">
+                            {{ $t('aiIntegration.prompts.readOnly') }}
+                        </div>
 
-                    <q-tab-panels
-                    v-if="canReadPrompts || canReadGuidelines"
-                    v-model="writingTab"
-                    animated
-                    >
-                        <q-tab-panel v-if="canReadPrompts" name="prompts" class="q-pa-none">
-                            <q-card-section>
-                                <div class="text-grey-8">
-                                    {{ $t('aiIntegration.prompts.description') }}
-                                </div>
-                                <div v-if="!canEditPrompts" class="text-orange q-mt-sm">
-                                    {{ $t('aiIntegration.prompts.readOnly') }}
-                                </div>
-                            </q-card-section>
+                        <div class="row q-col-gutter-md ai-integration-columns">
+                            <!-- Navigation tree -->
+                            <div class="col-12 col-md-3">
+                                <q-card bordered flat class="q-pa-md ai-integration-card full-height column no-wrap">
+                                    <div class="text-subtitle2 text-weight-medium q-mb-sm">
+                                        {{ $t('aiIntegration.prompts.categoriesAndFields') }}
+                                    </div>
 
-                            <q-separator />
-
-                            <q-card-section class="q-pa-none">
-                                <q-list bordered separator class="rounded-borders">
-                                    <q-expansion-item
-                                    default-opened
-                                    expand-separator
-                                    icon="public"
-                                    :label="$t('aiIntegration.prompts.globalLabel')"
-                                    :caption="$t('aiIntegration.prompts.globalCaption')"
+                                    <q-input
+                                    data-testid="prompt-tree-search"
+                                    outlined
+                                    dense
+                                    clearable
+                                    v-model="treeFilter"
+                                    :placeholder="$t('aiIntegration.prompts.searchAllPlaceholder')"
+                                    class="q-mb-sm"
                                     >
-                                        <q-card-section class="q-gutter-md">
-                                            <div v-if="globalPrompts.length === 0" class="text-grey-7">
-                                                {{ $t('aiIntegration.prompts.noGlobalPrompts') }}
+                                        <template v-slot:prepend>
+                                            <q-icon name="search" />
+                                        </template>
+                                    </q-input>
+
+                                    <q-tree
+                                    data-testid="prompt-tree"
+                                    :nodes="promptTreeNodes"
+                                    node-key="key"
+                                    :selected="selectedNode"
+                                    @update:selected="selectTreeNode"
+                                    v-model:expanded="expandedNodes"
+                                    no-selection-unset
+                                    no-connectors
+                                    selected-color="primary"
+                                    class="ai-integration-tree col ai-integration-scroll-y"
+                                    >
+                                        <template v-slot:default-header="prop">
+                                            <div class="row items-center no-wrap full-width">
+                                                <div class="ellipsis">{{ prop.node.label }}</div>
+                                                <q-space />
+                                                <span class="text-caption text-grey-6 q-ml-sm">{{ prop.node.count }}</span>
                                             </div>
+                                        </template>
+                                    </q-tree>
+                                </q-card>
+                            </div>
 
-                                            <q-card
-                                            v-for="(entry, index) in globalPrompts"
-                                            :key="entry.id"
-                                            bordered
-                                            flat
-                                            class="q-pa-md"
+                            <!-- Prompt list -->
+                            <div class="col">
+                                <q-card bordered flat class="q-pa-md ai-integration-card full-height column no-wrap">
+                                    <div class="row items-center q-col-gutter-sm q-mb-sm col-auto">
+                                        <div class="col">
+                                            <q-input
+                                            data-testid="prompt-table-search"
+                                            outlined
+                                            dense
+                                            clearable
+                                            v-model="tableFilter"
+                                            :placeholder="$t('aiIntegration.prompts.filterPlaceholder')"
                                             >
-                                                <div class="row items-center q-col-gutter-md q-mb-sm">
-                                                    <div class="col">
-                                                        <q-input
-                                                        outlined
-                                                        dense
-                                                        :label="$t('aiIntegration.prompts.label')"
-                                                        v-model="entry.label"
-                                                        :readonly="!canEditPrompts"
-                                                        :hint="$t('aiIntegration.prompts.labelHint')"
-                                                        :error="isGlobalPromptIncomplete(entry) && !entry.label.trim()"
-                                                        :error-message="$t('aiIntegration.prompts.labelRequired')"
-                                                        />
-                                                    </div>
-                                                    <div class="col-auto">
-                                                        <q-toggle
-                                                        v-model="entry.enabled"
-                                                        :label="$t('aiIntegration.prompts.enabled')"
-                                                        :disable="!canEditPrompts"
-                                                        />
-                                                    </div>
-                                                    <div v-if="canEditPrompts" class="col-auto">
-                                                        <q-btn
-                                                        flat
-                                                        round
-                                                        dense
-                                                        color="negative"
-                                                        icon="delete"
-                                                        :aria-label="$t('aiIntegration.prompts.removeGlobalPrompt')"
-                                                        @click="removeGlobalPrompt(index)"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <q-input
-                                                outlined
-                                                type="textarea"
-                                                autogrow
-                                                :label="$t('aiIntegration.prompts.prompt')"
-                                                v-model="entry.prompt"
-                                                :readonly="!canEditPrompts"
-                                                :disable="!entry.enabled"
-                                                :error="isGlobalPromptIncomplete(entry) && !entry.prompt.trim()"
-                                                :error-message="$t('aiIntegration.prompts.promptRequired')"
-                                                />
-                                            </q-card>
-
-                                            <div v-if="canEditPrompts">
+                                                <template v-slot:prepend>
+                                                    <q-icon name="search" />
+                                                </template>
+                                            </q-input>
+                                        </div>
+                                        <template v-if="isGenericNodeSelected && canEditPrompts">
+                                            <div v-if="selectedGenericIds.length > 0" class="col-auto">
                                                 <q-btn
-                                                flat
+                                                data-testid="delete-selected-generic"
+                                                color="negative"
+                                                outline
+                                                no-caps
+                                                icon="delete"
+                                                :label="$t('aiIntegration.prompts.deleteSelected', { count: selectedGenericIds.length })"
+                                                @click="deleteSelectedGenericPrompts()"
+                                                />
+                                            </div>
+                                            <div class="col-auto">
+                                                <q-btn
+                                                data-testid="add-generic-prompt"
                                                 color="primary"
+                                                unelevated
                                                 no-caps
                                                 icon="add"
                                                 :label="$t('aiIntegration.prompts.addGlobalPrompt')"
-                                                @click="addGlobalPrompt()"
+                                                @click="openNewGenericEditor()"
                                                 />
                                             </div>
-                                        </q-card-section>
-                                    </q-expansion-item>
-                                </q-list>
-                            </q-card-section>
-
-                            <q-card-section>
-                                <q-input
-                                outlined
-                                dense
-                                clearable
-                                v-model="promptFilter"
-                                :label="$t('aiIntegration.prompts.filterLabel')"
-                                :placeholder="$t('aiIntegration.prompts.filterPlaceholder')"
-                                >
-                                    <template v-slot:prepend>
-                                        <q-icon name="search" />
-                                    </template>
-                                </q-input>
-                            </q-card-section>
-
-                            <q-card-section class="q-pa-none">
-                                <q-list bordered separator class="rounded-borders">
-                                    <div v-if="promptFilter.trim() && filteredGroupedPromptSections.length === 0" class="text-grey-7 q-pa-md">
-                                        {{ $t('aiIntegration.prompts.noFieldsMatch') }}
+                                        </template>
                                     </div>
 
-                                    <q-expansion-item
-                                    v-for="group in filteredGroupedPromptSections"
-                                    :key="group.key"
-                                    :model-value="isGroupExpanded(group)"
-                                    @update:model-value="(val) => setGroupExpanded(group.key, val)"
-                                    expand-separator
-                                    icon="article"
-                                    :label="group.label"
-                                    :caption="$t('aiIntegration.prompts.fieldPromptCount', { count: group.mappings.length })"
-                                    >
-                                        <q-list separator>
-                                            <q-expansion-item
-                                            v-for="mapping in group.mappings"
-                                            :key="`${mapping.entityType}:${mapping.fieldKey}`"
-                                            dense-toggle
-                                            group="field"
+                                    <div class="col ai-integration-scroll-y">
+                                        <!-- Generic prompts: reorderable table -->
+                                        <template v-if="isGenericNodeSelected">
+                                            <div class="text-caption text-grey-7 q-mb-sm">
+                                                {{ $t('aiIntegration.prompts.globalCaption') }}
+                                            </div>
+
+                                            <div
+                                            v-if="filteredGenericPrompts.length === 0"
+                                            class="text-grey-7 q-pa-md text-center"
+                                            data-testid="generic-empty"
                                             >
-                                                <template v-slot:header>
-                                                    <q-item-section avatar>
+                                                {{ tableFilter.trim() ? $t('aiIntegration.prompts.noFieldsMatch') : $t('aiIntegration.prompts.noGlobalPrompts') }}
+                                            </div>
+
+                                            <q-markup-table v-else flat bordered separator="horizontal" data-testid="generic-list">
+                                                <thead>
+                                                    <tr>
+                                                        <th v-if="canReorderGeneric" class="generic-col-drag"></th>
+                                                        <th v-if="canEditPrompts" class="generic-col-checkbox"></th>
+                                                        <th class="text-left">{{ $t('aiIntegration.prompts.label') }}</th>
+                                                        <th class="text-center generic-col-toggle">{{ $t('aiIntegration.prompts.aiAssist') }}</th>
+                                                        <th class="text-left">{{ $t('aiIntegration.prompts.columnPrompt') }}</th>
+                                                    </tr>
+                                                </thead>
+                                                <draggable
+                                                v-model="genericDragList"
+                                                tag="tbody"
+                                                item-key="id"
+                                                handle=".drag-handle"
+                                                ghost-class="drag-ghost"
+                                                :disabled="!canReorderGeneric"
+                                                >
+                                                    <template #item="{ element: entry }">
+                                                        <tr
+                                                        class="cursor-pointer"
+                                                        :class="{ 'prompt-row-active': editor && editor.kind === 'generic' && !editor.isNew && editor.id === entry.id }"
+                                                        @click="openGenericEditor(entry)"
+                                                        >
+                                                            <td v-if="canReorderGeneric" @click.stop>
+                                                                <q-icon name="drag_indicator" class="drag-handle cursor-pointer" color="grey" />
+                                                            </td>
+                                                            <td v-if="canEditPrompts" @click.stop>
+                                                                <q-checkbox v-model="selectedGenericIds" :val="entry.id" dense />
+                                                            </td>
+                                                            <td>{{ entry.label }}</td>
+                                                            <td class="text-center" @click.stop>
+                                                                <q-toggle
+                                                                color="green"
+                                                                :model-value="entry.enabled"
+                                                                :disable="!canEditPrompts || savingPrompts"
+                                                                @update:model-value="(val) => toggleGenericEnabled(entry, val)"
+                                                                />
+                                                            </td>
+                                                            <td class="prompt-preview-cell text-grey-8">{{ entry.prompt }}</td>
+                                                        </tr>
+                                                    </template>
+                                                </draggable>
+                                            </q-markup-table>
+                                        </template>
+
+                                        <!-- Field prompts table -->
+                                        <q-table
+                                        v-else
+                                        data-testid="prompt-table"
+                                        flat
+                                        bordered
+                                        hide-bottom
+                                        :rows="fieldTableRows"
+                                        :columns="fieldTableColumns"
+                                        :row-key="(row) => `${row.entityType}:${row.fieldKey}`"
+                                        v-model:pagination="fieldTablePagination"
+                                        :no-data-label="$t('aiIntegration.prompts.noFieldsMatch')"
+                                        >
+                                            <template v-slot:body="props">
+                                                <q-tr
+                                                :props="props"
+                                                class="cursor-pointer"
+                                                :class="{ 'prompt-row-active': isEditorRow(props.row) }"
+                                                @click="openFieldEditor(props.row)"
+                                                >
+                                                    <q-td key="field" :props="props">
+                                                        {{ fieldDisplayLabel(props.row) }}
+                                                    </q-td>
+                                                    <q-td key="enabled" :props="props">
                                                         <q-toggle
-                                                        v-model="mapping.enabled"
-                                                        :disable="!canEditPrompts"
-                                                        @click.stop
+                                                        color="green"
+                                                        :model-value="props.row.enabled"
+                                                        :disable="!canEditPrompts || savingPrompts"
+                                                        @update:model-value="(val) => toggleFieldEnabled(props.row, val)"
                                                         />
-                                                    </q-item-section>
-                                                    <q-item-section>
-                                                        {{ fieldDisplayLabel(mapping) }}
-                                                    </q-item-section>
-                                                    <q-item-section side>
-                                                        <q-chip dense square color="grey-3" text-color="grey-8">
-                                                            {{ outputTypeLabel(mapping.outputType) }}
-                                                        </q-chip>
-                                                    </q-item-section>
-                                                </template>
+                                                    </q-td>
+                                                    <q-td key="preview" :props="props" class="prompt-preview-cell">
+                                                        <span class="text-grey-8">{{ props.row.prompt }}</span>
+                                                    </q-td>
+                                                </q-tr>
+                                            </template>
+                                        </q-table>
+                                    </div>
+                                </q-card>
+                            </div>
 
-                                                <q-card-section>
+                            <!-- Editor panel -->
+                            <div v-if="editor" class="col-12 col-md-4">
+                                <q-card bordered flat data-testid="prompt-editor" class="full-height column no-wrap">
+                                    <q-card-section class="row no-wrap col-auto">
+                                        <q-breadcrumbs class="text-grey-8 ellipsis q-pt-sm" gutter="xs">
+                                            <q-breadcrumbs-el
+                                            v-for="(crumb, index) in editorBreadcrumbs"
+                                            :key="index"
+                                            :label="crumb"
+                                            />
+                                        </q-breadcrumbs>
+                                        <q-space />
+                                        <q-btn
+                                        data-testid="editor-close"
+                                        flat
+                                        round
+                                        dense
+                                        icon="close"
+                                        @click="closeEditor()"
+                                        />
+                                    </q-card-section>
+
+                                    <q-separator />
+
+                                    <q-card-section class="q-gutter-md col ai-integration-scroll-y">
+                                        <template v-if="editor.kind === 'field'">
+                                            <div class="row items-center">
+                                                <q-toggle
+                                                data-testid="editor-enabled"
+                                                color="green"
+                                                v-model="editor.enabled"
+                                                :label="$t('aiIntegration.prompts.aiAssist')"
+                                                :disable="!canEditPrompts"
+                                                />
+                                                <q-space />
+                                                <q-chip v-if="editorSourceMapping" dense square color="grey-3" text-color="grey-8">
+                                                    {{ outputTypeLabel(editorSourceMapping.outputType) }}
+                                                </q-chip>
+                                            </div>
+
+                                            <q-input
+                                            data-testid="editor-prompt"
+                                            outlined
+                                            dense
+                                            type="textarea"
+                                            autogrow
+                                            counter
+                                            :label="$t('aiIntegration.prompts.prompt')"
+                                            v-model="editor.prompt"
+                                            :readonly="!canEditPrompts"
+                                            :disable="!editor.enabled"
+                                            :input-style="{ minHeight: '140px' }"
+                                            />
+
+                                            <q-banner dense rounded class="bg-grey-3 text-grey-8 prompt-variables-banner">
+                                                <div class="text-caption text-weight-medium text-grey-7 q-mb-xs">
+                                                    {{ $t('aiIntegration.prompts.variablesTitle') }}
+                                                </div>
+                                                <code
+                                                v-for="variable in editorPromptVariables"
+                                                :key="variable"
+                                                class="q-mr-sm"
+                                                >{{ variableToken(variable) }}</code>
+                                            </q-banner>
+                                        </template>
+
+                                        <template v-else>
+                                            <div class="row items-center" style="gap: 16px">
+                                                <div class="col">
                                                     <q-input
+                                                    data-testid="editor-label"
                                                     outlined
-                                                    type="textarea"
-                                                    autogrow
-                                                    :label="$t('aiIntegration.prompts.fieldPromptLabel', { field: fieldDisplayLabel(mapping) })"
-                                                    v-model="mapping.prompt"
+                                                    dense
+                                                    hide-bottom-space
+                                                    :label="$t('aiIntegration.prompts.label')"
+                                                    v-model="editor.label"
                                                     :readonly="!canEditPrompts"
-                                                    :disable="!mapping.enabled"
                                                     />
-                                                </q-card-section>
-                                            </q-expansion-item>
-                                        </q-list>
-                                    </q-expansion-item>
-                                </q-list>
-                            </q-card-section>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <q-toggle
+                                                    data-testid="editor-enabled"
+                                                    color="green"
+                                                    v-model="editor.enabled"
+                                                    :label="$t('aiIntegration.prompts.enabled')"
+                                                    :disable="!canEditPrompts"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div class="text-caption text-grey-7 q-mt-xs">
+                                                {{ $t('aiIntegration.prompts.labelHint') }}
+                                            </div>
 
-                            <q-card-actions align="right" class="prompts-save-bar">
-                                <span v-if="promptDirtyCount > 0" class="text-caption text-grey-7 q-mr-md">
-                                    {{ $t('aiIntegration.prompts.unsavedChanges', { count: promptDirtyCount }) }}
-                                </span>
-                                <q-btn
-                                color="secondary"
-                                unelevated
-                                no-caps
-                                :label="$t('aiIntegration.prompts.save')"
-                                :disable="!canEditPrompts || !hasPromptChanges"
-                                :loading="savingPrompts"
-                                @click="savePrompts()"
-                                />
-                            </q-card-actions>
-                        </q-tab-panel>
+                                            <q-input
+                                            data-testid="editor-prompt"
+                                            outlined
+                                            dense
+                                            type="textarea"
+                                            autogrow
+                                            counter
+                                            :label="$t('aiIntegration.prompts.prompt')"
+                                            v-model="editor.prompt"
+                                            :readonly="!canEditPrompts"
+                                            :input-style="{ minHeight: '140px' }"
+                                            />
+                                        </template>
+                                    </q-card-section>
 
-                        <q-tab-panel v-if="canReadGuidelines" name="guidelines" class="q-pa-none">
-                            <q-card-section>
-                                <div class="text-grey-8">
-                                    {{ $t('aiIntegration.guidelines.description') }}
-                                </div>
-                                <div v-if="!canEditGuidelines" class="text-orange q-mt-sm">
-                                    {{ $t('aiIntegration.guidelines.readOnly') }}
-                                </div>
-                            </q-card-section>
+                                    <q-card-actions v-if="canEditPrompts" class="q-px-md q-pb-md">
+                                        <q-btn
+                                        v-if="editor.kind === 'field' && editorSourceMapping && !editorSourceMapping.usingDefaultPrompt"
+                                        data-testid="editor-reset"
+                                        flat
+                                        no-caps
+                                        color="negative"
+                                        icon="restart_alt"
+                                        :label="$t('aiIntegration.prompts.resetToDefault')"
+                                        @click="resetFieldPrompt()"
+                                        />
+                                        <q-btn
+                                        v-if="editor.kind === 'generic' && !editor.isNew"
+                                        data-testid="editor-delete"
+                                        flat
+                                        no-caps
+                                        color="negative"
+                                        icon="delete"
+                                        :label="$t('aiIntegration.prompts.deletePrompt')"
+                                        @click="deleteEditorGenericPrompt()"
+                                        />
+                                        <q-space />
+                                        <q-btn
+                                        data-testid="editor-save"
+                                        color="primary"
+                                        unelevated
+                                        no-caps
+                                        :label="$t('aiIntegration.prompts.saveChanges')"
+                                        :disable="!editorCanSave"
+                                        :loading="savingEditor"
+                                        @click="saveEditor()"
+                                        />
+                                    </q-card-actions>
+                                </q-card>
+                            </div>
+                        </div>
+                    </q-tab-panel>
 
-                            <q-separator />
+                    <q-tab-panel v-if="canReadGuidelines" name="guidelines" class="q-pa-none">
+                        <q-card bordered flat class="q-pa-md ai-integration-card">
+                            <div class="text-grey-8">
+                                {{ $t('aiIntegration.guidelines.description') }}
+                            </div>
+                            <div v-if="!canEditGuidelines" class="text-orange q-mt-sm">
+                                {{ $t('aiIntegration.guidelines.readOnly') }}
+                            </div>
 
-                            <q-card-section class="q-gutter-md">
+                            <div class="q-gutter-md q-mt-md">
                                 <q-input
                                 outlined
                                 type="textarea"
@@ -263,7 +416,7 @@
                                         ({{ redactionGuidelines.bedrockPromptCache.region }})
                                     </span>
                                 </q-banner>
-                            </q-card-section>
+                            </div>
 
                             <q-card-actions align="right">
                                 <q-btn
@@ -276,54 +429,47 @@
                                 @click="saveRedactionGuidelines()"
                                 />
                             </q-card-actions>
-                        </q-tab-panel>
-                    </q-tab-panels>
-                </template>
+                        </q-card>
+                    </q-tab-panel>
+                </q-tab-panels>
+            </template>
 
-                <template v-else-if="section === 'qa'">
-                    <q-card-section>
-                        <div class="text-grey-8">
-                            {{ $t('aiIntegration.qa.description') }}
+            <template v-else-if="section === 'qa'">
+                <div class="text-grey-8">
+                    {{ $t('aiIntegration.qa.description') }}
+                </div>
+                <div v-if="!canEditQa" class="text-orange q-mt-sm">
+                    {{ $t('aiIntegration.qa.readOnly') }}
+                </div>
+
+                <q-tabs
+                v-model="qaTab"
+                dense
+                no-caps
+                class="text-grey-8 ai-integration-tabs q-mt-md q-mb-sm"
+                active-color="primary"
+                indicator-color="primary"
+                align="left"
+                >
+                    <q-tab name="programmatic">
+                        <div class="row items-center no-wrap">
+                            <span>{{ $t('aiIntegration.tabProgrammaticChecks') }}</span>
+                            <q-badge v-if="programmaticQaTabDirty" rounded color="orange" class="q-ml-xs" />
                         </div>
-                        <div v-if="!canEditQa" class="text-orange q-mt-sm">
-                            {{ $t('aiIntegration.qa.readOnly') }}
+                    </q-tab>
+                    <q-tab name="ai">
+                        <div class="row items-center no-wrap">
+                            <span>{{ $t('aiIntegration.tabAiChecks') }}</span>
+                            <q-badge v-if="aiQaTabDirty" rounded color="orange" class="q-ml-xs" />
                         </div>
-                    </q-card-section>
+                    </q-tab>
+                </q-tabs>
 
-                    <q-tabs
-                    v-model="qaTab"
-                    dense
-                    class="text-grey-8"
-                    active-color="primary"
-                    indicator-color="primary"
-                    align="left"
-                    >
-                        <q-tab name="programmatic">
-                            <div class="row items-center no-wrap">
-                                <span>{{ $t('aiIntegration.tabProgrammaticChecks') }}</span>
-                                <q-badge v-if="programmaticQaTabDirty" rounded color="orange" class="q-ml-xs" />
-                            </div>
-                        </q-tab>
-                        <q-tab name="ai">
-                            <div class="row items-center no-wrap">
-                                <span>{{ $t('aiIntegration.tabAiChecks') }}</span>
-                                <q-badge v-if="aiQaTabDirty" rounded color="orange" class="q-ml-xs" />
-                            </div>
-                        </q-tab>
-                    </q-tabs>
-
-                    <q-separator />
-
-                    <q-tab-panels v-model="qaTab" animated>
-                        <q-tab-panel name="programmatic" class="q-pa-none">
-                            <q-card-section class="q-gutter-sm">
-                                <q-card
-                                v-for="check in programmaticQaCheckOptions"
-                                :key="check.key"
-                                bordered
-                                flat
-                                class="q-pa-md"
-                                >
+                <q-tab-panels v-model="qaTab" animated class="bg-transparent">
+                    <q-tab-panel name="programmatic" class="q-pa-none">
+                        <div class="row q-col-gutter-sm">
+                            <div v-for="check in programmaticQaCheckOptions" :key="check.key" class="col-12">
+                                <q-card bordered flat class="q-pa-md ai-integration-card">
                                     <div class="row items-center q-col-gutter-md">
                                         <div class="col">
                                             <div class="text-subtitle2">{{ check.label }}</div>
@@ -344,6 +490,7 @@
                                         </div>
                                         <div class="col-auto">
                                             <q-toggle
+                                            color="green"
                                             v-model="qaChecks[check.key]"
                                             :label="$t('aiIntegration.prompts.enabled')"
                                             :disable="!canEditQa"
@@ -351,18 +498,14 @@
                                         </div>
                                     </div>
                                 </q-card>
-                            </q-card-section>
-                        </q-tab-panel>
+                            </div>
+                        </div>
+                    </q-tab-panel>
 
-                        <q-tab-panel name="ai" class="q-pa-none">
-                            <q-card-section class="q-gutter-sm">
-                                <q-card
-                                v-for="check in aiQaCheckOptions"
-                                :key="check.key"
-                                bordered
-                                flat
-                                class="q-pa-md"
-                                >
+                    <q-tab-panel name="ai" class="q-pa-none">
+                        <div class="row q-col-gutter-sm q-mb-md">
+                            <div v-for="check in aiQaCheckOptions" :key="check.key" class="col-12">
+                                <q-card bordered flat class="q-pa-md ai-integration-card">
                                     <div class="row items-center q-col-gutter-md">
                                         <div class="col">
                                             <div class="text-subtitle2">
@@ -388,6 +531,7 @@
                                         </div>
                                         <div class="col-auto">
                                             <q-toggle
+                                            color="green"
                                             v-model="qaChecks[check.key]"
                                             :label="$t('aiIntegration.prompts.enabled')"
                                             :disable="!canEditQa"
@@ -395,18 +539,16 @@
                                         </div>
                                     </div>
                                 </q-card>
-                            </q-card-section>
+                            </div>
+                        </div>
 
-                            <q-separator />
+                        <q-card bordered flat class="q-pa-md ai-integration-card">
+                            <div class="text-subtitle2 q-mb-sm">{{ $t('aiIntegration.qa.instructionsTitle') }}</div>
+                            <div class="text-grey-8 q-mb-md">
+                                {{ $t('aiIntegration.qa.instructionsDescription') }}
+                            </div>
 
-                            <q-card-section>
-                                <div class="text-subtitle2 q-mb-sm">{{ $t('aiIntegration.qa.instructionsTitle') }}</div>
-                                <div class="text-grey-8 q-mb-md">
-                                    {{ $t('aiIntegration.qa.instructionsDescription') }}
-                                </div>
-                            </q-card-section>
-
-                            <q-card-section class="q-gutter-md q-pt-none">
+                            <div class="q-gutter-md">
                                 <q-input
                                 outlined
                                 type="textarea"
@@ -428,26 +570,26 @@
                                         ({{ qaInstructions.bedrockPromptCache.region }})
                                     </span>
                                 </q-banner>
-                            </q-card-section>
-                        </q-tab-panel>
-                    </q-tab-panels>
+                            </div>
+                        </q-card>
+                    </q-tab-panel>
+                </q-tab-panels>
 
-                    <q-card-actions align="right" class="ai-integration-save-bar">
-                        <span v-if="qaDirtyCount > 0" class="text-caption text-grey-7 q-mr-md">
-                            {{ $t('aiIntegration.prompts.unsavedChanges', { count: qaDirtyCount }) }}
-                        </span>
-                        <q-btn
-                        color="secondary"
-                        unelevated
-                        no-caps
-                        :label="$t('aiIntegration.qa.save')"
-                        :disable="!canEditQa || !hasQaChanges || (hasQaInstructionChanges && qaInstructions.delivery !== 'inline')"
-                        :loading="savingQaSettings"
-                        @click="saveQaSettings()"
-                        />
-                    </q-card-actions>
-                </template>
-            </q-card>
+                <div class="row justify-end items-center ai-integration-save-bar q-mt-md q-pa-md">
+                    <span v-if="qaDirtyCount > 0" class="text-caption text-grey-7 q-mr-md">
+                        {{ $t('aiIntegration.prompts.unsavedChanges', { count: qaDirtyCount }) }}
+                    </span>
+                    <q-btn
+                    color="secondary"
+                    unelevated
+                    no-caps
+                    :label="$t('aiIntegration.qa.save')"
+                    :disable="!canEditQa || !hasQaChanges || (hasQaInstructionChanges && qaInstructions.delivery !== 'inline')"
+                    :loading="savingQaSettings"
+                    @click="saveQaSettings()"
+                    />
+                </div>
+            </template>
         </div>
     </div>
 </template>
@@ -455,13 +597,41 @@
 <script src="./ai-integration.js"></script>
 
 <style scoped>
+.ai-integration-card {
+    background: white;
+}
+
+.body--dark .ai-integration-card {
+    background: var(--q-dark-page);
+}
+
+.ai-integration-columns {
+    min-height: 0;
+}
+
+/* Set directly on each column rather than on the row: a wrapped flex row's
+   "align-items: stretch" doesn't reliably cap a child's cross size when a
+   sibling's content (e.g. a fully expanded tree) is taller than the viewport. */
+.ai-integration-columns > div {
+    height: calc(100vh - 240px);
+}
+
+.ai-integration-card.full-height {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.ai-integration-scroll-y {
+    min-height: 0;
+    overflow-y: auto;
+}
+
 .redaction-guidelines-editor :deep(textarea),
 .qa-instructions-editor :deep(textarea) {
     line-height: 1.5;
 }
 
-.ai-integration-save-bar,
-.prompts-save-bar {
+.ai-integration-save-bar {
     position: sticky;
     bottom: 0;
     background: white;
@@ -469,8 +639,57 @@
     border-top: 1px solid rgba(0, 0, 0, 0.12);
 }
 
-:deep(.body--dark) .ai-integration-save-bar,
-:deep(.body--dark) .prompts-save-bar {
+.body--dark .ai-integration-save-bar {
     background: var(--q-dark-page);
+}
+
+.prompt-row-active {
+    background: rgba(25, 118, 210, 0.08);
+}
+
+.body--dark .prompt-row-active {
+    background: rgba(144, 202, 249, 0.12);
+}
+
+.prompt-preview-cell {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.prompt-variables-banner code {
+    background: rgba(0, 0, 0, 0.06);
+    color: inherit;
+    white-space: nowrap;
+}
+
+.body--dark .prompt-variables-banner code {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.drag-ghost {
+    opacity: 0.5;
+}
+
+.generic-col-drag,
+.generic-col-checkbox {
+    width: 1%;
+}
+
+.generic-col-toggle {
+    width: 100px;
+}
+
+/* Tree: hide the built-in connector lines and give the selected node the same
+   flat highlight used for the active table/list row, instead of relying on
+   text color alone. */
+.ai-integration-tree :deep(.q-tree__node-header.q-tree__node--selected) {
+    background: rgba(25, 118, 210, 0.08);
+    border-radius: 4px;
+}
+
+.body--dark .ai-integration-tree :deep(.q-tree__node-header.q-tree__node--selected) {
+    background: rgba(144, 202, 249, 0.12);
 }
 </style>

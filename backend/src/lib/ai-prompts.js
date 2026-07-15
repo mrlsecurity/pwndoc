@@ -120,7 +120,9 @@ const buildCustomFieldCatalog = (customFields = [], entityType, displayFilter, l
             defaultPrompt: getDefaultPromptForField(field.label, outputType),
             source: 'custom-field',
             customFieldId: String(field._id),
-            customFieldType: String(field.fieldType || '')
+            customFieldType: String(field.fieldType || ''),
+            customFieldDisplay: String(field.display || ''),
+            customFieldDisplaySub: String(field.displaySub || '')
         };
     })
     .filter(Boolean)
@@ -133,7 +135,9 @@ const buildFindingFieldCatalog = (customFields = []) => {
             ...field,
             source: 'builtin',
             customFieldId: null,
-            customFieldType: null
+            customFieldType: null,
+            customFieldDisplay: null,
+            customFieldDisplaySub: null
         })),
         ...buildCustomFieldCatalog(customFields, 'finding', ['finding', 'vulnerability'], 'Finding Custom Field')
     ];
@@ -170,8 +174,11 @@ const buildPromptMappings = (fieldCatalog = [], promptRows = []) => {
             source: field.source,
             customFieldId: field.customFieldId,
             customFieldType: field.customFieldType,
+            customFieldDisplay: field.customFieldDisplay,
+            customFieldDisplaySub: field.customFieldDisplaySub,
             enabled: typeof promptRow?.enabled === 'boolean' ? promptRow.enabled : true,
-            prompt: configuredPrompt || field.defaultPrompt
+            prompt: configuredPrompt || field.defaultPrompt,
+            usingDefaultPrompt: !configuredPrompt || configuredPrompt === field.defaultPrompt
         };
     });
 }

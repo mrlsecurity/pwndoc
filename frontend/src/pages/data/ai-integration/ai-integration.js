@@ -1,7 +1,9 @@
 import { Notify, Dialog } from 'quasar';
+import draggable from 'vuedraggable';
 import DataService from '@/services/data';
 import { useUserStore } from '@/stores/user';
 import { $t } from '@/boot/i18n';
+import AiFieldHelper from '@/services/ai-field-helper';
 import {
     QA_PROGRAMMATIC_CHECK_KEYS,
     QA_AI_CHECK_KEYS
@@ -14,6 +16,47 @@ const OUTPUT_TYPE_LABEL_KEYS = {
 };
 
 const CUSTOM_FIELD_LABEL_PREFIX = /^(Finding|Section) Custom Field:\s*/;
+
+// Derived from the context objects services/ai-field-helper.js actually builds
+// (buildFindingAiContext / buildSectionAiContext), rather than a hand-kept copy
+// of their keys that could silently drift out of sync.
+const promptVariablesFor = (contextBuilder) => Object.keys(contextBuilder({})).filter((key) => key !== 'customFields');
+const FINDING_PROMPT_VARIABLES = promptVariablesFor(AiFieldHelper.buildFindingAiContext);
+const SECTION_PROMPT_VARIABLES = promptVariablesFor(AiFieldHelper.buildSectionAiContext);
+
+// Drives the three category branches of the prompt tree (Findings, Vulnerabilities,
+// Sections). Each has an "All categories" leaf keyed `<key>:all` plus one leaf per
+// custom-field category under `catPrefix`; Findings additionally has a "Built-in
+// fields" leaf since findings (unlike vulnerabilities/sections) have AI-assisted
+// built-in fields of their own.
+const TREE_PARENT_CONFIGS = [
+    {
+        key: 'findings',
+        labelKey: 'aiIntegration.prompts.nodeFindings',
+        catPrefix: 'findings:cat:',
+        extraLeaves: [
+            { key: 'findings:builtin', labelKey: 'aiIntegration.prompts.nodeBuiltinFields' },
+            { key: 'findings:all', labelKey: 'aiIntegration.prompts.nodeAllCategories' }
+        ]
+    },
+    {
+        key: 'vulnerabilities',
+        labelKey: 'aiIntegration.prompts.nodeVulnerabilities',
+        catPrefix: 'vulnerabilities:cat:',
+        extraLeaves: [
+            { key: 'vulnerabilities:all', labelKey: 'aiIntegration.prompts.nodeAllCategories' }
+        ]
+    },
+    {
+        key: 'sections',
+        labelKey: 'aiIntegration.prompts.nodeSections',
+        catPrefix: 'sections:sub:',
+        extraLeaves: [
+            { key: 'sections:all', labelKey: 'aiIntegration.prompts.nodeAllSections' }
+        ]
+    }
+];
+const TREE_PARENT_KEYS = TREE_PARENT_CONFIGS.map((config) => config.key);
 
 const userStore = useUserStore();
 
@@ -74,52 +117,30 @@ const buildQaCheckOptions = (keys) => {
     }));
 };
 
-const PROMPT_FIELD_SECTIONS = () => [
-    {
-        key: 'definition',
-        label: $t('aiIntegration.prompts.sectionDefinition'),
-        match: (mapping) => {
-            return mapping.entityType === 'finding' &&
-                ['description', 'observation', 'remediation', 'references'].includes(mapping.fieldKey);
-        }
-    },
-    {
-        key: 'proofs',
-        label: $t('aiIntegration.prompts.sectionProofs'),
-        match: (mapping) => mapping.entityType === 'finding' && mapping.fieldKey === 'poc'
-    },
-    {
-        key: 'finding-custom',
-        label: $t('aiIntegration.prompts.sectionFindingCustom'),
-        match: (mapping) => mapping.entityType === 'finding' && String(mapping.fieldKey || '').startsWith('custom-field:')
-    },
-    {
-        key: 'sections',
-        label: $t('aiIntegration.prompts.sectionSections'),
-        match: (mapping) => mapping.entityType === 'section'
-    }
-];
+const toMappingKey = (mapping) => `${mapping.entityType}:${mapping.fieldKey}`;
 
-const serializePromptMappings = (mappings = []) => {
-    return mappings
-    .map((mapping) => ({
-        entityType: String(mapping.entityType || ''),
-        fieldKey: String(mapping.fieldKey || ''),
-        enabled: mapping.enabled !== false,
-        prompt: String(mapping.prompt || '')
-    }))
-    .sort((a, b) => `${a.entityType}:${a.fieldKey}`.localeCompare(`${b.entityType}:${b.fieldKey}`));
+// Leaf node of the navigation tree a field prompt belongs to.
+const mappingNodeKey = (mapping) => {
+    if (mapping.entityType === 'section')
+        return mapping.customFieldDisplaySub ? `sections:sub:${mapping.customFieldDisplaySub}` : 'sections:all';
+
+    if (mapping.source === 'builtin')
+        return 'findings:builtin';
+
+    if (mapping.customFieldDisplay === 'vulnerability')
+        return mapping.customFieldDisplaySub ? `vulnerabilities:cat:${mapping.customFieldDisplaySub}` : 'vulnerabilities:all';
+
+    return mapping.customFieldDisplaySub ? `findings:cat:${mapping.customFieldDisplaySub}` : 'findings:all';
 };
 
 const serializeGlobalPrompts = (prompts = []) => {
-    return prompts
-    .map((entry) => ({
+    // Array order is meaningful: the AI chat drawer lists generic prompts in stored order.
+    return prompts.map((entry) => ({
         id: String(entry.id || ''),
         label: String(entry.label || ''),
         prompt: String(entry.prompt || ''),
         enabled: entry.enabled !== false
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    }));
 };
 
 const serializeMarkdownInstructions = (guidelines = {}) => ({
@@ -150,6 +171,10 @@ const createGlobalPromptId = () => {
 };
 
 export default {
+    components: {
+        draggable
+    },
+
     props: {
         section: {
             type: String,
@@ -159,7 +184,7 @@ export default {
     },
 
     beforeRouteLeave(to, from, next) {
-        if (this.hasPromptChanges || this.hasGuidelineChanges || this.hasQaChanges) {
+        if (this.editorDirty || this.hasGuidelineChanges || this.hasQaChanges) {
             Dialog.create({
                 title: $t('msg.thereAreUnsavedChanges'),
                 message: $t('msg.doYouWantToLeave'),
@@ -178,6 +203,7 @@ export default {
         return {
             loading: true,
             savingPrompts: false,
+            savingEditor: false,
             savingGuidelines: false,
             savingQaSettings: false,
             canEditPrompts: userStore.isAllowed('ai:prompts:update'),
@@ -194,11 +220,16 @@ export default {
             qaChecks: defaultQaChecks(),
             writingTab: 'prompts',
             qaTab: 'programmatic',
-            promptFilter: '',
-            openPromptGroups: {},
+            treeFilter: '',
+            tableFilter: '',
+            selectedNode: 'generic',
+            expandedNodes: [...TREE_PARENT_KEYS],
+            selectedGenericIds: [],
+            editor: null,
+            fieldTablePagination: {
+                rowsPerPage: 0
+            },
             orig: {
-                promptMappings: [],
-                globalPrompts: [],
                 redactionGuidelines: serializeMarkdownInstructions(),
                 qaInstructions: serializeMarkdownInstructions(),
                 qaChecks: serializeQaChecks()
@@ -208,6 +239,18 @@ export default {
 
     mounted: function() {
         this.getAiIntegration();
+    },
+
+    watch: {
+        treeFilter: function(value) {
+            if (String(value || '').trim())
+                this.expandedNodes = [...TREE_PARENT_KEYS];
+        },
+
+        selectedNode: function() {
+            this.tableFilter = '';
+            this.selectedGenericIds = [];
+        }
     },
 
     computed: {
@@ -229,81 +272,224 @@ export default {
             return buildQaCheckOptions(QA_AI_CHECK_KEYS);
         },
 
-        groupedPromptSections: function() {
-            const used = new Set();
+        // Tree leaves with total field count.
+        promptTreeLeaves: function() {
+            const leaves = new Map();
 
-            return PROMPT_FIELD_SECTIONS().map((section) => {
-                const mappings = this.promptMappings.filter((mapping) => {
-                    if (!section.match(mapping))
-                        return false;
+            this.promptMappings.forEach((mapping) => {
+                const key = mappingNodeKey(mapping);
+                leaves.set(key, (leaves.get(key) || 0) + 1);
+            });
 
-                    const key = `${mapping.entityType}:${mapping.fieldKey}`;
-                    if (used.has(key))
-                        return false;
+            return leaves;
+        },
 
-                    used.add(key);
-                    return true;
-                });
+        // The tree search only matches node/category names, not the fields they contain.
+        promptTreeNodes: function() {
+            const filterText = String(this.treeFilter || '').trim().toLowerCase();
+            const leaves = this.promptTreeLeaves;
 
+            const labelMatches = (label) => !filterText || String(label).toLowerCase().includes(filterText);
+
+            // showAll bypasses the filter for a node's children once its own parent
+            // label already matched - the whole matched branch is shown.
+            const leafNode = (key, label, showAll) => {
+                const count = leaves.get(key);
+                if (!count)
+                    return null;
+                if (!showAll && !labelMatches(label))
+                    return null;
+                return { key: key, label: label, count: count };
+            };
+
+            const categoryLeafNodes = (prefix, showAll) => {
+                return Array.from(leaves.keys())
+                .filter((key) => key.startsWith(prefix))
+                .map((key) => ({ key: key, label: key.slice(prefix.length) }))
+                .sort((a, b) => a.label.localeCompare(b.label))
+                .map((entry) => leafNode(entry.key, entry.label, showAll))
+                .filter(Boolean);
+            };
+
+            const parentNode = (key, label, children) => {
+                if (children.length === 0)
+                    return null;
                 return {
-                    ...section,
-                    mappings
+                    key: key,
+                    label: label,
+                    count: children.reduce((total, child) => total + child.count, 0),
+                    children: children
                 };
-            }).filter((section) => section.mappings.length > 0);
+            };
+
+            const nodes = [];
+
+            const genericLabel = this.$t('aiIntegration.prompts.genericPrompts');
+            if (labelMatches(genericLabel)) {
+                nodes.push({
+                    key: 'generic',
+                    label: genericLabel,
+                    count: this.globalPrompts.length
+                });
+            }
+
+            TREE_PARENT_CONFIGS.forEach((config) => {
+                const label = this.$t(config.labelKey);
+                const showAll = labelMatches(label);
+                const node = parentNode(config.key, label, [
+                    ...config.extraLeaves.map((leaf) => leafNode(leaf.key, this.$t(leaf.labelKey), showAll)),
+                    ...categoryLeafNodes(config.catPrefix, showAll)
+                ].filter(Boolean));
+
+                if (node)
+                    nodes.push(node);
+            });
+
+            return nodes;
         },
 
-        filteredGroupedPromptSections: function() {
-            const filterText = this.promptFilter.trim().toLowerCase();
+        isGenericNodeSelected: function() {
+            return this.selectedNode === 'generic';
+        },
+
+        selectedNodeMappings: function() {
+            const key = this.selectedNode;
+            if (!key || key === 'generic')
+                return [];
+
+            return this.promptMappings.filter((mapping) => {
+                const nodeKey = mappingNodeKey(mapping);
+                return nodeKey === key || nodeKey.startsWith(`${key}:`);
+            });
+        },
+
+        fieldTableRows: function() {
+            const filterText = this.tableFilter.trim().toLowerCase();
             if (!filterText)
-                return this.groupedPromptSections;
+                return this.selectedNodeMappings;
 
-            return this.groupedPromptSections
-            .map((group) => ({
-                ...group,
-                mappings: group.mappings.filter((mapping) => {
-                    return this.fieldDisplayLabel(mapping).toLowerCase().includes(filterText);
-                })
-            }))
-            .filter((group) => group.mappings.length > 0);
-        },
-
-        hasPromptChanges: function() {
-            return JSON.stringify({
-                promptMappings: serializePromptMappings(this.promptMappings),
-                globalPrompts: serializeGlobalPrompts(this.globalPrompts)
-            }) !== JSON.stringify({
-                promptMappings: this.orig.promptMappings,
-                globalPrompts: this.orig.globalPrompts
+            return this.selectedNodeMappings.filter((mapping) => {
+                return this.fieldDisplayLabel(mapping).toLowerCase().includes(filterText);
             });
         },
 
-        promptDirtyCount: function() {
-            let count = 0;
+        fieldTableColumns: function() {
+            return [
+                { name: 'field', label: this.$t('aiIntegration.prompts.columnField'), field: (row) => this.fieldDisplayLabel(row), align: 'left', sortable: true },
+                { name: 'enabled', label: this.$t('aiIntegration.prompts.aiAssist'), field: 'enabled', align: 'center' },
+                { name: 'preview', label: this.$t('aiIntegration.prompts.columnPrompt'), field: 'prompt', align: 'left' }
+            ];
+        },
 
-            const origByKey = new Map(this.orig.promptMappings.map((mapping) => [`${mapping.entityType}:${mapping.fieldKey}`, mapping]));
-            serializePromptMappings(this.promptMappings).forEach((mapping) => {
-                const key = `${mapping.entityType}:${mapping.fieldKey}`;
-                const original = origByKey.get(key);
-                if (!original || original.enabled !== mapping.enabled || original.prompt !== mapping.prompt)
-                    count++;
+        filteredGenericPrompts: function() {
+            const filterText = this.tableFilter.trim().toLowerCase();
+            if (!filterText)
+                return this.globalPrompts;
+
+            return this.globalPrompts.filter((entry) => {
+                return String(entry.label || '').toLowerCase().includes(filterText) ||
+                    String(entry.prompt || '').toLowerCase().includes(filterText);
             });
+        },
 
-            const origGlobalById = new Map(this.orig.globalPrompts.map((entry) => [entry.id, entry]));
-            const currentGlobal = serializeGlobalPrompts(this.globalPrompts);
-            const currentGlobalIds = new Set(currentGlobal.map((entry) => entry.id));
+        canReorderGeneric: function() {
+            return this.canEditPrompts && !this.tableFilter.trim() && this.globalPrompts.length > 1;
+        },
 
-            currentGlobal.forEach((entry) => {
-                const original = origGlobalById.get(entry.id);
-                if (!original || original.label !== entry.label || original.prompt !== entry.prompt || original.enabled !== entry.enabled)
-                    count++;
-            });
+        genericDragList: {
+            get: function() {
+                return this.filteredGenericPrompts;
+            },
+            set: function(list) {
+                this.persistGenericOrder(list);
+            }
+        },
 
-            this.orig.globalPrompts.forEach((entry) => {
-                if (!currentGlobalIds.has(entry.id))
-                    count++;
-            });
+        editorSourceMapping: function() {
+            if (this.editor?.kind !== 'field')
+                return null;
+            return this.promptMappings.find((mapping) => toMappingKey(mapping) === this.editor.mappingKey) || null;
+        },
 
-            return count;
+        editorSourceGeneric: function() {
+            if (this.editor?.kind !== 'generic' || this.editor.isNew)
+                return null;
+            return this.globalPrompts.find((entry) => entry.id === this.editor.id) || null;
+        },
+
+        editorDirty: function() {
+            if (!this.editor)
+                return false;
+
+            if (this.editor.kind === 'field') {
+                const source = this.editorSourceMapping;
+                if (!source)
+                    return false;
+                return this.editor.enabled !== (source.enabled !== false) || this.editor.prompt !== String(source.prompt || '');
+            }
+
+            if (this.editor.isNew)
+                return !!(this.editor.label.trim() || this.editor.prompt.trim());
+
+            const source = this.editorSourceGeneric;
+            if (!source)
+                return false;
+            return this.editor.label !== String(source.label || '') ||
+                this.editor.prompt !== String(source.prompt || '') ||
+                this.editor.enabled !== (source.enabled !== false);
+        },
+
+        editorCanSave: function() {
+            if (!this.canEditPrompts || !this.editor)
+                return false;
+            if (this.editor.kind === 'generic')
+                return this.editorDirty && !!this.editor.label.trim() && !!this.editor.prompt.trim();
+            return this.editorDirty;
+        },
+
+        editorBreadcrumbs: function() {
+            if (!this.editor)
+                return [];
+
+            if (this.editor.kind === 'generic') {
+                return [
+                    this.$t('aiIntegration.prompts.genericPrompts'),
+                    this.editor.isNew ? this.$t('aiIntegration.prompts.newPrompt') : this.editor.label || this.$t('aiIntegration.prompts.newPrompt')
+                ];
+            }
+
+            const mapping = this.editorSourceMapping;
+            if (!mapping)
+                return [];
+
+            const nodeKey = mappingNodeKey(mapping);
+            const crumbs = [];
+
+            if (nodeKey.startsWith('findings'))
+                crumbs.push(this.$t('aiIntegration.prompts.nodeFindings'));
+            else if (nodeKey.startsWith('vulnerabilities'))
+                crumbs.push(this.$t('aiIntegration.prompts.nodeVulnerabilities'));
+            else
+                crumbs.push(this.$t('aiIntegration.prompts.nodeSections'));
+
+            if (nodeKey === 'findings:builtin')
+                crumbs.push(this.$t('aiIntegration.prompts.nodeBuiltinFields'));
+            else if (nodeKey === 'findings:all' || nodeKey === 'vulnerabilities:all')
+                crumbs.push(this.$t('aiIntegration.prompts.nodeAllCategories'));
+            else if (nodeKey === 'sections:all')
+                crumbs.push(this.$t('aiIntegration.prompts.nodeAllSections'));
+            else
+                crumbs.push(nodeKey.replace(/^(findings:cat:|vulnerabilities:cat:|sections:sub:)/, ''));
+
+            crumbs.push(this.fieldDisplayLabel(mapping));
+            return crumbs;
+        },
+
+        editorPromptVariables: function() {
+            const mapping = this.editorSourceMapping;
+            if (!mapping)
+                return [];
+            return mapping.entityType === 'section' ? SECTION_PROMPT_VARIABLES : FINDING_PROMPT_VARIABLES;
         },
 
         hasGuidelineChanges: function() {
@@ -349,7 +535,9 @@ export default {
     },
 
     methods: {
-        applyPayload: function(payload) {
+        applyPayload: function(payload, options = {}) {
+            const promptsOnly = options.only === 'prompts';
+
             this.aiEnabled = payload.aiEnabled !== false;
 
             if (Array.isArray(payload.promptMappings)) {
@@ -359,18 +547,18 @@ export default {
                     enabled: mapping.enabled !== false,
                     prompt: String(mapping.prompt || '')
                 }));
-                this.orig.promptMappings = serializePromptMappings(this.promptMappings);
             }
 
             if (Array.isArray(payload.globalPrompts)) {
-                this.globalPrompts = payload.globalPrompts.map((entry) => ({
-                    id: String(entry.id || ''),
-                    label: String(entry.label || ''),
-                    prompt: String(entry.prompt || ''),
-                    enabled: entry.enabled !== false
-                }));
-                this.orig.globalPrompts = serializeGlobalPrompts(this.globalPrompts);
+                this.globalPrompts = serializeGlobalPrompts(payload.globalPrompts);
+                const validIds = new Set(this.globalPrompts.map((entry) => entry.id));
+                this.selectedGenericIds = this.selectedGenericIds.filter((id) => validIds.has(id));
             }
+
+            // Prompt saves return the full admin payload; skip the other sections so an
+            // in-progress guidelines/QA edit in another tab is not silently overwritten.
+            if (promptsOnly)
+                return;
 
             if (payload.redactionGuidelines) {
                 const guidelines = payload.redactionGuidelines;
@@ -385,35 +573,22 @@ export default {
                 this.orig.redactionGuidelines = serializeMarkdownInstructions(this.redactionGuidelines);
             }
 
-            if (payload.qaInstructions || payload.qaChecks) {
-                if (payload.qaInstructions) {
-                    const qaInstructions = payload.qaInstructions;
-                    this.qaInstructions = {
-                        delivery: qaInstructions.delivery || 'inline',
-                        content: String(qaInstructions.content || ''),
-                        bedrockPromptCache: {
-                            cacheReference: String(qaInstructions.bedrockPromptCache?.cacheReference || ''),
-                            region: String(qaInstructions.bedrockPromptCache?.region || '')
-                        }
-                    };
-                    this.orig.qaInstructions = serializeMarkdownInstructions(this.qaInstructions);
-                }
+            if (payload.qaInstructions) {
+                const qaInstructions = payload.qaInstructions;
+                this.qaInstructions = {
+                    delivery: qaInstructions.delivery || 'inline',
+                    content: String(qaInstructions.content || ''),
+                    bedrockPromptCache: {
+                        cacheReference: String(qaInstructions.bedrockPromptCache?.cacheReference || ''),
+                        region: String(qaInstructions.bedrockPromptCache?.region || '')
+                    }
+                };
+                this.orig.qaInstructions = serializeMarkdownInstructions(this.qaInstructions);
+            }
 
-                if (payload.qaChecks) {
-                    const qaChecks = payload.qaChecks;
-                    this.qaChecks = {
-                        completeness: qaChecks.completeness !== false,
-                        references: qaChecks.references !== false,
-                        imageCaptions: qaChecks.imageCaptions !== false,
-                        duplicates: qaChecks.duplicates !== false,
-                        aiDuplicates: qaChecks.aiDuplicates !== false,
-                        aiUnlinkedTranslations: qaChecks.aiUnlinkedTranslations !== false,
-                        redaction: qaChecks.redaction !== false,
-                        customer: qaChecks.customer !== false,
-                        instructions: qaChecks.instructions !== false
-                    };
-                    this.orig.qaChecks = serializeQaChecks(this.qaChecks);
-                }
+            if (payload.qaChecks) {
+                this.qaChecks = serializeQaChecks(payload.qaChecks);
+                this.orig.qaChecks = serializeQaChecks(this.qaChecks);
             }
         },
 
@@ -438,21 +613,30 @@ export default {
             });
         },
 
-        addGlobalPrompt: function() {
-            this.globalPrompts.push({
-                id: createGlobalPromptId(),
-                label: '',
-                prompt: '',
-                enabled: true
+        notifySuccess: function(message) {
+            Notify.create({
+                message: message,
+                color: 'positive',
+                textColor: 'white',
+                position: 'top-right'
             });
         },
 
-        removeGlobalPrompt: function(index) {
-            this.globalPrompts.splice(index, 1);
+        notifySaveError: function(err) {
+            Notify.create({
+                message: err.response?.data?.datas || this.$t('aiIntegration.prompts.saveFailed'),
+                color: 'negative',
+                textColor: 'white',
+                position: 'top-right'
+            });
         },
 
         fieldDisplayLabel: function(mapping) {
             return String(mapping.fieldLabel || '').replace(CUSTOM_FIELD_LABEL_PREFIX, '');
+        },
+
+        variableToken: function(variable) {
+            return `{${variable}}`;
         },
 
         outputTypeLabel: function(outputType) {
@@ -464,71 +648,341 @@ export default {
             return scope === 'audit' ? this.$t('aiIntegration.qa.scopeAudit') : this.$t('aiIntegration.qa.scopeVulnerability');
         },
 
-        isGroupExpanded: function(group) {
-            if (this.promptFilter.trim())
-                return true;
-            return this.openPromptGroups[group.key] !== false;
-        },
+        /* ===== Immediate persistence helpers ===== */
 
-        setGroupExpanded: function(key, expanded) {
-            this.openPromptGroups[key] = expanded;
-        },
-
-        isGlobalPromptIncomplete: function(entry) {
-            const hasLabel = !!String(entry.label || '').trim();
-            const hasPrompt = !!String(entry.prompt || '').trim();
-            return hasLabel !== hasPrompt;
-        },
-
-        savePrompts: function() {
-            if (!this.canEditPrompts || this.savingPrompts)
-                return;
-
-            if (this.globalPrompts.some((entry) => this.isGlobalPromptIncomplete(entry))) {
-                Notify.create({
-                    message: this.$t('aiIntegration.prompts.incompleteGlobalPrompt'),
-                    color: 'negative',
-                    textColor: 'white',
-                    position: 'top-right'
-                });
-                return;
-            }
-
+        updatePrompts: function(payload, successMessage, options = {}) {
             this.savingPrompts = true;
-            const completeGlobalPrompts = this.globalPrompts.filter((entry) => {
-                return String(entry.label || '').trim() && String(entry.prompt || '').trim();
-            });
-
-            DataService.updateAiIntegration({
-                promptMappings: this.promptMappings.map((mapping) => ({
-                    entityType: mapping.entityType,
-                    fieldKey: mapping.fieldKey,
-                    enabled: mapping.enabled !== false,
-                    prompt: mapping.prompt
-                })),
-                globalPrompts: serializeGlobalPrompts(completeGlobalPrompts)
-            })
+            return DataService.updateAiIntegration(payload)
             .then((data) => {
-                this.applyPayload(data.data.datas || {});
-                Notify.create({
-                    message: this.$t('aiIntegration.prompts.saveSuccess'),
-                    color: 'positive',
-                    textColor: 'white',
-                    position: 'top-right'
-                });
+                // skipApply: after a drag-reorder the optimistic list already matches the
+                // server; re-replacing the array fights sortable's DOM move and renders
+                // the old order until reload.
+                if (!options.skipApply)
+                    this.applyPayload(data.data.datas || {}, { only: 'prompts' });
+                if (successMessage)
+                    this.notifySuccess(successMessage);
+                return data;
             })
             .catch((err) => {
-                Notify.create({
-                    message: err.response?.data?.datas || this.$t('aiIntegration.prompts.saveFailed'),
-                    color: 'negative',
-                    textColor: 'white',
-                    position: 'top-right'
-                });
+                this.notifySaveError(err);
+                throw err;
             })
             .finally(() => {
                 this.savingPrompts = false;
             });
         },
+
+        fieldMappingPayload: function(mapping, overrides = {}) {
+            // Fields still on the default prompt are persisted with an empty prompt so
+            // they keep following the default if it changes in a future version.
+            return {
+                entityType: mapping.entityType,
+                fieldKey: mapping.fieldKey,
+                enabled: mapping.enabled !== false,
+                prompt: mapping.usingDefaultPrompt ? '' : String(mapping.prompt || ''),
+                ...overrides
+            };
+        },
+
+        toggleFieldEnabled: function(mapping, enabled) {
+            if (!this.canEditPrompts || this.savingPrompts)
+                return;
+
+            const previous = mapping.enabled;
+            mapping.enabled = enabled;
+
+            this.updatePrompts({
+                promptMappings: [this.fieldMappingPayload(mapping, { enabled: enabled })]
+            })
+            .then(() => {
+                // Only mirror the toggle; a full sync would discard unsaved prompt
+                // edits when the panel is open on the same row.
+                if (this.isEditorRow(mapping))
+                    this.editor.enabled = enabled;
+            })
+            .catch(() => {
+                mapping.enabled = previous;
+            });
+        },
+
+        toggleGenericEnabled: function(entry, enabled) {
+            if (!this.canEditPrompts || this.savingPrompts)
+                return;
+
+            const next = this.globalPrompts.map((item) => {
+                return item.id === entry.id ? { ...item, enabled: enabled } : item;
+            });
+
+            this.updatePrompts({
+                globalPrompts: serializeGlobalPrompts(next)
+            })
+            .then(() => {
+                if (this.editor?.kind === 'generic' && !this.editor.isNew && this.editor.id === entry.id)
+                    this.editor.enabled = enabled;
+            })
+            .catch(() => {});
+        },
+
+        persistGenericOrder: function(list) {
+            if (!this.canEditPrompts || this.savingPrompts || this.tableFilter.trim())
+                return;
+
+            const previous = this.globalPrompts;
+            this.globalPrompts = list;
+
+            this.updatePrompts({
+                globalPrompts: serializeGlobalPrompts(list)
+            }, null, { skipApply: true })
+            .catch(() => {
+                this.globalPrompts = previous;
+            });
+        },
+
+        deleteSelectedGenericPrompts: function() {
+            if (!this.canEditPrompts || this.selectedGenericIds.length === 0)
+                return;
+
+            const count = this.selectedGenericIds.length;
+            this.confirmAction(
+                this.$t('aiIntegration.prompts.deleteConfirmTitle'),
+                this.$t('aiIntegration.prompts.deleteConfirmMessage', { count: count }),
+                () => {
+                    const removedIds = new Set(this.selectedGenericIds);
+                    const next = this.globalPrompts.filter((entry) => !removedIds.has(entry.id));
+
+                    this.updatePrompts({
+                        globalPrompts: serializeGlobalPrompts(next)
+                    }, this.$t('aiIntegration.prompts.deleteSuccess', { count: count }))
+                    .then(() => {
+                        if (this.editor?.kind === 'generic' && !this.editor.isNew && removedIds.has(this.editor.id))
+                            this.editor = null;
+                    })
+                    .catch(() => {});
+                }
+            );
+        },
+
+        // Shared shape for every "confirm this negative/destructive action" dialog
+        // in this page (delete, reset, discard unsaved changes).
+        confirmAction: function(title, message, callback) {
+            Dialog.create({
+                title: title,
+                message: message,
+                ok: { label: this.$t('btn.confirm'), color: 'negative' },
+                cancel: { label: this.$t('btn.cancel'), color: 'white' },
+                focus: 'cancel'
+            })
+            .onOk(callback);
+        },
+
+        /* ===== Editor panel ===== */
+
+        confirmDiscardEditor: function(callback) {
+            if (!this.editorDirty) {
+                callback();
+                return;
+            }
+
+            this.confirmAction(
+                this.$t('aiIntegration.prompts.discardChangesTitle'),
+                this.$t('aiIntegration.prompts.discardChangesMessage'),
+                callback
+            );
+        },
+
+        // The tree uses a one-way :selected + @update:selected pair (rather than
+        // v-model:selected) specifically so a dirty editor can be confirmed before
+        // selectedNode changes, instead of changing it and reverting on cancel.
+        selectTreeNode: function(key) {
+            if (key === this.selectedNode)
+                return;
+
+            this.confirmDiscardEditor(() => {
+                this.editor = null;
+                this.selectedNode = key;
+            });
+        },
+
+        openFieldEditor: function(mapping) {
+            const mappingKey = toMappingKey(mapping);
+            if (this.editor?.kind === 'field' && this.editor.mappingKey === mappingKey)
+                return;
+
+            this.confirmDiscardEditor(() => {
+                this.editor = {
+                    kind: 'field',
+                    mappingKey: mappingKey,
+                    enabled: mapping.enabled !== false,
+                    prompt: String(mapping.prompt || '')
+                };
+            });
+        },
+
+        openGenericEditor: function(entry) {
+            if (this.editor?.kind === 'generic' && !this.editor.isNew && this.editor.id === entry.id)
+                return;
+
+            this.confirmDiscardEditor(() => {
+                this.editor = {
+                    kind: 'generic',
+                    isNew: false,
+                    id: entry.id,
+                    label: String(entry.label || ''),
+                    prompt: String(entry.prompt || ''),
+                    enabled: entry.enabled !== false
+                };
+            });
+        },
+
+        openNewGenericEditor: function() {
+            this.confirmDiscardEditor(() => {
+                this.editor = {
+                    kind: 'generic',
+                    isNew: true,
+                    id: createGlobalPromptId(),
+                    label: '',
+                    prompt: '',
+                    enabled: true
+                };
+            });
+        },
+
+        closeEditor: function() {
+            this.confirmDiscardEditor(() => {
+                this.editor = null;
+            });
+        },
+
+        isEditorRow: function(mapping) {
+            return this.editor?.kind === 'field' && this.editor.mappingKey === toMappingKey(mapping);
+        },
+
+        // Refresh the editor working copy after the server returned fresh data.
+        syncEditorFromSource: function() {
+            if (!this.editor)
+                return;
+
+            if (this.editor.kind === 'field') {
+                const source = this.editorSourceMapping;
+                if (!source) {
+                    this.editor = null;
+                    return;
+                }
+                this.editor.enabled = source.enabled !== false;
+                this.editor.prompt = String(source.prompt || '');
+                return;
+            }
+
+            if (this.editor.isNew)
+                return;
+
+            const source = this.editorSourceGeneric;
+            if (!source) {
+                this.editor = null;
+                return;
+            }
+            this.editor.label = String(source.label || '');
+            this.editor.prompt = String(source.prompt || '');
+            this.editor.enabled = source.enabled !== false;
+        },
+
+        saveEditor: function() {
+            if (!this.editorCanSave || this.savingEditor)
+                return;
+
+            let request = null;
+
+            if (this.editor.kind === 'field') {
+                const source = this.editorSourceMapping;
+                if (!source)
+                    return;
+
+                request = this.updatePrompts({
+                    promptMappings: [{
+                        entityType: source.entityType,
+                        fieldKey: source.fieldKey,
+                        enabled: this.editor.enabled,
+                        prompt: this.editor.prompt
+                    }]
+                }, this.$t('aiIntegration.prompts.saveSuccess'));
+            } else {
+                const entry = {
+                    id: this.editor.id,
+                    label: this.editor.label.trim(),
+                    prompt: this.editor.prompt.trim(),
+                    enabled: this.editor.enabled
+                };
+
+                const next = this.editor.isNew ?
+                    [...this.globalPrompts, entry] :
+                    this.globalPrompts.map((item) => item.id === entry.id ? entry : item);
+
+                request = this.updatePrompts({
+                    globalPrompts: serializeGlobalPrompts(next)
+                }, this.$t('aiIntegration.prompts.saveSuccess'));
+            }
+
+            this.savingEditor = true;
+            request
+            .then(() => {
+                if (this.editor?.kind === 'generic')
+                    this.editor.isNew = false;
+                this.syncEditorFromSource();
+            })
+            .catch(() => {})
+            .finally(() => {
+                this.savingEditor = false;
+            });
+        },
+
+        resetFieldPrompt: function() {
+            const source = this.editorSourceMapping;
+            if (!this.canEditPrompts || !source)
+                return;
+
+            this.confirmAction(
+                this.$t('aiIntegration.prompts.resetConfirmTitle'),
+                this.$t('aiIntegration.prompts.resetConfirmMessage', { field: this.fieldDisplayLabel(source) }),
+                () => {
+                    this.updatePrompts({
+                        promptMappings: [{
+                            entityType: source.entityType,
+                            fieldKey: source.fieldKey,
+                            enabled: this.editor?.kind === 'field' ? this.editor.enabled : source.enabled !== false,
+                            prompt: ''
+                        }]
+                    }, this.$t('aiIntegration.prompts.resetSuccess'))
+                    .then(() => {
+                        this.syncEditorFromSource();
+                    })
+                    .catch(() => {});
+                }
+            );
+        },
+
+        deleteEditorGenericPrompt: function() {
+            if (!this.canEditPrompts || this.editor?.kind !== 'generic' || this.editor.isNew)
+                return;
+
+            const id = this.editor.id;
+            this.confirmAction(
+                this.$t('aiIntegration.prompts.deleteConfirmTitle'),
+                this.$t('aiIntegration.prompts.deleteConfirmMessage', { count: 1 }),
+                () => {
+                    const next = this.globalPrompts.filter((entry) => entry.id !== id);
+
+                    this.updatePrompts({
+                        globalPrompts: serializeGlobalPrompts(next)
+                    }, this.$t('aiIntegration.prompts.deleteSuccess', { count: 1 }))
+                    .then(() => {
+                        this.editor = null;
+                    })
+                    .catch(() => {});
+                }
+            );
+        },
+
+        /* ===== Guidelines / QA (unchanged behavior) ===== */
 
         saveRedactionGuidelines: function() {
             if (!this.canEditGuidelines || this.savingGuidelines)

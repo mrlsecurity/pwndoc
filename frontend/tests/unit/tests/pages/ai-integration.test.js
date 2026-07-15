@@ -24,7 +24,7 @@ vi.mock('quasar', async () => {
   return {
     ...actual,
     Notify: { create: vi.fn() },
-    Dialog: { create: vi.fn(() => ({ onOk: vi.fn(() => ({ onCancel: vi.fn() })) })) }
+    Dialog: { create: vi.fn(() => ({ onOk: vi.fn(() => ({ onCancel: vi.fn(), onDismiss: vi.fn() })) })) }
   }
 })
 
@@ -48,16 +48,60 @@ describe('AI Integration Page', () => {
       fieldKey: 'description',
       fieldLabel: 'Description',
       outputType: 'html',
+      source: 'builtin',
+      customFieldDisplay: null,
+      customFieldDisplaySub: null,
       enabled: true,
-      prompt: 'Describe the finding thoroughly.'
+      prompt: 'Describe the finding thoroughly.',
+      usingDefaultPrompt: false
     },
     {
       entityType: 'finding',
       fieldKey: 'custom-field:abc123',
       fieldLabel: 'Finding Custom Field: Severity Rationale',
       outputType: 'text',
+      source: 'custom-field',
+      customFieldDisplay: 'finding',
+      customFieldDisplaySub: '',
       enabled: true,
-      prompt: 'Explain why this severity was chosen.'
+      prompt: 'Explain why this severity was chosen.',
+      usingDefaultPrompt: true
+    },
+    {
+      entityType: 'finding',
+      fieldKey: 'custom-field:web1',
+      fieldLabel: 'Finding Custom Field: Application ID',
+      outputType: 'text',
+      source: 'custom-field',
+      customFieldDisplay: 'vulnerability',
+      customFieldDisplaySub: 'Web',
+      enabled: true,
+      prompt: 'Extract the application identifier.',
+      usingDefaultPrompt: false
+    },
+    {
+      entityType: 'finding',
+      fieldKey: 'custom-field:vall1',
+      fieldLabel: 'Finding Custom Field: MFA Enabled',
+      outputType: 'text',
+      source: 'custom-field',
+      customFieldDisplay: 'vulnerability',
+      customFieldDisplaySub: '',
+      enabled: false,
+      prompt: 'State whether MFA is enabled.',
+      usingDefaultPrompt: true
+    },
+    {
+      entityType: 'section',
+      fieldKey: 'custom-field:sec1',
+      fieldLabel: 'Section Custom Field: Executive Overview',
+      outputType: 'html',
+      source: 'custom-field',
+      customFieldDisplay: 'section',
+      customFieldDisplaySub: 'Executive Summary',
+      enabled: true,
+      prompt: 'Summarize for executives.',
+      usingDefaultPrompt: true
     }
   ])
 
@@ -128,13 +172,25 @@ describe('AI Integration Page', () => {
           'q-tab-panels': true,
           'q-tab-panel': true,
           'q-list': true,
-          'q-expansion-item': true,
+          'q-tree': true,
+          'q-table': true,
+          'q-markup-table': true,
+          'q-tr': true,
+          'q-td': true,
+          'q-item': true,
+          'q-item-label': true,
+          'q-item-section': true,
           'q-input': true,
           'q-toggle': true,
+          'q-checkbox': true,
           'q-btn': true,
-          'q-item-section': true,
           'q-chip': true,
+          'q-badge': true,
           'q-icon': true,
+          'q-space': true,
+          'q-breadcrumbs': true,
+          'q-breadcrumbs-el': true,
+          draggable: true,
           ...(options.stubs || {})
         },
         mocks: {
@@ -157,59 +213,163 @@ describe('AI Integration Page', () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      expect(wrapper.vm.promptMappings).toHaveLength(2)
+      expect(wrapper.vm.promptMappings).toHaveLength(5)
       expect(wrapper.vm.globalPrompts).toHaveLength(2)
+      expect(wrapper.vm.selectedNode).toBe('generic')
     })
   })
 
-  describe('filteredGroupedPromptSections', () => {
-    it('should return all groups unchanged when promptFilter is empty', async () => {
+  describe('promptTreeNodes', () => {
+    it('should build generic, findings, vulnerabilities and sections nodes with counts', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.promptFilter = ''
-      await wrapper.vm.$nextTick()
+      const byKey = Object.fromEntries(wrapper.vm.promptTreeNodes.map((node) => [node.key, node]))
 
-      expect(wrapper.vm.filteredGroupedPromptSections).toEqual(wrapper.vm.groupedPromptSections)
-      expect(wrapper.vm.filteredGroupedPromptSections.length).toBeGreaterThan(0)
+      expect(byKey.generic.count).toBe(2)
+
+      expect(byKey.findings.count).toBe(2)
+      const findingsChildren = Object.fromEntries(byKey.findings.children.map((node) => [node.key, node]))
+      expect(findingsChildren['findings:builtin'].count).toBe(1)
+      expect(findingsChildren['findings:all'].count).toBe(1)
+
+      expect(byKey.vulnerabilities.count).toBe(2)
+      const vulnChildren = Object.fromEntries(byKey.vulnerabilities.children.map((node) => [node.key, node]))
+      expect(vulnChildren['vulnerabilities:all'].count).toBe(1)
+      expect(vulnChildren['vulnerabilities:cat:Web'].count).toBe(1)
+      expect(vulnChildren['vulnerabilities:cat:Web'].label).toBe('Web')
+
+      expect(byKey.sections.count).toBe(1)
+      expect(byKey.sections.children[0].key).toBe('sections:sub:Executive Summary')
     })
 
-    it('should match case-insensitively against the custom field display label and drop empty groups', async () => {
+    it('should hide empty nodes', async () => {
+      DataService.getAiIntegration.mockResolvedValue({
+        data: {
+          datas: {
+            ...mockPayload(),
+            promptMappings: mockPromptMappings().filter((mapping) => mapping.entityType !== 'section')
+          }
+        }
+      })
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.promptFilter = 'SEVERITY'
-      await wrapper.vm.$nextTick()
-
-      const groups = wrapper.vm.filteredGroupedPromptSections
-      expect(groups).toHaveLength(1)
-      expect(groups[0].key).toBe('finding-custom')
-      expect(groups[0].mappings).toHaveLength(1)
-      expect(groups[0].mappings[0].fieldLabel).toBe('Finding Custom Field: Severity Rationale')
+      const keys = wrapper.vm.promptTreeNodes.map((node) => node.key)
+      expect(keys).not.toContain('sections')
     })
 
-    it('should match a builtin field label such as "Description"', async () => {
+    it('should filter by category name and hide nodes without a matching label', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.promptFilter = 'description'
+      wrapper.vm.treeFilter = 'web'
       await wrapper.vm.$nextTick()
 
-      const groups = wrapper.vm.filteredGroupedPromptSections
-      expect(groups).toHaveLength(1)
-      expect(groups[0].key).toBe('definition')
-      expect(groups[0].mappings).toHaveLength(1)
-      expect(groups[0].mappings[0].fieldKey).toBe('description')
+      const byKey = Object.fromEntries(wrapper.vm.promptTreeNodes.map((node) => [node.key, node]))
+      expect(byKey.generic).toBeUndefined()
+      expect(byKey.findings).toBeUndefined()
+      expect(byKey.sections).toBeUndefined()
+      expect(byKey.vulnerabilities.children.map((node) => node.key)).toEqual(['vulnerabilities:cat:Web'])
     })
 
-    it('should return no groups when nothing matches the filter', async () => {
+    it('should show every descendant once a parent node name matches', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.promptFilter = 'no-such-field-xyz'
+      // The i18n mock returns the translation key verbatim, so this matches the
+      // "nodeVulnerabilities" node label rather than any field or category content.
+      wrapper.vm.treeFilter = 'vulnerabilities'
       await wrapper.vm.$nextTick()
 
-      expect(wrapper.vm.filteredGroupedPromptSections).toEqual([])
+      const byKey = Object.fromEntries(wrapper.vm.promptTreeNodes.map((node) => [node.key, node]))
+      expect(byKey.generic).toBeUndefined()
+      expect(byKey.findings).toBeUndefined()
+      expect(byKey.vulnerabilities.children.map((node) => node.key)).toEqual([
+        'vulnerabilities:all',
+        'vulnerabilities:cat:Web'
+      ])
+    })
+
+    it('should not match field or generic prompt content, only node labels', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      // 'application' only appears inside a field label ("Application ID"), and 'tone'
+      // only appears as a generic prompt's label - neither is a tree node name.
+      wrapper.vm.treeFilter = 'application'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.promptTreeNodes).toEqual([])
+
+      wrapper.vm.treeFilter = 'tone'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.promptTreeNodes).toEqual([])
+    })
+
+    it('should not throw when the search input is cleared to null', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.treeFilter = 'web'
+      await wrapper.vm.$nextTick()
+
+      // Quasar's clearable q-input emits null (not '') when its clear icon is clicked.
+      wrapper.vm.treeFilter = null
+      await wrapper.vm.$nextTick()
+
+      expect(() => wrapper.vm.promptTreeNodes).not.toThrow()
+      expect(wrapper.vm.promptTreeNodes.map((node) => node.key)).toEqual(['generic', 'findings', 'vulnerabilities', 'sections'])
+    })
+  })
+
+  describe('selectedNodeMappings / fieldTableRows', () => {
+    it('should aggregate all descendants when a parent node is selected', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.selectedNode = 'vulnerabilities'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.selectedNodeMappings.map((mapping) => mapping.fieldKey).sort()).toEqual([
+        'custom-field:vall1',
+        'custom-field:web1'
+      ])
+    })
+
+    it('should return only the leaf mappings when a leaf is selected', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.selectedNode = 'findings:builtin'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.selectedNodeMappings.map((mapping) => mapping.fieldKey)).toEqual(['description'])
+    })
+
+    it('should filter table rows by the display label', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.selectedNode = 'findings'
+      await wrapper.vm.$nextTick()
+      wrapper.vm.tableFilter = 'severity'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.fieldTableRows).toHaveLength(1)
+      expect(wrapper.vm.fieldTableRows[0].fieldKey).toBe('custom-field:abc123')
+    })
+
+    it('should reset the table filter and generic selection when the node changes', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.tableFilter = 'tone'
+      wrapper.vm.selectedGenericIds = ['g1']
+      wrapper.vm.selectedNode = 'findings'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.tableFilter).toBe('')
+      expect(wrapper.vm.selectedGenericIds).toEqual([])
     })
   })
 
@@ -260,125 +420,303 @@ describe('AI Integration Page', () => {
     })
   })
 
-  describe('isGroupExpanded / setGroupExpanded', () => {
-    it('should default to expanded when no state has been stored and there is no filter', async () => {
+  describe('toggleFieldEnabled', () => {
+    it('should persist a single mapping immediately', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      expect(wrapper.vm.isGroupExpanded({ key: 'definition' })).toBe(true)
+      const mapping = wrapper.vm.promptMappings.find((entry) => entry.fieldKey === 'description')
+      wrapper.vm.toggleFieldEnabled(mapping, false)
+      await wrapper_flushPromises()
+
+      expect(DataService.updateAiIntegration).toHaveBeenCalledTimes(1)
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.promptMappings).toEqual([{
+        entityType: 'finding',
+        fieldKey: 'description',
+        enabled: false,
+        prompt: 'Describe the finding thoroughly.'
+      }])
     })
 
-    it('should collapse a group once explicitly set to false', async () => {
+    it('should send an empty prompt for fields still on the default so they keep following it', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.setGroupExpanded('definition', false)
+      const mapping = wrapper.vm.promptMappings.find((entry) => entry.fieldKey === 'custom-field:abc123')
+      wrapper.vm.toggleFieldEnabled(mapping, false)
+      await wrapper_flushPromises()
 
-      expect(wrapper.vm.openPromptGroups.definition).toBe(false)
-      expect(wrapper.vm.isGroupExpanded({ key: 'definition' })).toBe(false)
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.promptMappings[0].prompt).toBe('')
     })
 
-    it('should re-expand a group once explicitly set to true', async () => {
+    it('should revert the toggle when the save fails', async () => {
+      DataService.updateAiIntegration.mockRejectedValue({ response: { data: { datas: 'nope' } } })
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.setGroupExpanded('definition', false)
-      wrapper.vm.setGroupExpanded('definition', true)
+      const mapping = wrapper.vm.promptMappings.find((entry) => entry.fieldKey === 'description')
+      wrapper.vm.toggleFieldEnabled(mapping, false)
+      await wrapper_flushPromises()
 
-      expect(wrapper.vm.isGroupExpanded({ key: 'definition' })).toBe(true)
+      expect(mapping.enabled).toBe(true)
+      expect(Notify.create).toHaveBeenCalledWith(expect.objectContaining({ color: 'negative' }))
     })
 
-    it('should always report expanded while promptFilter is non-empty, even if collapsed', async () => {
+    it('should not persist anything without edit permission', async () => {
+      mockUserStore.isAllowed.mockReturnValue(false)
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.setGroupExpanded('definition', false)
-      wrapper.vm.promptFilter = 'description'
+      wrapper.vm.toggleFieldEnabled(wrapper.vm.promptMappings[0], false)
       await wrapper.vm.$nextTick()
 
-      expect(wrapper.vm.isGroupExpanded({ key: 'definition' })).toBe(true)
-    })
-
-    it('should treat a whitespace-only filter as empty', async () => {
-      const wrapper = createWrapper()
-      await wrapper_flushPromises()
-
-      wrapper.vm.setGroupExpanded('definition', false)
-      wrapper.vm.promptFilter = '   '
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.vm.isGroupExpanded({ key: 'definition' })).toBe(false)
+      expect(DataService.updateAiIntegration).not.toHaveBeenCalled()
     })
   })
 
-  describe('promptDirtyCount', () => {
-    it('should be 0 when nothing has changed', async () => {
+  describe('generic prompts', () => {
+    it('should persist the full list, preserving order, when toggling one prompt', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      expect(wrapper.vm.promptDirtyCount).toBe(0)
+      wrapper.vm.toggleGenericEnabled(wrapper.vm.globalPrompts[1], false)
+      await wrapper_flushPromises()
+
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.globalPrompts.map((entry) => entry.id)).toEqual(['g1', 'g2'])
+      expect(payload.globalPrompts[1].enabled).toBe(false)
     })
 
-    it('should count an edited mapping prompt', async () => {
+    it('should persist a reorder without sorting by label', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.promptMappings[0].prompt = 'A brand new prompt.'
-      await wrapper.vm.$nextTick()
+      const reversed = [...wrapper.vm.globalPrompts].reverse()
+      wrapper.vm.persistGenericOrder(reversed)
+      await wrapper_flushPromises()
 
-      expect(wrapper.vm.promptDirtyCount).toBe(1)
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.globalPrompts.map((entry) => entry.id)).toEqual(['g2', 'g1'])
     })
 
-    it('should count an edited mapping enabled toggle', async () => {
+    it('should restore the previous order when the reorder save fails', async () => {
+      DataService.updateAiIntegration.mockRejectedValue({ response: { data: { datas: 'nope' } } })
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.promptMappings[0].enabled = false
-      await wrapper.vm.$nextTick()
+      const reversed = [...wrapper.vm.globalPrompts].reverse()
+      wrapper.vm.persistGenericOrder(reversed)
+      await wrapper_flushPromises()
 
-      expect(wrapper.vm.promptDirtyCount).toBe(1)
+      expect(wrapper.vm.globalPrompts.map((entry) => entry.id)).toEqual(['g1', 'g2'])
     })
 
-    it('should count an added global prompt', async () => {
+    it('should not reorder while a table filter is active', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.globalPrompts.push({ id: 'g3', label: 'NewLabel', prompt: 'NewPrompt', enabled: true })
+      wrapper.vm.tableFilter = 'tone'
+      wrapper.vm.persistGenericOrder([...wrapper.vm.globalPrompts].reverse())
       await wrapper.vm.$nextTick()
 
-      expect(wrapper.vm.promptDirtyCount).toBe(1)
+      expect(DataService.updateAiIntegration).not.toHaveBeenCalled()
+      expect(wrapper.vm.canReorderGeneric).toBe(false)
     })
 
-    it('should count a removed global prompt', async () => {
+    it('should delete the selected prompts after confirmation', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.globalPrompts.splice(0, 1)
+      let confirmDelete
+      Dialog.create.mockImplementationOnce(() => ({
+        onOk(cb) {
+          confirmDelete = cb
+          return this
+        }
+      }))
+
+      wrapper.vm.selectedGenericIds = ['g1']
+      wrapper.vm.deleteSelectedGenericPrompts()
+      expect(DataService.updateAiIntegration).not.toHaveBeenCalled()
+
+      confirmDelete()
+      await wrapper_flushPromises()
+
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.globalPrompts.map((entry) => entry.id)).toEqual(['g2'])
+    })
+  })
+
+  describe('editor panel', () => {
+    it('should open a field editor with a working copy and breadcrumbs', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      const mapping = wrapper.vm.promptMappings.find((entry) => entry.fieldKey === 'custom-field:web1')
+      wrapper.vm.openFieldEditor(mapping)
       await wrapper.vm.$nextTick()
 
-      expect(wrapper.vm.promptDirtyCount).toBe(1)
+      expect(wrapper.vm.editor.kind).toBe('field')
+      expect(wrapper.vm.editor.prompt).toBe('Extract the application identifier.')
+      expect(wrapper.vm.editorDirty).toBe(false)
+      expect(wrapper.vm.editorBreadcrumbs).toEqual([
+        'aiIntegration.prompts.nodeVulnerabilities',
+        'Web',
+        'Application ID'
+      ])
     })
 
-    it('should count an edited global prompt', async () => {
+    it('should become dirty when the working copy changes and save a single mapping', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.globalPrompts[0].prompt = 'A different tone entirely.'
+      const mapping = wrapper.vm.promptMappings.find((entry) => entry.fieldKey === 'description')
+      wrapper.vm.openFieldEditor(mapping)
+      wrapper.vm.editor.prompt = 'New description prompt.'
       await wrapper.vm.$nextTick()
 
-      expect(wrapper.vm.promptDirtyCount).toBe(1)
+      expect(wrapper.vm.editorDirty).toBe(true)
+      expect(wrapper.vm.editorCanSave).toBe(true)
+
+      wrapper.vm.saveEditor()
+      await wrapper_flushPromises()
+
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.promptMappings).toEqual([{
+        entityType: 'finding',
+        fieldKey: 'description',
+        enabled: true,
+        prompt: 'New description prompt.'
+      }])
     })
 
-    it('should sum multiple simultaneous changes independently', async () => {
+    it('should require label and prompt before saving a new generic prompt', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.promptMappings[0].prompt = 'Edited mapping prompt.'
-      wrapper.vm.globalPrompts.push({ id: 'g3', label: 'NewLabel', prompt: 'NewPrompt', enabled: true })
-      wrapper.vm.globalPrompts.splice(0, 1)
+      wrapper.vm.openNewGenericEditor()
       await wrapper.vm.$nextTick()
 
-      expect(wrapper.vm.promptDirtyCount).toBe(3)
+      expect(wrapper.vm.editor.isNew).toBe(true)
+      expect(wrapper.vm.editorCanSave).toBe(false)
+
+      wrapper.vm.editor.label = 'Spellcheck'
+      expect(wrapper.vm.editorCanSave).toBe(false)
+
+      wrapper.vm.editor.prompt = 'Fix spelling and grammar.'
+      expect(wrapper.vm.editorCanSave).toBe(true)
+
+      wrapper.vm.saveEditor()
+      await wrapper_flushPromises()
+
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.globalPrompts).toHaveLength(3)
+      expect(payload.globalPrompts[2]).toMatchObject({ label: 'Spellcheck', prompt: 'Fix spelling and grammar.', enabled: true })
+    })
+
+    it('should append new generic prompts at the end so chat order follows the list', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.openNewGenericEditor()
+      wrapper.vm.editor.label = 'Last'
+      wrapper.vm.editor.prompt = 'Prompt'
+      wrapper.vm.saveEditor()
+      await wrapper_flushPromises()
+
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.globalPrompts.map((entry) => entry.label)).toEqual(['Tone', 'Audience', 'Last'])
+    })
+
+    it('should reset a customized field prompt to the default after confirmation', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      let confirmReset
+      Dialog.create.mockImplementationOnce(() => ({
+        onOk(cb) {
+          confirmReset = cb
+          return this
+        }
+      }))
+
+      const mapping = wrapper.vm.promptMappings.find((entry) => entry.fieldKey === 'description')
+      wrapper.vm.openFieldEditor(mapping)
+      wrapper.vm.resetFieldPrompt()
+      expect(DataService.updateAiIntegration).not.toHaveBeenCalled()
+
+      confirmReset()
+      await wrapper_flushPromises()
+
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.promptMappings[0].prompt).toBe('')
+    })
+
+    it('should confirm before replacing a dirty editor with another row', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      const first = wrapper.vm.promptMappings[0]
+      const second = wrapper.vm.promptMappings[1]
+      wrapper.vm.openFieldEditor(first)
+      wrapper.vm.editor.prompt = 'Unsaved edit.'
+      await wrapper.vm.$nextTick()
+
+      let confirmDiscard
+      Dialog.create.mockImplementationOnce(() => ({
+        onOk(cb) {
+          confirmDiscard = cb
+          return this
+        },
+        onDismiss() {
+          return this
+        }
+      }))
+
+      wrapper.vm.openFieldEditor(second)
+      expect(wrapper.vm.editor.mappingKey).toBe('finding:description')
+
+      confirmDiscard()
+      expect(wrapper.vm.editor.mappingKey).toBe('finding:custom-field:abc123')
+    })
+
+    it('should delete the generic prompt open in the editor after confirmation', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      let confirmDelete
+      Dialog.create.mockImplementationOnce(() => ({
+        onOk(cb) {
+          confirmDelete = cb
+          return this
+        }
+      }))
+
+      wrapper.vm.openGenericEditor(wrapper.vm.globalPrompts[0])
+      wrapper.vm.deleteEditorGenericPrompt()
+      confirmDelete()
+      await wrapper_flushPromises()
+
+      const payload = DataService.updateAiIntegration.mock.calls[0][0]
+      expect(payload.globalPrompts.map((entry) => entry.id)).toEqual(['g2'])
+      expect(wrapper.vm.editor).toBe(null)
+    })
+  })
+
+  describe('applyPayload prompts-only refresh', () => {
+    it('should not clobber unsaved guideline edits when a prompt save returns the full payload', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.redactionGuidelines.content = 'Unsaved guideline edit.'
+      const mapping = wrapper.vm.promptMappings.find((entry) => entry.fieldKey === 'description')
+      wrapper.vm.toggleFieldEnabled(mapping, false)
+      await wrapper_flushPromises()
+
+      expect(wrapper.vm.redactionGuidelines.content).toBe('Unsaved guideline edit.')
+      expect(wrapper.vm.hasGuidelineChanges).toBe(true)
     })
   })
 
@@ -452,95 +790,6 @@ describe('AI Integration Page', () => {
     })
   })
 
-  describe('isGlobalPromptIncomplete', () => {
-    it('should be false when both label and prompt are empty', () => {
-      const wrapper = createWrapper()
-      expect(wrapper.vm.isGlobalPromptIncomplete({ label: '', prompt: '' })).toBe(false)
-    })
-
-    it('should be false when both label and prompt are filled', () => {
-      const wrapper = createWrapper()
-      expect(wrapper.vm.isGlobalPromptIncomplete({ label: 'Tone', prompt: 'Be formal' })).toBe(false)
-    })
-
-    it('should be true when only label is filled', () => {
-      const wrapper = createWrapper()
-      expect(wrapper.vm.isGlobalPromptIncomplete({ label: 'Tone', prompt: '' })).toBe(true)
-    })
-
-    it('should be true when only prompt is filled', () => {
-      const wrapper = createWrapper()
-      expect(wrapper.vm.isGlobalPromptIncomplete({ label: '', prompt: 'Be formal' })).toBe(true)
-    })
-
-    it('should treat whitespace-only values as empty', () => {
-      const wrapper = createWrapper()
-      expect(wrapper.vm.isGlobalPromptIncomplete({ label: '   ', prompt: '' })).toBe(false)
-      expect(wrapper.vm.isGlobalPromptIncomplete({ label: '   x  ', prompt: '' })).toBe(true)
-    })
-  })
-
-  describe('savePrompts', () => {
-    it('should notify with an error and not save when a global prompt is incomplete', async () => {
-      const wrapper = createWrapper()
-      await wrapper_flushPromises()
-
-      wrapper.vm.globalPrompts.push({ id: 'g3', label: 'OnlyLabel', prompt: '', enabled: true })
-      await wrapper.vm.$nextTick()
-
-      wrapper.vm.savePrompts()
-      await wrapper.vm.$nextTick()
-
-      expect(Notify.create).toHaveBeenCalledWith(
-        expect.objectContaining({ color: 'negative' })
-      )
-      expect(DataService.updateAiIntegration).not.toHaveBeenCalled()
-    })
-
-    it('should save when all global prompts are complete', async () => {
-      const wrapper = createWrapper()
-      await wrapper_flushPromises()
-
-      wrapper.vm.promptMappings[0].prompt = 'Updated prompt text.'
-      await wrapper.vm.$nextTick()
-
-      wrapper.vm.savePrompts()
-      await wrapper_flushPromises()
-
-      expect(DataService.updateAiIntegration).toHaveBeenCalledTimes(1)
-      expect(Notify.create).toHaveBeenCalledWith(
-        expect.objectContaining({ color: 'positive' })
-      )
-    })
-
-    it('should filter out fully-empty global prompts before saving', async () => {
-      const wrapper = createWrapper()
-      await wrapper_flushPromises()
-
-      wrapper.vm.globalPrompts.push({ id: 'g3', label: '', prompt: '', enabled: true })
-      await wrapper.vm.$nextTick()
-
-      wrapper.vm.savePrompts()
-      await wrapper_flushPromises()
-
-      expect(DataService.updateAiIntegration).toHaveBeenCalledTimes(1)
-      const payload = DataService.updateAiIntegration.mock.calls[0][0]
-      expect(payload.globalPrompts).toHaveLength(2)
-      expect(payload.globalPrompts.some((entry) => entry.id === 'g3')).toBe(false)
-    })
-
-    it('should not save when the user lacks edit permission', async () => {
-      mockUserStore.isAllowed.mockReturnValue(false)
-      const wrapper = createWrapper()
-      await wrapper_flushPromises()
-
-      wrapper.vm.savePrompts()
-      await wrapper.vm.$nextTick()
-
-      expect(DataService.updateAiIntegration).not.toHaveBeenCalled()
-    })
-  })
-
   describe('beforeRouteLeave', () => {
     it('should call next() immediately when there are no unsaved changes', async () => {
       const wrapper = createWrapper()
@@ -553,11 +802,12 @@ describe('AI Integration Page', () => {
       expect(next).toHaveBeenCalledTimes(1)
     })
 
-    it('should open a confirm dialog and only call next() once onOk fires when there are unsaved prompt changes', async () => {
+    it('should open a confirm dialog and only call next() once onOk fires when the editor has unsaved changes', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      wrapper.vm.promptMappings[0].prompt = 'Unsaved edit.'
+      wrapper.vm.openFieldEditor(wrapper.vm.promptMappings[0])
+      wrapper.vm.editor.prompt = 'Unsaved edit.'
       await wrapper.vm.$nextTick()
 
       let confirmLeave
