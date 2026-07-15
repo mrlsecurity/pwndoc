@@ -595,6 +595,7 @@ export default {
             label: 'Label',
             labelHint: 'Shown in the AI chat (e.g. Spellcheck my document)',
             enabled: 'Enabled',
+            disabled: 'Désactivé',
             prompt: 'Prompt',
             newPrompt: 'New prompt',
             saveChanges: 'Save changes',

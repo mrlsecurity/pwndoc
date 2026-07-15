@@ -233,6 +233,9 @@ export default {
             qaChecks: defaultQaChecks(),
             writingTab: 'prompts',
             qaInstructionsExpanded: false,
+            promptToggleSaveKey: null,
+            promptToggleSaveState: null,
+            promptToggleSaveTimer: null,
             qaToggleSaveKey: null,
             qaToggleSaveState: null,
             qaToggleSaveTimer: null,
@@ -258,6 +261,8 @@ export default {
     },
 
     beforeUnmount: function() {
+        if (this.promptToggleSaveTimer)
+            clearTimeout(this.promptToggleSaveTimer);
         if (this.qaToggleSaveTimer)
             clearTimeout(this.qaToggleSaveTimer);
     },
@@ -660,6 +665,27 @@ export default {
 
         /* ===== Immediate persistence helpers ===== */
 
+        clearPromptToggleSaveStatus: function() {
+            if (this.promptToggleSaveTimer)
+                clearTimeout(this.promptToggleSaveTimer);
+            this.promptToggleSaveTimer = null;
+            this.promptToggleSaveKey = null;
+            this.promptToggleSaveState = null;
+        },
+
+        startPromptToggleSaveStatus: function(key) {
+            this.clearPromptToggleSaveStatus();
+            this.promptToggleSaveKey = key;
+            this.promptToggleSaveState = 'saving';
+        },
+
+        finishPromptToggleSaveStatus: function() {
+            this.promptToggleSaveState = 'saved';
+            this.promptToggleSaveTimer = setTimeout(() => {
+                this.clearPromptToggleSaveStatus();
+            }, 2000);
+        },
+
         updatePrompts: function(payload, successMessage, options = {}) {
             this.savingPrompts = true;
             return DataService.updateAiIntegration(payload)
@@ -700,8 +726,9 @@ export default {
 
             const previous = mapping.enabled;
             mapping.enabled = enabled;
+            this.startPromptToggleSaveStatus(`field:${toMappingKey(mapping)}`);
 
-            this.updatePrompts({
+            return this.updatePrompts({
                 promptMappings: [this.fieldMappingPayload(mapping, { enabled: enabled })]
             })
             .then(() => {
@@ -709,9 +736,11 @@ export default {
                 // edits when the panel is open on the same row.
                 if (this.isEditorRow(mapping))
                     this.editor.enabled = enabled;
+                this.finishPromptToggleSaveStatus();
             })
             .catch(() => {
                 mapping.enabled = previous;
+                this.clearPromptToggleSaveStatus();
             });
         },
 
@@ -719,18 +748,22 @@ export default {
             if (!this.canEditPrompts || this.savingPrompts)
                 return;
 
+            this.startPromptToggleSaveStatus(`generic:${entry.id}`);
             const next = this.globalPrompts.map((item) => {
                 return item.id === entry.id ? { ...item, enabled: enabled } : item;
             });
 
-            this.updatePrompts({
+            return this.updatePrompts({
                 globalPrompts: serializeGlobalPrompts(next)
             })
             .then(() => {
                 if (this.editor?.kind === 'generic' && !this.editor.isNew && this.editor.id === entry.id)
                     this.editor.enabled = enabled;
+                this.finishPromptToggleSaveStatus();
             })
-            .catch(() => {});
+            .catch(() => {
+                this.clearPromptToggleSaveStatus();
+            });
         },
 
         persistGenericOrder: function(list) {

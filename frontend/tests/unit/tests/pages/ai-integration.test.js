@@ -219,6 +219,15 @@ describe('AI Integration Page', () => {
       expect(wrapper.vm.globalPrompts).toHaveLength(2)
       expect(wrapper.vm.selectedNode).toBe('generic')
     })
+
+    it('should render QA in the same open page layout as assisted writing', async () => {
+      const wrapper = createWrapper({ props: { section: 'qa' } })
+      await wrapper_flushPromises()
+
+      expect(wrapper.find('.qa-settings-card').exists()).toBe(false)
+      expect(wrapper.text()).toContain('aiIntegration.pageTitleQa')
+      expect(wrapper.text()).toContain('aiIntegration.qa.description')
+    })
   })
 
   describe('promptTreeNodes', () => {
