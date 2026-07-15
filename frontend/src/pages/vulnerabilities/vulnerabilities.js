@@ -1,7 +1,7 @@
 import { Dialog, Notify } from 'quasar';
+import { Cvss3P1, Cvss4P0 } from 'ae-cvss-calculator'
 
 import BasicEditor from 'components/editor/Editor.vue';
-import Breadcrumb from 'components/breadcrumb'
 import Cvss3Calculator from 'components/cvss3calculator'
 import Cvss4Calculator from 'components/cvss4calculator'
 import TextareaArray from 'components/textarea-array'
@@ -26,6 +26,10 @@ import { $t } from 'boot/i18n'
 
 const userStore = useUserStore()
 
+// Memoized CVSS parsing per row object — rows are replaced on each list reload so
+// stale entries are garbage collected with them.
+const cvssCacheByRow = new WeakMap()
+
 export default {
     data: () => {
         return {
@@ -34,31 +38,29 @@ export default {
             vulnerabilities: [],
             // Loading state
             loading: true,
-            // Datatable headers
-            dtHeaders: [
-                {name: 'title', label: $t('title'), field: 'title', align: 'left', sortable: true},
-                {name: 'category', label: $t('category'), field: 'category', align: 'left', sortable: true},
-                {name: 'type', label: $t('type'), field: 'type', align: 'left', sortable: true},
-                {name: 'action', label: '', field: 'action', align: 'left', sortable: false},
-            ],
-            // Datatable pagination
+            // List pagination
             pagination: {
                 page: 1,
                 rowsPerPage: 25,
                 sortBy: 'title'
             },
+            sortDesc: false,
             rowsPerPageOptions: [
                 {label:'25', value:25},
                 {label:'50', value:50},
                 {label:'100', value:100},
                 {label:'All', value:0}
             ],
-            filteredRowsCount: 0,
             // Vulnerabilities languages
             languages: [],
             locale: '',
             // Search filter
-            search: {title: '', type: '', category: '', valid: 0, new: 1, updates: 2},
+            search: {title: '', categories: [], types: [], cvssRange: 'all', creator: null, unsavedOnly: false},
+            // Text filters for the option lists inside the filter popover
+            categoryFilterSearch: '',
+            typeFilterSearch: '',
+            // Status filter (single-select): all | valid | new | updates
+            statusFilter: 'all',
             // Errors messages
             errors: {title: ''},
             // Selected or New Vulnerability
@@ -67,11 +69,10 @@ export default {
                 cvssv4: '',
                 priority: '',
                 remediationComplexity: '',
-                details: [] 
+                details: []
             },
             currentVulnerabilityOrig: null,
             currentLanguage: "",
-            displayFilters: {valid: true, new: true, updates: true},
             dtLanguage: "",
             currentDetailsIndex: 0,
             vulnerabilityId: '',
@@ -94,7 +95,8 @@ export default {
             vulnerabilityDrafts: [],
             aiPromptFieldKeys: [],
             aiFieldPrompts: [],
-            activeModal: null,
+            // Content displayed in the detail pane: null | create | edit | updates | merge
+            activePane: null,
             vulnQaOpen: false,
             runAllQaOpen: false,
             runAllQaKey: 0
@@ -103,7 +105,6 @@ export default {
 
     components: {
         BasicEditor,
-        Breadcrumb,
         Cvss3Calculator,
         Cvss4Calculator,
         TextareaArray,
@@ -135,6 +136,14 @@ export default {
         },
         draftRecoveryRevision: function() {
             this.refreshVulnerabilityDrafts()
+        },
+        filteredRowsCount: function() {
+            // Keep the current page within bounds when filters shrink the list
+            if (this.pagination.page > this.pagesNumber)
+                this.pagination.page = Math.max(1, this.pagesNumber)
+        },
+        'pagination.rowsPerPage': function() {
+            this.pagination.page = 1
         }
     },
 
@@ -155,6 +164,128 @@ export default {
             return result;
         },
 
+        statusCounts: function() {
+            var counts = {all: this.computedVulnerabilities.length, valid: 0, new: 0, updates: 0}
+            this.computedVulnerabilities.forEach(vuln => {
+                if (vuln.status === 1)
+                    counts.new += 1
+                else if (vuln.status === 2)
+                    counts.updates += 1
+                else
+                    counts.valid += 1
+            })
+            return counts
+        },
+
+        filteredVulnerabilities: function() {
+            return this.customFilter(this.computedVulnerabilities, {...this.search, status: this.statusFilter})
+        },
+
+        filteredRowsCount: function() {
+            return this.filteredVulnerabilities.length
+        },
+
+        sortedVulnerabilities: function() {
+            return this.customSort(this.filteredVulnerabilities, this.pagination.sortBy, this.sortDesc)
+        },
+
+        pagesNumber: function() {
+            if (!this.pagination.rowsPerPage)
+                return 1
+            return Math.max(1, Math.ceil(this.filteredRowsCount / this.pagination.rowsPerPage))
+        },
+
+        paginatedVulnerabilities: function() {
+            if (!this.pagination.rowsPerPage)
+                return this.sortedVulnerabilities
+            var start = (this.pagination.page - 1) * this.pagination.rowsPerPage
+            return this.sortedVulnerabilities.slice(start, start + this.pagination.rowsPerPage)
+        },
+
+        paginationRangeLabel: function() {
+            if (this.filteredRowsCount === 0)
+                return '0 - 0'
+            if (!this.pagination.rowsPerPage)
+                return `1 - ${this.filteredRowsCount}`
+            var start = (this.pagination.page - 1) * this.pagination.rowsPerPage + 1
+            var end = Math.min(this.filteredRowsCount, start + this.pagination.rowsPerPage - 1)
+            return `${start} - ${end}`
+        },
+
+        activeFilterCount: function() {
+            var count = 0
+            if (this.search.categories.length > 0)
+                count += 1
+            if (this.search.types.length > 0)
+                count += 1
+            if (this.search.cvssRange !== 'all')
+                count += 1
+            if (this.search.creator)
+                count += 1
+            if (this.search.unsavedOnly)
+                count += 1
+            return count
+        },
+
+        categoryFacets: function() {
+            var counts = {}
+            this.computedVulnerabilities.forEach(vuln => {
+                var name = vuln.category || 'No Category'
+                counts[name] = (counts[name] || 0) + 1
+            })
+            var term = (this.categoryFilterSearch || '').toLowerCase()
+            return this.vulnCategoriesOptions
+                .filter(name => !term || name.toLowerCase().indexOf(term) > -1)
+                .map(name => ({name: name, count: counts[name] || 0}))
+        },
+
+        typeFacets: function() {
+            var counts = {}
+            this.computedVulnerabilities.forEach(vuln => {
+                var name = this.getDtType(vuln)
+                counts[name] = (counts[name] || 0) + 1
+            })
+            var term = (this.typeFilterSearch || '').toLowerCase()
+            return this.vulnTypeOptions
+                .filter(name => !term || name.toLowerCase().indexOf(term) > -1)
+                .map(name => ({name: name, count: counts[name] || 0}))
+        },
+
+        cvssFacets: function() {
+            var counts = {all: this.computedVulnerabilities.length, low: 0, medium: 0, high: 0, critical: 0}
+            this.computedVulnerabilities.forEach(vuln => {
+                var bucket = this.getCvssBucket(vuln)
+                if (bucket)
+                    counts[bucket] += 1
+            })
+            return [
+                {value: 'all', label: $t('all'), count: counts.all},
+                {value: 'low', label: `0 – 3.9 (${$t('low')})`, count: counts.low},
+                {value: 'medium', label: `4 – 6.9 (${$t('medium')})`, count: counts.medium},
+                {value: 'high', label: `7 – 8.9 (${$t('high')})`, count: counts.high},
+                {value: 'critical', label: `9 – 10 (${$t('critical')})`, count: counts.critical}
+            ]
+        },
+
+        creatorOptions: function() {
+            var names = new Set()
+            this.vulnerabilities.forEach(vuln => {
+                if (vuln.creator && vuln.creator.username)
+                    names.add(vuln.creator.username)
+            })
+            return Array.from(names).sort((a, b) => a.localeCompare(b))
+        },
+
+        sortLabel: function() {
+            var fieldLabels = {title: $t('title'), category: $t('category'), lastModified: $t('lastModified')}
+            var direction
+            if (this.pagination.sortBy === 'lastModified')
+                direction = this.sortDesc ? $t('oldestFirst') : $t('newestFirst')
+            else
+                direction = this.sortDesc ? 'Z → A' : 'A → Z'
+            return `${fieldLabels[this.pagination.sortBy] || this.pagination.sortBy} (${direction})`
+        },
+
         vulnCategoriesOptions: function() {
             var result = this.vulnCategories.map(cat => {return cat.name})
             result.unshift('No Category')
@@ -168,14 +299,14 @@ export default {
         },
 
         filteredVulnerabilitiesMergeLeft: function() {
-            return this.vulnerabilities.filter(vuln => 
+            return this.vulnerabilities.filter(vuln =>
                 this.getVulnTitleLocale(vuln, this.mergeLanguageRight) === 'undefined' &&
                 this.getVulnTitleLocale(vuln, this.mergeLanguageLeft) !== 'undefined'
             )
         },
 
         filteredVulnerabilitiesMergeRight: function() {
-            return this.vulnerabilities.filter(vuln => 
+            return this.vulnerabilities.filter(vuln =>
                 this.getVulnTitleLocale(vuln, this.mergeLanguageLeft) === 'undefined' &&
                 this.getVulnTitleLocale(vuln, this.mergeLanguageRight) !== 'undefined'
             )
@@ -216,7 +347,7 @@ export default {
             return useAiGenerationStore().drawerOpen
         },
 
-        // Run key for the QA panel of the vulnerability currently in the modal. Matches the
+        // Run key for the QA panel of the vulnerability currently in the pane. Matches the
         // key computed inside vulnerability-qa-panel so the toolbar dot reflects its run even
         // when the panel is closed.
         activeVulnQaKey: function() {
@@ -229,23 +360,7 @@ export default {
             return useQaRunsStore().isRunning(this.activeVulnQaKey)
         },
 
-        sidePanelOpen: function() {
-            return this.aiDrawerOpen || this.vulnQaOpen
-        },
-
-        vulnModalCardStyle: function() {
-            // The side panel keeps a fixed width and the form keeps a minimum width
-            // (see .vuln-modal-form / .vuln-modal-ai) - so opening the panel widens the
-            // dialog to make room for it instead of splitting the existing width and
-            // squeezing the form (which wrapped the CVSS matrix badly on narrower screens).
-            return {
-                width: this.sidePanelOpen ? 'min(1600px, 98vw)' : 'min(1000px, 95vw)',
-                maxWidth: '98vw',
-                height: '90vh'
-            }
-        },
-
-        canUseAiInModal: function() {
+        canUseAiInPane: function() {
             if (!this.aiEnabled)
                 return false
             if (this.vulnerabilityId)
@@ -326,7 +441,7 @@ export default {
             var index = this.currentVulnerability.details.findIndex(obj => obj.title !== '');
             if (index < 0)
                 this.errors.title = $t('err.titleRequired');
-            
+
             if (this.errors.title)
                 return;
 
@@ -335,7 +450,7 @@ export default {
                 if (this.draftRecovery)
                     this.draftRecovery.clearDraft()
                 this.getVulnerabilities();
-                this.$refs.createModal?.hide();
+                this.closePane();
                 Notify.create({
                     message: $t('msg.vulnerabilityCreatedOk'),
                     color: 'positive',
@@ -358,7 +473,7 @@ export default {
             var index = this.currentVulnerability.details.findIndex(obj => obj.title !== '');
             if (index < 0)
                 this.errors.title = $t('err.titleRequired');
-            
+
             if (this.errors.title)
                 return;
 
@@ -367,8 +482,7 @@ export default {
                 if (this.draftRecovery)
                     this.draftRecovery.clearDraft()
                 this.getVulnerabilities();
-                this.$refs.editModal?.hide();
-                this.$refs.updatesModal?.hide();
+                this.closePane();
                 Notify.create({
                     message: $t('msg.vulnerabilityUpdatedOk'),
                     color: 'positive',
@@ -389,6 +503,8 @@ export default {
         deleteVulnerability: function(vulnerabilityId) {
             VulnerabilityService.deleteVulnerability(vulnerabilityId)
             .then(() => {
+                if (this.vulnerabilityId === vulnerabilityId)
+                    this.closePane()
                 this.getVulnerabilities();
                 Notify.create({
                     message: $t('msg.vulnerabilityDeletedOk'),
@@ -436,41 +552,63 @@ export default {
 
         clone: function(row) {
             this.cleanCurrentVulnerability();
-            
+
             this.currentVulnerability = this.$_.cloneDeep(row)
             this.setCurrentDetails();
             this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
-            
+
             this.vulnerabilityId = row._id;
             if (userStore.isAllowed('vulnerabilities:update'))
                 this.getVulnUpdates(this.vulnerabilityId);
         },
 
+        selectVulnerability: async function(row) {
+            if (this.activePane && this.vulnerabilityId === row._id)
+                return
+            await this.openVulnerability(row)
+        },
+
         openVulnerability: async function(row) {
+            if (this.activePane)
+                await this.cleanupCurrentVulnerability()
+
             this.clone(row)
+            if (userStore.isAllowed('vulnerabilities:update') && row.status === 2)
+                this.activePane = 'updates'
+            else
+                this.activePane = 'edit'
             await this.draftRecovery.maybePromptRecovery()
-            if (userStore.isAllowed('vulnerabilities:update') && row.status === 2) {
-                this.activeModal = 'updates'
-                await this.$nextTick()
-                this.$refs.updatesModal.show()
-            }
-            else {
-                this.activeModal = 'edit'
-                await this.$nextTick()
-                this.$refs.editModal.show()
-            }
         },
 
         openCreateVulnerability: async function(category) {
+            if (this.activePane)
+                await this.cleanupCurrentVulnerability()
+
             this.currentCategory = category ? this.$_.cloneDeep(category) : null
             this.vulnerabilityId = ''
             this.cleanCurrentVulnerability()
             this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
+            this.activePane = 'create'
             await this.draftRecovery.maybePromptRecovery()
+        },
 
-            this.activeModal = 'create'
-            await this.$nextTick()
-            this.$refs.createModal.show()
+        openMergeVulnerabilities: async function() {
+            if (this.activePane === 'merge')
+                return
+            if (this.activePane)
+                await this.cleanupCurrentVulnerability()
+            this.activePane = 'merge'
+        },
+
+        closePane: async function() {
+            if (!this.activePane)
+                return
+            if (this.activePane === 'merge') {
+                this.activePane = null
+                return
+            }
+            await this.cleanupCurrentVulnerability()
+            this.activePane = null
         },
 
         cleanupCurrentVulnerability: async function() {
@@ -478,8 +616,8 @@ export default {
             if (aiStore.isActive)
                 aiStore.cancelSession({ force: true })
             this.vulnQaOpen = false
-            // The unsaved-vulnerability QA run is tied to this modal session; drop it so the
-            // next modal starts clean instead of showing a previous draft's results.
+            // The unsaved-vulnerability QA run is tied to this pane session; drop it so the
+            // next pane starts clean instead of showing a previous draft's results.
             useQaRunsStore().reset('draft')
 
             if (this.draftRecovery) {
@@ -488,11 +626,11 @@ export default {
             }
             this.draftRecoveryPaused = true
             this.vulnerabilityId = ''
+            this.currentCategory = null
             this.cleanCurrentVulnerability()
             this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
             await this.$nextTick()
             this.draftRecoveryPaused = false
-            this.activeModal = null
             await this.refreshVulnerabilityDrafts()
         },
 
@@ -516,7 +654,7 @@ export default {
 
         cleanErrors: function() {
             this.errors.title = '';
-        },  
+        },
 
         cleanCurrentVulnerability: function() {
             this.cleanErrors();
@@ -527,7 +665,7 @@ export default {
             this.currentVulnerability.details = [];
             delete this.currentVulnerability.creator;
             this.currentLanguage = this.dtLanguage;
-            if (this.currentCategory && this.currentCategory.name) 
+            if (this.currentCategory && this.currentCategory.name)
                 this.currentVulnerability.category = this.currentCategory.name
             else
                 this.currentVulnerability.category = null
@@ -603,7 +741,7 @@ export default {
                     customFields: []
                 }
                 details.customFields = Utils.filterCustomFields('vulnerability', this.currentVulnerability.category, this.customFields, [], this.currentLanguage)
-                
+
                 this.currentVulnerability.details.push(details)
                 index = this.currentVulnerability.details.length - 1;
             }
@@ -639,7 +777,7 @@ export default {
             if (index < 0 || !row.details[index].title)
                 return $t('err.notDefinedLanguage');
             else
-                return row.details[index].title;         
+                return row.details[index].title;
         },
 
         getDtType: function(row) {
@@ -647,17 +785,81 @@ export default {
             if (index < 0 || !row.details[index].vulnType)
                 return "Undefined";
             else
-                return row.details[index].vulnType;         
+                return row.details[index].vulnType;
+        },
+
+        getVulnCvss: function(row) {
+            var scoring = this.$settings?.report?.public?.scoringMethods || {}
+            var cacheKey = `${row.cvssv3 || ''}|${row.cvssv4 || ''}|${!!scoring.CVSS3}|${!!scoring.CVSS4}`
+            var cached = cvssCacheByRow.get(row)
+            if (cached && cached.key === cacheKey)
+                return cached.value
+
+            var cvss = null
+            try {
+                if (scoring.CVSS4 && row.cvssv4)
+                    cvss = new Cvss4P0(row.cvssv4).createJsonSchema()
+                else if (scoring.CVSS3 && row.cvssv3)
+                    cvss = new Cvss3P1(row.cvssv3).createJsonSchema()
+            } catch (err) {
+                // Invalid CVSS format — ignore and treat as no CVSS
+                cvss = null
+            }
+
+            var value = null
+            if (cvss && typeof cvss.baseScore === 'number' && cvss.baseScore >= 0) {
+                value = {
+                    score: cvss.baseScore.toFixed(1),
+                    scoreNum: cvss.baseScore,
+                    color: this.getSeverityColor(cvss.baseSeverity)
+                }
+            }
+            cvssCacheByRow.set(row, {key: cacheKey, value: value})
+            return value
+        },
+
+        // Severity bucket used by the CVSS range filter; null when the row has no CVSS
+        getCvssBucket: function(row) {
+            var cvss = this.getVulnCvss(row)
+            if (!cvss)
+                return null
+            if (cvss.scoreNum < 4)
+                return 'low'
+            if (cvss.scoreNum < 7)
+                return 'medium'
+            if (cvss.scoreNum < 9)
+                return 'high'
+            return 'critical'
+        },
+
+        getSeverityColor: function(severity) {
+            var cvssColors = this.$settings?.report?.public?.cvssColors
+            if (cvssColors) {
+                var severityColorName = `${String(severity || 'None').toLowerCase()}Color`
+                return cvssColors[severityColorName] || cvssColors.noneColor
+            }
+            switch (String(severity || '').toLowerCase()) {
+                case 'low':
+                    return 'green'
+                case 'medium':
+                    return 'orange'
+                case 'high':
+                    return 'red'
+                case 'critical':
+                    return 'black'
+                default:
+                    return 'blue'
+            }
         },
 
         customSort: function(rows, sortBy, descending) {
             if (rows) {
                 var data = [...rows];
 
-                if (sortBy === 'type') {
+                if (sortBy === 'lastModified') {
                     (descending)
-                        ? data.sort((a, b) => this.getDtType(b).localeCompare(this.getDtType(a)))
-                        : data.sort((a, b) => this.getDtType(a).localeCompare(this.getDtType(b)))
+                        ? data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+                        : data.sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt))
                 }
                 else if (sortBy === 'title') {
                     (descending)
@@ -673,21 +875,51 @@ export default {
             }
         },
 
-        customFilter: function(rows, terms, cols, getCellValue) {
+        setSort: function(sortBy) {
+            if (this.pagination.sortBy === sortBy)
+                this.sortDesc = !this.sortDesc
+            else {
+                this.pagination.sortBy = sortBy
+                this.sortDesc = sortBy === 'lastModified'
+            }
+        },
+
+        matchesStatusFilter: function(row, status) {
+            if (status === 'valid')
+                return row.status === 0
+            if (status === 'new')
+                return row.status === 1
+            if (status === 'updates')
+                return row.status === 2
+            return true
+        },
+
+        customFilter: function(rows, terms) {
+            var termTitle = (terms.title || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            var categories = terms.categories || []
+            var types = terms.types || []
+            var cvssRange = terms.cvssRange || 'all'
             var result = rows && rows.filter(row => {
                 var title = this.getDtTitle(row).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-                var type = this.getDtType(row).toLowerCase()
-                var category = (row.category || $t('noCategory')).toLowerCase()
-                var termTitle = (terms.title || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-                var termCategory = (terms.category || "").toLowerCase()
-                var termVulnType = (terms.type || "").toLowerCase()
-                return title.indexOf(termTitle) > -1 && 
-                type.indexOf(termVulnType||"") > -1 &&
-                category.indexOf(termCategory||"") > -1 &&
-                (row.status === terms.valid || row.status === terms.new || row.status === terms.updates)
+                return title.indexOf(termTitle) > -1 &&
+                (categories.length === 0 || categories.includes(row.category || 'No Category')) &&
+                (types.length === 0 || types.includes(this.getDtType(row))) &&
+                (cvssRange === 'all' || this.getCvssBucket(row) === cvssRange) &&
+                (!terms.creator || row.creator?.username === terms.creator) &&
+                (!terms.unsavedOnly || this.hasDraftForVulnerability(row._id)) &&
+                this.matchesStatusFilter(row, terms.status || 'all')
             })
-            this.filteredRowsCount = result.length;
-            return result;
+            return result || [];
+        },
+
+        resetAdvancedFilters: function() {
+            this.search.categories = []
+            this.search.types = []
+            this.search.cvssRange = 'all'
+            this.search.creator = null
+            this.search.unsavedOnly = false
+            this.categoryFilterSearch = ''
+            this.typeFilterSearch = ''
         },
 
         goToAudits: function(row) {
@@ -695,7 +927,7 @@ export default {
             this.$router.push({name: 'audits', query: {findingTitle: title}});
         },
 
-        prepareSidePanelForModal: function(except) {
+        prepareSidePanelForPane: function(except) {
             if (except !== 'qa')
                 this.vulnQaOpen = false
             if (except !== 'ai') {
@@ -712,7 +944,7 @@ export default {
             }
 
             Utils.syncEditors(this.$refs)
-            this.prepareSidePanelForModal('qa')
+            this.prepareSidePanelForPane('qa')
             this.vulnQaOpen = true
         },
 
@@ -746,6 +978,8 @@ export default {
         mergeVulnerabilities: function() {
             VulnerabilityService.mergeVulnerability(this.mergeVulnLeft, this.mergeVulnRight, this.mergeLanguageRight)
             .then(() => {
+                this.mergeVulnLeft = ''
+                this.mergeVulnRight = ''
                 this.getVulnerabilities();
                 Notify.create({
                     message: $t('msg.vulnerabilityMergeOk'),
@@ -762,10 +996,6 @@ export default {
                     position: 'top-right'
                 })
             })
-        },
-
-        dblClick: function(row) {
-            this.openVulnerability(row)
         },
 
         loadAiEnabledFieldKeys: function() {
@@ -794,7 +1024,7 @@ export default {
         },
 
         canGenerateAi: function(fieldKey) {
-            return this.canUseAiInModal && this.aiPromptFieldKeys.includes(fieldKey)
+            return this.canUseAiInPane && this.aiPromptFieldKeys.includes(fieldKey)
         },
 
         buildAiLockKey: function(fieldKey) {
@@ -815,7 +1045,7 @@ export default {
         },
 
         isFieldEditable: function(fieldKey) {
-            return this.canUseAiInModal
+            return this.canUseAiInPane
         },
 
         getCurrentDetail: function() {
@@ -841,10 +1071,10 @@ export default {
             if (!fieldKey || !this.canGenerateAi(fieldKey))
                 return
 
-            if (!this.canUseAiInModal || this.isAiFieldLoading(fieldKey))
+            if (!this.canUseAiInPane || this.isAiFieldLoading(fieldKey))
                 return
 
-            this.prepareSidePanelForModal('ai')
+            this.prepareSidePanelForPane('ai')
 
             const lockKey = this.buildAiLockKey(fieldKey)
             const aiStore = useAiGenerationStore()

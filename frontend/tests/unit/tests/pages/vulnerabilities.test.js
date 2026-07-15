@@ -132,10 +132,12 @@ const mockVulnerabilities = [
     _id: 'vuln1',
     category: 'Category1',
     status: 0,
-    cvssv3: '',
+    creator: { username: 'admin' },
+    cvssv3: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
     cvssv4: '',
     priority: '',
     remediationComplexity: '',
+    updatedAt: '2024-01-15T00:00:00.000Z',
     details: [
       {
         locale: 'en',
@@ -157,6 +159,7 @@ const mockVulnerabilities = [
     cvssv4: '',
     priority: '',
     remediationComplexity: '',
+    updatedAt: '2024-03-10T00:00:00.000Z',
     details: [
       {
         locale: 'en',
@@ -178,6 +181,7 @@ const mockVulnerabilities = [
     cvssv4: '',
     priority: '',
     remediationComplexity: '',
+    updatedAt: '2024-02-20T00:00:00.000Z',
     details: [
       {
         locale: 'en',
@@ -204,17 +208,6 @@ function setupDefaultMocks() {
   DraftRecoveryService.listDrafts.mockResolvedValue([])
   DraftRecoveryService.state.current = null
   DraftRecoveryService.state.revision = 0
-}
-
-// Helper to set $refs on Vue 3 component instances (can't assign directly through proxy)
-function setRefs(wrapper, refs) {
-  Object.entries(refs).forEach(([name, refValue]) => {
-    if (wrapper.vm.$refs[name]) {
-      Object.assign(wrapper.vm.$refs[name], refValue)
-    } else {
-      wrapper.vm.$refs[name] = refValue
-    }
-  })
 }
 
 describe('Vulnerabilities Page', () => {
@@ -250,8 +243,11 @@ describe('Vulnerabilities Page', () => {
       global: {
         plugins: [pinia, router, i18n],
         stubs: {
-          'q-table': true,
           'q-select': true,
+          'q-chip': true,
+          'q-menu': true,
+          'q-checkbox': true,
+          'q-inner-loading': true,
           'q-toggle': true,
           'q-btn': true,
           'q-btn-dropdown': true,
@@ -312,24 +308,11 @@ describe('Vulnerabilities Page', () => {
   }
 
   const draftIndicatorStubs = () => ({
-    'q-table': {
-      props: ['rows'],
-      template: `
-        <div>
-          <slot name="top" />
-          <div v-for="row in rows" :key="row._id">
-            <slot name="body" :row="row" />
-          </div>
-        </div>
-      `
-    },
     'q-btn-dropdown': { template: '<div><slot /></div>' },
     'q-list': { template: '<div><slot /></div>' },
     'q-item': { template: '<div><slot /></div>' },
     'q-item-section': { template: '<div><slot /></div>' },
     'q-item-label': { template: '<div><slot /></div>' },
-    'q-tr': { template: '<div><slot /></div>' },
-    'q-td': { template: '<div><slot /></div>' },
     'q-badge': { template: '<span v-bind="$attrs"><slot /></span>' },
     'q-tooltip': { template: '<span><slot /></span>' }
   })
@@ -467,34 +450,80 @@ describe('Vulnerabilities Page', () => {
       expect(wrapper.vm.dtLanguageLabel).toBe('de')
     })
 
-    it('should widen the vulnerability modal only while a side panel is open', async () => {
+    it('should compute status counts for the selected language', async () => {
       const wrapper = createWrapper()
       await flushPromises()
 
-      wrapper.vm.vulnQaOpen = false
-      expect(wrapper.vm.vulnModalCardStyle.width).toBe('min(1000px, 95vw)')
+      wrapper.vm.dtLanguage = 'en'
+      expect(wrapper.vm.statusCounts).toEqual({ all: 3, valid: 1, new: 1, updates: 1 })
+    })
 
-      wrapper.vm.vulnQaOpen = true
-      expect(wrapper.vm.vulnModalCardStyle.width).toBe('min(1600px, 98vw)')
+    it('should filter vulnerabilities by the single-select status filter', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      wrapper.vm.statusFilter = 'all'
+      expect(wrapper.vm.filteredVulnerabilities.length).toBe(3)
+
+      wrapper.vm.statusFilter = 'new'
+      expect(wrapper.vm.filteredVulnerabilities.length).toBe(1)
+      expect(wrapper.vm.filteredVulnerabilities[0]._id).toBe('vuln2')
+
+      wrapper.vm.statusFilter = 'updates'
+      expect(wrapper.vm.filteredVulnerabilities.length).toBe(1)
+      expect(wrapper.vm.filteredVulnerabilities[0]._id).toBe('vuln3')
+    })
+
+    it('should paginate the sorted vulnerabilities', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      wrapper.vm.pagination.rowsPerPage = 2
+      wrapper.vm.pagination.page = 1
+      expect(wrapper.vm.paginatedVulnerabilities.length).toBe(2)
+      expect(wrapper.vm.pagesNumber).toBe(2)
+
+      wrapper.vm.pagination.page = 2
+      expect(wrapper.vm.paginatedVulnerabilities.length).toBe(1)
+
+      // rowsPerPage 0 shows everything
+      wrapper.vm.pagination.rowsPerPage = 0
+      expect(wrapper.vm.paginatedVulnerabilities.length).toBe(3)
+      expect(wrapper.vm.pagesNumber).toBe(1)
+    })
+  })
+
+  describe('setSort', () => {
+    it('should toggle direction when selecting the current sort field', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      expect(wrapper.vm.pagination.sortBy).toBe('title')
+      expect(wrapper.vm.sortDesc).toBe(false)
+
+      wrapper.vm.setSort('title')
+      expect(wrapper.vm.sortDesc).toBe(true)
+
+      wrapper.vm.setSort('category')
+      expect(wrapper.vm.pagination.sortBy).toBe('category')
+      expect(wrapper.vm.sortDesc).toBe(false)
     })
   })
 
   describe('Draft Recovery Hints', () => {
-    it('should render the draft recovery status in create, edit, and update modal headers', async () => {
+    it('should render the draft recovery status in create, edit, and update pane headers', async () => {
       const wrapper = createWrapper({
         stubs: {
-          'q-dialog': { template: '<div><slot /></div>' },
-          'q-card': { template: '<div><slot /></div>' },
-          'q-layout': { template: '<div><slot /></div>' },
-          'q-header': { template: '<div><slot /></div>' },
           'q-bar': { template: '<div><slot /></div>' },
           'draft-recovery-status': { template: '<div data-testid="draft-recovery-status-stub" />' }
         }
       })
       await flushPromises()
 
-      for (const modal of ['create', 'edit', 'updates']) {
-        wrapper.vm.activeModal = modal
+      for (const pane of ['create', 'edit', 'updates']) {
+        wrapper.vm.activePane = pane
         await wrapper.vm.$nextTick()
         expect(wrapper.find('[data-testid="draft-recovery-status-stub"]').exists()).toBe(true)
       }
@@ -719,7 +748,6 @@ describe('Vulnerabilities Page', () => {
         { locale: 'en', title: 'New Vuln', customFields: [] }
       ]
 
-      setRefs(wrapper, { createModal: { hide: vi.fn() } })
       wrapper.vm.createVulnerability()
       await flushPromises()
 
@@ -734,9 +762,8 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.currentVulnerability.details = [
         { locale: 'en', title: 'New Vuln', customFields: [] }
       ]
-      wrapper.vm.activeModal = 'create'
+      wrapper.vm.activePane = 'create'
       await wrapper.vm.$nextTick()
-      setRefs(wrapper, { createModal: { hide: vi.fn() } })
       wrapper.vm.createVulnerability()
       await flushPromises()
 
@@ -789,10 +816,6 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.currentVulnerability.details = [
         { locale: 'en', title: 'Updated Vuln', customFields: [] }
       ]
-      setRefs(wrapper, {
-        editModal: { hide: vi.fn() },
-        updatesModal: { hide: vi.fn() }
-      })
       wrapper.vm.updateVulnerability()
       await flushPromises()
 
@@ -811,12 +834,8 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.currentVulnerability.details = [
         { locale: 'en', title: 'Updated Vuln', customFields: [] }
       ]
-      wrapper.vm.activeModal = 'edit'
+      wrapper.vm.activePane = 'edit'
       await wrapper.vm.$nextTick()
-      setRefs(wrapper, {
-        editModal: { hide: vi.fn() },
-        updatesModal: { hide: vi.fn() }
-      })
       wrapper.vm.updateVulnerability()
       await flushPromises()
 
@@ -995,16 +1014,30 @@ describe('Vulnerabilities Page', () => {
       expect(sorted[1].category).toBe('Category2')
     })
 
-    it('should sort by type', async () => {
+    it('should sort by last modified', async () => {
       const wrapper = createWrapper()
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
       const rows = [...mockVulnerabilities]
-      const sorted = wrapper.vm.customSort(rows, 'type', false)
+      const sorted = wrapper.vm.customSort(rows, 'lastModified', false)
 
-      expect(wrapper.vm.getDtType(sorted[0])).toBe('Network')
-      expect(wrapper.vm.getDtType(sorted[1])).toBe('Web')
+      expect(sorted[0]._id).toBe('vuln1')
+      expect(sorted[1]._id).toBe('vuln3')
+      expect(sorted[2]._id).toBe('vuln2')
+    })
+
+    it('should sort by last modified descending', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      const rows = [...mockVulnerabilities]
+      const sorted = wrapper.vm.customSort(rows, 'lastModified', true)
+
+      expect(sorted[0]._id).toBe('vuln2')
+      expect(sorted[1]._id).toBe('vuln3')
+      expect(sorted[2]._id).toBe('vuln1')
     })
 
     it('should return undefined for null rows', async () => {
@@ -1022,35 +1055,112 @@ describe('Vulnerabilities Page', () => {
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
-      const terms = { title: 'SQL', category: '', type: '', valid: 0, new: 1, updates: 2 }
+      const terms = { title: 'SQL', status: 'all' }
       const result = wrapper.vm.customFilter(mockVulnerabilities, terms)
 
       expect(result.length).toBe(1)
       expect(result[0]._id).toBe('vuln1')
     })
 
-    it('should filter by status toggles', async () => {
+    it('should filter by status', async () => {
       const wrapper = createWrapper()
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
       // Only show valid (status 0), exclude new and updates
-      const terms = { title: '', category: '', type: '', valid: 0, new: null, updates: null }
+      const terms = { title: '', status: 'valid' }
       const result = wrapper.vm.customFilter(mockVulnerabilities, terms)
 
       expect(result.length).toBe(1)
       expect(result[0]._id).toBe('vuln1')
     })
 
-    it('should update filteredRowsCount', async () => {
+    it('should filter by selected categories (multi-select, No Category included)', async () => {
       const wrapper = createWrapper()
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
-      const terms = { title: '', category: '', type: '', valid: 0, new: 1, updates: 2 }
-      wrapper.vm.customFilter(mockVulnerabilities, terms)
+      let result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', categories: ['Category1'] })
+      expect(result.map(row => row._id)).toEqual(['vuln1'])
+
+      result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', categories: ['Category1', 'No Category'] })
+      expect(result.map(row => row._id)).toEqual(['vuln1', 'vuln3'])
+    })
+
+    it('should filter by selected types (multi-select)', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      const result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', types: ['Network'] })
+      expect(result.map(row => row._id)).toEqual(['vuln3'])
+    })
+
+    it('should filter by CVSS range bucket', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      // vuln1 has a 9.8 CVSSv3 vector -> critical; the others have no CVSS
+      const critical = wrapper.vm.customFilter(mockVulnerabilities, { title: '', cvssRange: 'critical' })
+      expect(critical.map(row => row._id)).toEqual(['vuln1'])
+
+      const low = wrapper.vm.customFilter(mockVulnerabilities, { title: '', cvssRange: 'low' })
+      expect(low.length).toBe(0)
+    })
+
+    it('should filter by creator username', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      const result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', creator: 'admin' })
+      expect(result.map(row => row._id)).toEqual(['vuln1'])
+    })
+
+    it('should count active filter groups and reset them', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      expect(wrapper.vm.activeFilterCount).toBe(0)
+
+      wrapper.vm.search.categories = ['Category1']
+      wrapper.vm.search.types = ['Web']
+      wrapper.vm.search.cvssRange = 'high'
+      wrapper.vm.search.creator = 'admin'
+      expect(wrapper.vm.activeFilterCount).toBe(4)
+
+      wrapper.vm.search.unsavedOnly = true
+      expect(wrapper.vm.activeFilterCount).toBe(5)
+
+      wrapper.vm.resetAdvancedFilters()
+      expect(wrapper.vm.activeFilterCount).toBe(0)
+      expect(wrapper.vm.search).toEqual({
+        title: '', categories: [], types: [], cvssRange: 'all', creator: null, unsavedOnly: false
+      })
+    })
+
+    it('should filter by unsaved changes only', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+      wrapper.vm.vulnerabilityDrafts = [
+        { scope: 'vuln-modal-edit', refKey: 'vuln1', status: 'active_draft' }
+      ]
+
+      const result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', unsavedOnly: true })
+      expect(result.map(row => row._id)).toEqual(['vuln1'])
+    })
+
+    it('should expose the filtered count through filteredRowsCount', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
 
       expect(wrapper.vm.filteredRowsCount).toBe(3)
+
+      wrapper.vm.search.title = 'SQL'
+      expect(wrapper.vm.filteredRowsCount).toBe(1)
     })
 
     it('should filter case-insensitively', async () => {
@@ -1058,7 +1168,7 @@ describe('Vulnerabilities Page', () => {
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
-      const terms = { title: 'sql injection', category: '', type: '', valid: 0, new: 1, updates: 2 }
+      const terms = { title: 'sql injection', status: 'all' }
       const result = wrapper.vm.customFilter(mockVulnerabilities, terms)
 
       expect(result.length).toBe(1)
@@ -1201,11 +1311,14 @@ describe('Vulnerabilities Page', () => {
       expect(wrapper.vm.loading).toBe(true)
       expect(wrapper.vm.vulnerabilities).toEqual([])
       expect(wrapper.vm.search).toEqual({
-        title: '', type: '', category: '', valid: 0, new: 1, updates: 2
+        title: '', categories: [], types: [], cvssRange: 'all', creator: null, unsavedOnly: false
       })
+      expect(wrapper.vm.statusFilter).toBe('all')
       expect(wrapper.vm.errors).toEqual({ title: '' })
       expect(wrapper.vm.pagination.rowsPerPage).toBe(25)
       expect(wrapper.vm.pagination.sortBy).toBe('title')
+      expect(wrapper.vm.sortDesc).toBe(false)
+      expect(wrapper.vm.activePane).toBeNull()
     })
 
     it('should have correct rowsPerPageOptions', async () => {

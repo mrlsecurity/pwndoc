@@ -436,14 +436,14 @@ async function recordAuditAuthoring(page, data) {
 
 async function recordVulnerabilityWorkflow(page, data) {
   // Search/filter and view a vulnerability with EN/FR details, CVSS, remediation, references, category
-  await goto(page, '/vulnerabilities', (p) => p.getByRole('button', { name: 'New Vulnerability' }));
+  await goto(page, '/vulnerabilities', (p) => p.getByTestId('new-vulnerability-button'));
   await fill(page, page.getByTestId('search-vulnerability-title'), 'SQL Injection');
-  let row = page.getByRole('row').filter({ hasText: 'SQL Injection in Search Endpoint' }).first();
-  await row.waitFor();
-  await click(page, row.getByTestId('edit-vulnerability-button'));
-  await page.getByRole('dialog').getByText(/Edit Vulnerability/i).waitFor();
+  let item = page.getByRole('listitem').filter({ hasText: 'SQL Injection in Search Endpoint' }).first();
+  await item.waitFor();
+  await click(page, item);
+  await page.getByTestId('vulnerability-edit-pane').getByText(/Edit Vulnerability/i).waitFor();
   await sleep(900);
-  await click(page, page.locator('.q-dialog .q-select').nth(1));
+  await click(page, page.getByTestId('vulnerability-edit-pane').locator('.q-select').nth(1));
   await click(page, page.getByRole('option', { name: /French|fr/i }).first());
   await sleep(900);
   await click(page, page.getByTestId('edit-vulnerability-close'));
@@ -457,11 +457,11 @@ async function recordVulnerabilityWorkflow(page, data) {
   // Switch to admin validation queue, show the pending update, compare current vs proposed, and approve it
   await goto(page, '/vulnerabilities', (p) => p.getByTestId('search-vulnerability-title'));
   await fill(page, page.getByTestId('search-vulnerability-title'), 'SQL Injection');
-  row = page.getByRole('row').filter({ hasText: 'SQL Injection in Search Endpoint' }).first();
-  await row.waitFor();
+  item = page.getByRole('listitem').filter({ hasText: 'SQL Injection in Search Endpoint' }).first();
+  await item.waitFor();
   await sleep(500);
-  await click(page, row.getByTestId('edit-vulnerability-button'));
-  await page.getByRole('dialog').getByText('Update Vulnerability').waitFor();
+  await click(page, item);
+  await page.getByTestId('vulnerability-updates-pane').getByText('Update Vulnerability').waitFor();
   await sleep(1200);
   await click(page, page.getByRole('button', { name: /^Update$/i }));
   await sleep(900);
