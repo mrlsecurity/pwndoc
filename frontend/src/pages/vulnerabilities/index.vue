@@ -1439,7 +1439,7 @@ body.body--dark .vuln-pane-header {
     overflow-y: auto;
     overflow-x: auto;
     min-height: 0;
-    /* The QA/AI panel keeps a fixed width (below); the form keeps this floor so the
+    /* The QA/AI panel keeps its own width (below); the form keeps this floor so the
        CVSS matrix doesn't get cramped when the panel is open on narrower screens. */
     flex: 1 1 640px;
     min-width: 640px;
@@ -1448,8 +1448,12 @@ body.body--dark .vuln-pane-header {
 .vuln-modal-ai {
     border-left: 1px solid #e0e0e0;
     min-height: 0;
-    flex: 0 0 420px;
-    width: 420px;
+    /* Scale with the viewport like .vuln-sidebar so the AI chat / QA panel
+       stays comfortable on large displays, but allow it to shrink (down to
+       420px) instead of being clipped when the sidebar + form floors leave
+       less room than the preferred width. */
+    flex: 0 1 clamp(420px, 32vw, 560px);
+    min-width: 420px;
     max-height: 100%;
     overflow: hidden;
     display: flex;
