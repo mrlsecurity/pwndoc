@@ -125,10 +125,6 @@ const SettingSchema = new Schema({
             bedrockRegion: {type: String, default: 'us-east-1'},
             bedrockModel: {type: String, default: 'global.anthropic.claude-opus-4-8'}
         }
-    },
-    vulnerabilityQaReports: {
-        type: Schema.Types.Mixed,
-        default: undefined
     }
 }, {strict: true});
 
@@ -163,23 +159,6 @@ SettingSchema.statics.update = (settings) => {
         query.exec()
             .then(settings => resolve(settings))
             .catch(err => reject(err));
-    });
-};
-
-SettingSchema.statics.saveVulnerabilityQaReportForLocale = (locale, qaReport) => {
-    return new Promise((resolve, reject) => {
-        const localeKey = String(locale || '').trim();
-        Settings.findOneAndUpdate({}, {
-            $set: {
-                [`vulnerabilityQaReports.${localeKey}`]: {
-                    ...qaReport,
-                    locale: localeKey
-                }
-            }
-        }, { new: true, runValidators: true })
-        .exec()
-        .then((settings) => resolve(settings))
-        .catch((err) => reject(err));
     });
 };
 

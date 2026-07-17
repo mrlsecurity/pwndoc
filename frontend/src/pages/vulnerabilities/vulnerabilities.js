@@ -14,11 +14,13 @@ import AiService from '@/services/ai'
 import AiFieldHelper from '@/services/ai-field-helper'
 import { useAiGenerationStore } from '@/stores/ai-generation'
 import { useQaRunsStore } from '@/stores/qa-runs'
+import { useVulnQaStore } from '@/stores/vuln-qa'
 import { useUserStore } from 'src/stores/user'
 import Utils from '@/services/utils'
 import { createDraftRecovery } from '@/composables/useDraftRecovery'
 import DraftRecoveryService from '@/services/draft-recovery'
 import VulnerabilityQaPanel from '@/components/vulnerability-qa-panel.vue'
+import VulnerabilityQaAllPanel from '@/components/vulnerability-qa-all-panel.vue'
 import AiChatDrawer from '@/components/ai-chat-drawer.vue'
 import { hasAnyQaCheckEnabled } from '@/services/qa-checks'
 
@@ -83,6 +85,8 @@ export default {
             // Merge languages
             mergeLanguageLeft: '',
             mergeLanguageRight: '',
+            mergeSearchLeft: '',
+            mergeSearchRight: '',
             mergeVulnLeft: '',
             mergeVulnRight: '',
             // Vulnerability categories
@@ -97,9 +101,7 @@ export default {
             aiFieldPrompts: [],
             // Content displayed in the detail pane: null | create | edit | updates | merge
             activePane: null,
-            vulnQaOpen: false,
-            runAllQaOpen: false,
-            runAllQaKey: 0
+            vulnQaOpen: false
         }
     },
 
@@ -111,7 +113,8 @@ export default {
         CustomFields,
         DraftRecoveryStatus,
         AiChatDrawer,
-        VulnerabilityQaPanel
+        VulnerabilityQaPanel,
+        VulnerabilityQaAllPanel
     },
 
     mounted: function() {
@@ -123,16 +126,25 @@ export default {
         this.setupDraftRecovery()
         this.refreshVulnerabilityDrafts()
         this.loadAiEnabledFieldKeys()
+        this.setupVulnQaSocket()
     },
 
     unmounted: function() {
         if (this.draftRecovery)
             this.draftRecovery.stop()
+        this.teardownVulnQaSocket()
     },
 
     watch: {
         currentLanguage: function(val, oldVal) {
             this.setCurrentDetails();
+        },
+        // The QA-all panel is per-locale: switching the list language re-attaches it (and
+        // any in-flight job/state) to the newly selected locale.
+        dtLanguage: function(val) {
+            const vulnQaStore = useVulnQaStore()
+            if (vulnQaStore.panelOpen && vulnQaStore.locale !== val)
+                vulnQaStore.open(val)
         },
         draftRecoveryRevision: function() {
             this.refreshVulnerabilityDrafts()
@@ -227,6 +239,12 @@ export default {
             return count
         },
 
+        unsavedChangesCount: function() {
+            return this.computedVulnerabilities.filter(vuln =>
+                this.hasDraftForVulnerability(vuln._id)
+            ).length
+        },
+
         categoryFacets: function() {
             var counts = {}
             this.computedVulnerabilities.forEach(vuln => {
@@ -299,16 +317,20 @@ export default {
         },
 
         filteredVulnerabilitiesMergeLeft: function() {
+            const search = (this.mergeSearchLeft || '').trim().toLowerCase()
             return this.vulnerabilities.filter(vuln =>
                 this.getVulnTitleLocale(vuln, this.mergeLanguageRight) === 'undefined' &&
-                this.getVulnTitleLocale(vuln, this.mergeLanguageLeft) !== 'undefined'
+                this.getVulnTitleLocale(vuln, this.mergeLanguageLeft) !== 'undefined' &&
+                (!search || this.getVulnTitleLocale(vuln, this.mergeLanguageLeft).toLowerCase().includes(search))
             )
         },
 
         filteredVulnerabilitiesMergeRight: function() {
+            const search = (this.mergeSearchRight || '').trim().toLowerCase()
             return this.vulnerabilities.filter(vuln =>
                 this.getVulnTitleLocale(vuln, this.mergeLanguageLeft) === 'undefined' &&
-                this.getVulnTitleLocale(vuln, this.mergeLanguageRight) !== 'undefined'
+                this.getVulnTitleLocale(vuln, this.mergeLanguageRight) !== 'undefined' &&
+                (!search || this.getVulnTitleLocale(vuln, this.mergeLanguageRight).toLowerCase().includes(search))
             )
         },
 
@@ -345,6 +367,21 @@ export default {
 
         aiDrawerOpen: function() {
             return useAiGenerationStore().drawerOpen
+        },
+
+        vulnQaAllOpen: function() {
+            return useVulnQaStore().panelOpen
+        },
+
+        vulnQaAllRunning: function() {
+            return useVulnQaStore().running
+        },
+
+        // The QA-all panel always renders as its own docked column (never inside a pane),
+        // so navigating between vulnerabilities — which swaps the pane content — never
+        // remounts it and the reviewer keeps their scroll position and expanded groups.
+        vulnQaAllDockVisible: function() {
+            return this.vulnQaAllOpen
         },
 
         // Run key for the QA panel of the vulnerability currently in the pane. Matches the
@@ -577,7 +614,17 @@ export default {
                 this.activePane = 'updates'
             else
                 this.activePane = 'edit'
+            this.scrollDetailToTop()
             await this.draftRecovery.maybePromptRecovery()
+        },
+
+        // Switching vulnerabilities swaps the pane content in place, which keeps the
+        // previous scroll offset and lands the reader mid-form. Always reset to the top.
+        // `detailScroll` is the active pane's scroll container (only one pane is mounted).
+        scrollDetailToTop: function() {
+            this.$nextTick(() => {
+                this.$refs.detailScroll?.scrollTo({ top: 0 })
+            })
         },
 
         openCreateVulnerability: async function(category) {
@@ -927,6 +974,8 @@ export default {
             this.$router.push({name: 'audits', query: {findingTitle: title}});
         },
 
+        // Exactly one right-hand panel is visible at a time: per-vuln QA ('qa'), the AI
+        // chat drawer ('ai'), or the QA-all panel ('qa-all'). Opening one closes the others.
         prepareSidePanelForPane: function(except) {
             if (except !== 'qa')
                 this.vulnQaOpen = false
@@ -935,6 +984,8 @@ export default {
                 if (aiStore.isActive)
                     aiStore.cancelSession({ force: true })
             }
+            if (except !== 'qa-all')
+                useVulnQaStore().close()
         },
 
         toggleVulnerabilityQaView: function() {
@@ -952,20 +1003,91 @@ export default {
             this.vulnQaOpen = false
         },
 
-        closeRunAllQaModal: function() {
-            this.runAllQaOpen = false
-            this.$refs.runAllQaModal?.hide()
-        },
-
-        openRunAllQaModal: function() {
+        toggleRunAllQa: function() {
+            const vulnQaStore = useVulnQaStore()
+            if (vulnQaStore.panelOpen) {
+                vulnQaStore.close()
+                return
+            }
             if (!this.vulnerabilityQaCount)
                 return
 
-            this.runAllQaKey += 1
-            this.runAllQaOpen = true
+            this.prepareSidePanelForPane('qa-all')
+            vulnQaStore.open(this.dtLanguage)
+        },
+
+        // Issue click in the QA-all panel: select the offending vulnerability in the list
+        // (paging/scrolling to it) and open its edit pane — the panel follows into the
+        // pane's side slot, so triage flow is click → fix → recheck → next.
+        navigateToVulnerabilityFromQa: async function(vulnerabilityId) {
+            const vuln = this.vulnerabilities.find((row) => row._id === vulnerabilityId)
+            if (!vuln) {
+                // Deleted since the QA run: without feedback the button looks broken.
+                Notify.create({
+                    message: $t('vulnerabilityQa.notFoundInList'),
+                    color: 'warning',
+                    textColor: 'white',
+                    position: 'top-right'
+                })
+                return
+            }
+
+            const index = this.sortedVulnerabilities.findIndex((row) => row._id === vulnerabilityId)
+            if (index === -1) {
+                Notify.create({
+                    message: $t('vulnerabilityQa.notVisibleWithFilters'),
+                    color: 'info',
+                    textColor: 'white',
+                    position: 'top-right',
+                    actions: [{
+                        label: $t('vulnerabilityQa.clearFilters'),
+                        color: 'white',
+                        handler: () => {
+                            this.clearListFilters()
+                            this.navigateToVulnerabilityFromQa(vulnerabilityId)
+                        }
+                    }]
+                })
+            } else if (this.pagination.rowsPerPage) {
+                this.pagination.page = Math.floor(index / this.pagination.rowsPerPage) + 1
+            }
+
+            await this.selectVulnerability(vuln)
             this.$nextTick(() => {
-                this.$refs.runAllQaModal?.show()
+                document.querySelector(`[data-testid="vulnerability-item-${vulnerabilityId}"]`)
+                    ?.scrollIntoView({ block: 'nearest' })
             })
+        },
+
+        clearListFilters: function() {
+            this.search = {title: '', categories: [], types: [], cvssRange: 'all', creator: null, unsavedOnly: false}
+            this.statusFilter = 'all'
+        },
+
+        setupVulnQaSocket: function() {
+            const vulnQaStore = useVulnQaStore()
+            this.vulnQaSocketHandlers = {
+                progress: (payload) => vulnQaStore.handleSocketProgress(payload),
+                done: (payload) => vulnQaStore.handleSocketDone(payload),
+                connect: () => this.$socket.emit('join', { username: userStore.username, room: 'vuln-qa' })
+            }
+            this.$socket.emit('join', { username: userStore.username, room: 'vuln-qa' })
+            this.$socket.on('vuln-qa:progress', this.vulnQaSocketHandlers.progress)
+            this.$socket.on('vuln-qa:done', this.vulnQaSocketHandlers.done)
+            this.$socket.on('connect', this.vulnQaSocketHandlers.connect)
+        },
+
+        teardownVulnQaSocket: function() {
+            if (!this.vulnQaSocketHandlers)
+                return
+            // Remove only this page's listeners — the boot file's global connect/disconnect
+            // handlers must survive, so never call a bare $socket.off().
+            this.$socket.emit('leave', { username: userStore.username, room: 'vuln-qa' })
+            this.$socket.off('vuln-qa:progress', this.vulnQaSocketHandlers.progress)
+            this.$socket.off('vuln-qa:done', this.vulnQaSocketHandlers.done)
+            this.$socket.off('connect', this.vulnQaSocketHandlers.connect)
+            this.vulnQaSocketHandlers = null
+            useVulnQaStore().clearStatusRefresh()
         },
 
         getVulnTitleLocale: function(vuln, locale) {

@@ -132,47 +132,35 @@ module.exports = function() {
         });
 
         describe('batching large catalogs', () => {
-            it('should split a large "all templates" catalog into multiple batched requests', async () => {
+            it('should skip a large "all templates" catalog instead of making multiple provider requests', async () => {
                 const mockFn = jest.fn().mockResolvedValue({ issues: [], summary: '', model: 'test-model' });
 
-                await runAiUnlinkedTranslationChecksWithMockedProvider(mockFn, {
+                await expect(runAiUnlinkedTranslationChecksWithMockedProvider(mockFn, {
                     vulnerabilities: buildLargeSingleLocaleCatalog(90),
                     settings: {},
                     provider: 'anthropic'
-                });
+                })).rejects.toThrow('skipped above 75');
 
-                expect(mockFn.mock.calls.length).toBeGreaterThan(1);
-                mockFn.mock.calls.forEach((call) => {
-                    expect(call[0].templates.length).toBeLessThanOrEqual(40);
-                    expect(call[0].mode).toBe('all');
-                });
+                expect(mockFn).not.toHaveBeenCalled();
             });
 
-            it('should merge issues collected across batches', async () => {
-                const mockFn = jest.fn()
-                    .mockResolvedValueOnce({
-                        issues: [{
-                            severity: 'warning',
-                            title: 'Unlinked translation',
-                            vulnerabilityId: 'vuln-0',
-                            templateTitle: 'Template 0',
-                            locale: 'en',
-                            relatedTemplates: [{ vulnerabilityId: 'vuln-1', title: 'Template 1', locale: 'fr' }]
-                        }],
-                        summary: 'first batch summary',
-                        model: 'test-model'
-                    })
-                    .mockResolvedValueOnce({ issues: [], summary: '', model: 'test-model' })
-                    .mockResolvedValueOnce({ issues: [], summary: '', model: 'test-model' });
+            it('should send a catalog within the pulled ceiling in one provider request', async () => {
+                const mockFn = jest.fn().mockResolvedValue({
+                    issues: [],
+                    summary: 'catalog summary',
+                    model: 'test-model'
+                });
 
                 const result = await runAiUnlinkedTranslationChecksWithMockedProvider(mockFn, {
-                    vulnerabilities: buildLargeSingleLocaleCatalog(90),
+                    vulnerabilities: buildLargeSingleLocaleCatalog(70),
                     settings: {},
                     provider: 'anthropic'
                 });
 
-                expect(result.issues).toHaveLength(1);
-                expect(result.summary).toBe('first batch summary');
+                expect(mockFn).toHaveBeenCalledTimes(1);
+                expect(mockFn.mock.calls[0][0].templates).toHaveLength(70);
+                expect(mockFn.mock.calls[0][0].mode).toBe('all');
+                expect(result.summary).toBe('catalog summary');
             });
         });
     });

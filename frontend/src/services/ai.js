@@ -22,6 +22,28 @@ export default {
     return api.post('ai/vulnerabilities/qa', params)
   },
 
+  startVulnerabilityQaRun: function(params = {}) {
+    return api.post('ai/vulnerabilities/qa/run', params)
+  },
+
+  getVulnerabilityQaStatus: function(locale) {
+    return api.get('ai/vulnerabilities/qa/status', {
+      params: { locale }
+    })
+  },
+
+  cancelVulnerabilityQaRun: function(locale) {
+    return api.post('ai/vulnerabilities/qa/cancel', { locale })
+  },
+
+  setVulnerabilityQaIssueDismissed: function(params = {}) {
+    return api.post('ai/vulnerabilities/qa/dismiss', params)
+  },
+
+  resolveVulnerabilityQa: function(params = {}) {
+    return api.post('ai/vulnerabilities/qa/resolve', params)
+  },
+
   testProvider: function(params = {}) {
     return api.post('ai/test', params)
   },

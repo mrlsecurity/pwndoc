@@ -9,9 +9,10 @@ const {
 
 const AI_DUPLICATE_SEVERITIES = ['error', 'warning', 'info'];
 const FIELD_SLICE_LENGTH = 2500;
-// Keeps a single request's template catalog within provider context limits on large libraries.
-const TYPE_BATCH_CEILING = 40;
-const AI_DUPLICATE_BATCH_OVERLAP = 5;
+// Keep QA-all aligned with the pulled implementation: one catalog request processes one
+// vulnerability type, with oversized types split into non-overlapping groups of 75.
+const TYPE_BATCH_CEILING = 75;
+const TARGET_BATCH_CEILING = 40;
 
 const pushIssue = (issues, issue, source = 'ai') => {
     const normalized = normalizeIssue({
@@ -77,7 +78,7 @@ const buildDuplicateBatches = (catalog = []) => {
     const batches = [];
 
     groupCatalogByType(catalog).forEach((entries) => {
-        chunkByCeiling(entries, TYPE_BATCH_CEILING, AI_DUPLICATE_BATCH_OVERLAP)
+        chunkByCeiling(entries, TYPE_BATCH_CEILING, 0)
             .forEach((batch) => batches.push(batch));
     });
 
@@ -144,7 +145,8 @@ const normalizeAiDuplicateIssues = (issues = [], {
                 severity: severity,
                 title: title,
                 message: message,
-                location: location || formatVulnerabilityLocation(focalTitle)
+                location: location || formatVulnerabilityLocation(focalTitle),
+                vulnerabilityIds: focalId ? [focalId] : []
             });
             return;
         }
@@ -188,7 +190,8 @@ const normalizeAiDuplicateIssues = (issues = [], {
                 severity: severity,
                 title: title,
                 message: issueMessage.replace(/\s+/g, ' ').trim(),
-                location: formatVulnerabilityLocation(focalEntry.title)
+                location: formatVulnerabilityLocation(focalEntry.title),
+                vulnerabilityIds: [focalId, resolvedRelatedId]
             });
         });
     });
@@ -230,7 +233,7 @@ const runAiDuplicateChecks = async ({
             entry.vulnerabilityId !== targetEntry.vulnerabilityId &&
             normalizeTypeKey(entry.vulnType) === typeKey
         ));
-        batches = chunkByCeiling(typeCandidates).map((candidateBatch) => ({
+        batches = chunkByCeiling(typeCandidates, TARGET_BATCH_CEILING, 0).map((candidateBatch) => ({
             mode: 'single',
             target: targetEntry,
             templates: candidateBatch

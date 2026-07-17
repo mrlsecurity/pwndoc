@@ -113,6 +113,48 @@ The right side has multiple tabs, each representing change requests made by user
 
 The admin user must manually make changes in the left side with what he wants from the right side. When clicking the Update button the left side will be saved and all update requests from the right side will be deleted.
 
+## Quality Assurance
+
+> Requires AI integration to be enabled in Settings. QA checks combine fast built-in checks (completeness, reference links, duplicates) with AI-powered content review (redaction compliance, customer alignment, duplicate detection, unlinked translations). Which checks run is configured in Settings.
+
+### Single vulnerability QA
+
+When creating or editing a vulnerability, click the QA button in the pane header to open the QA panel next to the form. Run built-in checks, AI checks, or both. Issues are listed by severity with the affected field.
+
+Cross-template findings that involve the open vulnerability (duplicates, unlinked translations) appear in their own **Cross-template checks** group. They come from the last database-wide QA run — re-run **QA all vulnerabilities** to refresh them.
+
+### QA all vulnerabilities
+
+The **QA all vulnerabilities** button above the vulnerability list opens a docked report panel and reviews every template that has content in the selected language.
+
+The review runs as a background job on the server:
+
+- Progress is shown live (templates checked, cross-template check batches). You can keep working, navigate away, or reload the page — the run continues and the panel re-attaches to it.
+- Re-runs are incremental: templates that have not changed since their last check are reused instantly, and only new or edited templates are sent for review again.
+- One run can be active per language. **Cancel** stops the run after the in-flight checks finish; completed results are kept.
+
+The report groups issues per vulnerability, under the same categories as the list. Within each category, the vulnerabilities with the most severe issues are listed first.
+
+- **Go to finding** selects the vulnerability in the list and opens it for editing — the report stays docked beside the editor so you can work through issues one by one.
+- The refresh button on a row re-checks just that template after you fix it and updates the report in place. The re-check runs the same checks as the last database-wide run (a built-in-only run never triggers AI checks from a row re-check).
+- Rows marked **outdated** were edited after their last check; run QA again (or re-check the row) to refresh them. The outdated banner at the top has a **Run again** shortcut — unchanged templates are reused, so re-runs are fast.
+- Cross-template issues (duplicates, unlinked translations) show a chip for each involved template; click a chip to open that template directly.
+- Use the filter field above the results to narrow the report to templates whose title matches.
+
+> Note: screenshot needed — vulnerabilities page with the docked QA report panel open on the right, showing progress bar and per-vulnerability issue groups.
+
+#### Dismissing issues
+
+Not every flagged issue is a real problem — AI reviews in particular can raise judgment calls you disagree with. Click the eye icon on an issue to dismiss it: it disappears from the report and no longer counts toward the totals, on this run and on future runs.
+
+- Use the **Show dismissed** toggle to see dismissed issues and restore any of them.
+- Dismissals on a template's own issues are tied to its content: editing the template clears its dismissals, so the next check re-evaluates everything against the new content.
+- Dismissals on cross-template issues (e.g. "not a duplicate") are permanent for that pair of templates until restored.
+
+> Note: screenshot needed — QA report panel with the "Show dismissed" toggle on, showing a dismissed issue with its restore button.
+
+Running **QA all vulnerabilities** requires a role with the `vulnerabilities:ai-qa-all` permission; single-vulnerability QA requires `vulnerabilities:ai-qa`. Dismissing issues requires `vulnerabilities:ai-qa-all`.
+
 ## Local Draft Recovery
 
 When you create or edit a vulnerability, PwnDoc keeps a local recovery draft in your browser for unsaved changes. Drafts are tracked separately for new vulnerabilities and existing vulnerabilities.

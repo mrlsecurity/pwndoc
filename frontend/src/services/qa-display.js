@@ -309,6 +309,141 @@ export const buildAuditQaGroups = (issues = [], { findings = [], sections = [] }
   return groups;
 };
 
+// Groups the assembled "QA all vulnerabilities" report the way the vulnerabilities page
+// lays templates out: catalog-level findings (duplicates, unlinked translations —
+// cross-template, no single owner) first, then one group per category with ONE row per
+// vulnerability aggregating all its issues. Rows carry the vulnerabilityId (as findingId,
+// reusing qa-results-panel's findingRows rendering) so navigation needs no location parsing.
+const QA_SEVERITY_RANK = { error: 0, warning: 1, info: 2 };
+
+// Worst active severity of a row's issues (dismissed issues don't drive ordering).
+const rowSeverityRank = (issues = []) => issues.reduce(
+  (rank, issue) => issue.dismissed ? rank : Math.min(rank, QA_SEVERITY_RANK[issue.severity] ?? 9),
+  9
+);
+
+// `statusFilter` selects which vulnerabilities/issues are shown:
+//   active   — unresolved issues (resolved vulns hidden); the default view
+//   outdated — only vulnerabilities whose content changed since their last QA
+//   resolved — only resolved vulnerabilities / cross-vuln issues (to review them)
+//   all      — everything, resolved included
+// `countOnly` callers (the status-filter chips) only read group lengths, so the
+// per-category worst-first sort is skipped for them — it never affects a count.
+export const buildVulnQaGroups = (report = {}, { severityFilter = 'all', textFilter = '', statusFilter = 'active', countOnly = false } = {}) => {
+  const templates = Array.isArray(report.templates) ? report.templates : [];
+  const catalog = report.catalog || null;
+  const groups = [];
+  const search = String(textFilter || '').trim().toLowerCase();
+
+  const titleById = new Map(templates.map((row) => [
+    String(row.vulnerabilityId),
+    String(row.title || '').trim()
+  ]));
+
+  // Resolved issues carry `dismissed`; 'resolved' shows only those, 'all' shows both,
+  // everything else shows only the unresolved ones.
+  const issueMatchesStatus = (issue) => {
+    if (statusFilter === 'resolved')
+      return Boolean(issue.dismissed);
+    if (statusFilter === 'all')
+      return true;
+    return !issue.dismissed;
+  };
+
+  const visibleIssues = (issues = []) => filterIssuesBySeverity(
+    issues.filter((issue) => !isAiUnavailableIssue(issue) && issueMatchesStatus(issue)),
+    severityFilter
+  );
+
+  // Cross-vuln checks never appear under the outdated view: "outdated" is a
+  // per-vulnerability content-change signal, but the catalog fingerprint tracks EVERY
+  // vulnerability, so editing any single one would otherwise flag the whole group stale.
+  const catalogAllowed = statusFilter !== 'outdated';
+  const catalogIssues = (catalogAllowed ? visibleIssues(catalog?.issues) : [])
+    // Chips linking to each involved template, so duplicate/translation issues can be
+    // opened directly instead of hunting their titles in the list.
+    .map((issue) => ({
+      ...issue,
+      linkedTemplates: (Array.isArray(issue.vulnerabilityIds) ? issue.vulnerabilityIds : [])
+        .map((id) => ({
+          id: String(id),
+          title: titleById.get(String(id)) || $t('vulnerabilityQa.untitled')
+        }))
+    }))
+    .filter((issue) => !search ||
+      [issue.title, issue.message, ...issue.linkedTemplates.map((entry) => entry.title)]
+        .join(' ').toLowerCase().includes(search));
+  if (catalogIssues.length) {
+    groups.push({
+      key: 'catalog',
+      label: $t('vulnerabilityQa.catalogGroup'),
+      issues: catalogIssues
+    });
+  }
+
+  const categoryOrder = [];
+  const rowsByCategory = new Map();
+
+  templates.forEach((row) => {
+    if (search && !String(row.title || '').toLowerCase().includes(search))
+      return;
+
+    // Only the outdated view needs an explicit row gate; the resolved/active split
+    // falls out of issue-level filtering (a resolved vuln's issues are all dismissed).
+    if (statusFilter === 'outdated' && !row.outdated)
+      return;
+
+    const rowIssues = visibleIssues(row.issues);
+    if (!rowIssues.length)
+      return;
+
+    const category = String(row.category || '').trim() || $t('noCategory');
+    if (!rowsByCategory.has(category)) {
+      rowsByCategory.set(category, []);
+      categoryOrder.push(category);
+    }
+    rowsByCategory.get(category).push({
+      key: row.vulnerabilityId,
+      title: row.title,
+      findingId: row.vulnerabilityId,
+      outdated: Boolean(row.outdated),
+      resolved: Boolean(row.resolved),
+      issues: rowIssues
+    });
+  });
+
+  categoryOrder.forEach((category) => {
+    const rows = rowsByCategory.get(category);
+    // Worst rows first inside each category so reviewers can burn down errors first.
+    const findingRows = countOnly ? rows : rows.sort((left, right) => {
+      const rankDiff = rowSeverityRank(left.issues) - rowSeverityRank(right.issues);
+      if (rankDiff !== 0)
+        return rankDiff;
+      return right.issues.length - left.issues.length;
+    });
+    groups.push({
+      key: `category:${category}`,
+      label: category,
+      findingRows: findingRows
+    });
+  });
+
+  return groups;
+};
+
+// One QA group's headline count: vulnerabilities for a category group when `countRows`
+// (each finding row is one vuln), otherwise the total issue count; flat/catalog groups
+// always report their issue count. Shared by the group badge, the panel's expand
+// heuristic, and the QA-all status-filter chip totals so all three stay in sync.
+export const countGroupEntries = (group, countRows = false) => {
+  if (group.findingRows) {
+    return countRows
+      ? group.findingRows.length
+      : group.findingRows.reduce((sum, row) => sum + row.issues.length, 0);
+  }
+  return (group.issues || []).length;
+};
+
 export const filterIssuesBySeverity = (issues = [], severityFilter = 'all') => {
   if (severityFilter === 'all')
     return issues

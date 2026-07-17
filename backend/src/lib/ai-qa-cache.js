@@ -122,10 +122,14 @@ const getOutdatedQaReport = (audit = {}) => {
 };
 
 const buildQaReportCache = (fingerprint, result = {}, options = {}) => {
-    const now = new Date();
     const existing = options.existing || {};
     const scope = options.scope || 'all';
     const seeded = seedLegacyRunTimestamps(existing);
+    const existingTimes = [existing.ranAt, seeded.programmaticRanAt, seeded.aiRanAt]
+        .map((value) => value ? new Date(value).getTime() : 0)
+        .filter(Number.isFinite);
+    const latestExistingTime = existingTimes.length ? Math.max(...existingTimes) : 0;
+    const now = new Date(Math.max(Date.now(), latestExistingTime + 1));
 
     let programmaticRanAt = seeded.programmaticRanAt;
     let aiRanAt = seeded.aiRanAt;

@@ -9,7 +9,7 @@ vi.mock('@/services/audit-qa-navigation', async (importOriginal) => {
   return actual
 })
 
-import { groupIssuesByLabel, filterIssuesBySeverity, formatQaLocationLabel, buildQaReportViewModel, buildPreviousRunEntries, buildPreviousRunLabels, isAiUnavailableIssue, splitAiUnavailableIssues, buildAuditQaGroups } from '@/services/qa-display'
+import { groupIssuesByLabel, filterIssuesBySeverity, formatQaLocationLabel, buildQaReportViewModel, buildPreviousRunEntries, buildPreviousRunLabels, isAiUnavailableIssue, splitAiUnavailableIssues, buildAuditQaGroups, buildVulnQaGroups } from '@/services/qa-display'
 
 describe('qa-display', () => {
   const issues = [
@@ -271,5 +271,160 @@ describe('qa-display', () => {
     expect(entries[0].kind).toBe('programmatic')
     expect(entries[1].kind).toBe('ai')
     expect(entries[0].date).toBeTruthy()
+  })
+
+  describe('buildVulnQaGroups', () => {
+    const issue = (severity, overrides = {}) => ({
+      severity,
+      category: 'completeness',
+      title: 'Issue',
+      message: 'msg',
+      location: 'vulnerability:X',
+      source: 'structural',
+      ...overrides
+    })
+
+    const report = {
+      templates: [
+        { vulnerabilityId: 'v1', title: 'SQL Injection', category: 'Web', outdated: false, issues: [issue('error'), issue('info')] },
+        { vulnerabilityId: 'v2', title: 'Weak TLS', category: 'Infrastructure', outdated: true, issues: [issue('warning')] },
+        { vulnerabilityId: 'v3', title: 'Clean template', category: 'Web', outdated: false, issues: [] },
+        { vulnerabilityId: 'v4', title: 'Uncategorized', category: '', outdated: false, issues: [issue('warning')] }
+      ],
+      catalog: {
+        issues: [
+          issue('error', { category: 'duplicates', vulnerabilityIds: ['v1', 'v2'] }),
+          issue('info', { title: 'AI duplicate review skipped' })
+        ]
+      }
+    }
+
+    it('puts catalog issues first, then one row per vulnerability grouped by category', () => {
+      const groups = buildVulnQaGroups(report)
+
+      expect(groups[0].key).toBe('catalog')
+      // The "AI ... skipped" notice is a banner concern, not a group row.
+      expect(groups[0].issues).toHaveLength(1)
+
+      const webGroup = groups.find((group) => group.key === 'category:Web')
+      expect(webGroup.findingRows).toHaveLength(1) // v3 has no issues → no row
+      expect(webGroup.findingRows[0]).toMatchObject({
+        key: 'v1',
+        findingId: 'v1',
+        title: 'SQL Injection',
+        outdated: false
+      })
+      expect(webGroup.findingRows[0].issues).toHaveLength(2)
+
+      const infraGroup = groups.find((group) => group.key === 'category:Infrastructure')
+      expect(infraGroup.findingRows[0].outdated).toBe(true)
+
+      const noCategoryGroup = groups.find((group) => group.key === 'category:noCategory')
+      expect(noCategoryGroup.findingRows[0].findingId).toBe('v4')
+    })
+
+    it('applies the severity filter to rows and drops empty groups', () => {
+      const groups = buildVulnQaGroups(report, { severityFilter: 'error' })
+
+      expect(groups.map((group) => group.key)).toEqual(['catalog', 'category:Web'])
+      expect(groups[1].findingRows[0].issues).toHaveLength(1)
+    })
+
+    it('returns no groups for an empty report', () => {
+      expect(buildVulnQaGroups({})).toEqual([])
+    })
+
+    it('links catalog issues to the involved templates', () => {
+      const groups = buildVulnQaGroups(report)
+
+      expect(groups[0].issues[0].linkedTemplates).toEqual([
+        { id: 'v1', title: 'SQL Injection' },
+        { id: 'v2', title: 'Weak TLS' }
+      ])
+    })
+
+    it('filters issues by resolution status (active / resolved / all)', () => {
+      const resolvedReport = {
+        templates: [
+          {
+            vulnerabilityId: 'v1',
+            title: 'SQL Injection',
+            category: 'Web',
+            outdated: false,
+            resolved: false,
+            issues: [issue('info', { key: 'k2', dismissed: false })]
+          },
+          {
+            vulnerabilityId: 'v2',
+            title: 'Old XSS',
+            category: 'Web',
+            outdated: false,
+            resolved: true,
+            issues: [issue('error', { key: 'k1', dismissed: true })]
+          }
+        ],
+        catalog: {
+          issues: [issue('error', { category: 'duplicates', key: 'k3', dismissed: true, vulnerabilityIds: ['v1'] })]
+        }
+      }
+
+      // Active (default): only the unresolved vuln, resolved vuln and dismissed catalog hidden.
+      const active = buildVulnQaGroups(resolvedReport)
+      expect(active.map((group) => group.key)).toEqual(['category:Web'])
+      expect(active[0].findingRows).toHaveLength(1)
+      expect(active[0].findingRows[0].findingId).toBe('v1')
+
+      // Resolved: only the resolved vuln and the dismissed catalog issue.
+      const resolved = buildVulnQaGroups(resolvedReport, { statusFilter: 'resolved' })
+      expect(resolved.map((group) => group.key)).toEqual(['catalog', 'category:Web'])
+      expect(resolved.find((group) => group.key === 'category:Web').findingRows[0].findingId).toBe('v2')
+
+      // All: both vulns plus the catalog issue.
+      const all = buildVulnQaGroups(resolvedReport, { statusFilter: 'all' })
+      expect(all.find((group) => group.key === 'category:Web').findingRows).toHaveLength(2)
+      expect(all[0].key).toBe('catalog')
+    })
+
+    it('filters to only outdated vulnerabilities and never the cross-vuln group', () => {
+      const outdatedReport = {
+        templates: [
+          { vulnerabilityId: 'v1', title: 'Current', category: 'Web', outdated: false, issues: [issue('info')] },
+          { vulnerabilityId: 'v2', title: 'Stale', category: 'Web', outdated: true, issues: [issue('error')] }
+        ],
+        // Even a catalog flagged outdated is excluded: "outdated" is per-vulnerability, but
+        // the catalog fingerprint tracks every vuln, so it would otherwise always show.
+        catalog: { outdated: true, issues: [issue('warning', { category: 'duplicates', key: 'c1', vulnerabilityIds: ['v1'] })] }
+      }
+
+      const outdated = buildVulnQaGroups(outdatedReport, { statusFilter: 'outdated' })
+      expect(outdated.map((group) => group.key)).toEqual(['category:Web'])
+      expect(outdated[0].findingRows).toHaveLength(1)
+      expect(outdated[0].findingRows[0].findingId).toBe('v2')
+    })
+
+    it('filters rows by template title and catalog issues by text', () => {
+      const groups = buildVulnQaGroups(report, { textFilter: 'sql' })
+      const keys = groups.map((group) => group.key)
+
+      // 'SQL Injection' matches directly; the catalog issue matches through its
+      // linked template titles; 'Weak TLS' does not match.
+      expect(keys).toContain('category:Web')
+      expect(keys).toContain('catalog')
+      expect(keys).not.toContain('category:Infrastructure')
+    })
+
+    it('orders rows within a category by worst severity, then issue count', () => {
+      const sortReport = {
+        templates: [
+          { vulnerabilityId: 'a', title: 'Info only', category: 'Web', issues: [issue('info')] },
+          { vulnerabilityId: 'b', title: 'One error', category: 'Web', issues: [issue('error')] },
+          { vulnerabilityId: 'c', title: 'Two warnings', category: 'Web', issues: [issue('warning'), issue('warning')] },
+          { vulnerabilityId: 'd', title: 'One warning', category: 'Web', issues: [issue('warning')] }
+        ]
+      }
+
+      const groups = buildVulnQaGroups(sortReport)
+      expect(groups[0].findingRows.map((row) => row.key)).toEqual(['b', 'c', 'd', 'a'])
+    })
   })
 })

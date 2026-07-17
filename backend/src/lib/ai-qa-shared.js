@@ -1,5 +1,5 @@
 const QA_SEVERITIES = ['error', 'warning', 'info'];
-const QA_CATEGORIES = ['completeness', 'redaction', 'customer', 'instructions', 'references', 'imageCaptions', 'duplicates', 'aiDuplicates', 'other'];
+const QA_CATEGORIES = ['completeness', 'redaction', 'customer', 'instructions', 'references', 'imageCaptions', 'duplicates', 'aiDuplicates', 'aiUnlinkedTranslations', 'other'];
 
 const stripHtml = (value) => {
     return String(value || '')
@@ -21,7 +21,7 @@ const normalizeIssue = (issue = {}, source = 'structural') => {
     const severity = QA_SEVERITIES.includes(issue.severity) ? issue.severity : 'warning';
     const category = QA_CATEGORIES.includes(issue.category) ? issue.category : 'other';
 
-    return {
+    const normalized = {
         severity: severity,
         category: category,
         title: String(issue.title || 'Issue').trim(),
@@ -29,6 +29,16 @@ const normalizeIssue = (issue = {}, source = 'structural') => {
         location: String(issue.location || 'report').trim() || 'report',
         source: source
     };
+
+    // Catalog-level issues (duplicates, unlinked translations) reference the templates
+    // they involve so consumers can resolve them without parsing location strings.
+    const vulnerabilityIds = Array.isArray(issue.vulnerabilityIds) ?
+        [...new Set(issue.vulnerabilityIds.map((id) => String(id || '').trim()).filter(Boolean))] :
+        [];
+    if (vulnerabilityIds.length)
+        normalized.vulnerabilityIds = vulnerabilityIds;
+
+    return normalized;
 };
 
 // Overlap keeps a boundary item in two consecutive batches so a duplicate/translation
@@ -102,7 +112,20 @@ const compactLlmValue = (value) => {
     if (Array.isArray(value)) {
         return value
             .map((entry) => compactLlmValue(entry))
-            .filter((entry) => !isLlmEmpty(entry));
+            .filter((entry) => {
+                if (isLlmEmpty(entry))
+                    return false;
+
+                // Catalog records with no content beyond their database identifier
+                // cannot help the model and only consume context-window space.
+                if (isPlainObject(entry)) {
+                    const keys = Object.keys(entry);
+                    if (keys.length === 1 && keys[0] === 'vulnerabilityId')
+                        return false;
+                }
+
+                return true;
+            });
     }
 
     if (isPlainObject(value)) {

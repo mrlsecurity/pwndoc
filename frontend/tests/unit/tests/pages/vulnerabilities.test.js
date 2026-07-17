@@ -109,6 +109,7 @@ import DataService from '@/services/data'
 import Utils from '@/services/utils'
 import DraftRecoveryService from '@/services/draft-recovery'
 import { Dialog, Notify } from 'quasar'
+import { useVulnQaStore } from '@/stores/vuln-qa'
 import VulnerabilitiesPage from '@/pages/vulnerabilities/index.vue'
 
 const mockLanguages = [
@@ -301,6 +302,11 @@ describe('Vulnerabilities Page', () => {
           $_: {
             cloneDeep: (obj) => JSON.parse(JSON.stringify(obj))
           },
+          $socket: {
+            emit: () => {},
+            on: () => {},
+            off: () => {}
+          },
           ...(options.mocks || {})
         }
       }
@@ -386,6 +392,19 @@ describe('Vulnerabilities Page', () => {
   })
 
   describe('Computed Properties', () => {
+    it('updates the QA review toggle label for the panel state', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      const qaToggle = () => wrapper.get('[data-testid="vulnerability-qa-all-toggle"]')
+      expect(qaToggle().attributes('label')).toBe('vulnerabilityQa.showReview')
+
+      useVulnQaStore().panelOpen = true
+      await wrapper.vm.$nextTick()
+
+      expect(qaToggle().attributes('label')).toBe('vulnerabilityQa.hideReview')
+    })
+
     it('should filter vulnTypesLang by currentLanguage', async () => {
       const wrapper = createWrapper()
       await flushPromises()
@@ -1140,6 +1159,22 @@ describe('Vulnerabilities Page', () => {
       })
     })
 
+    it('should count vulnerabilities with unsaved changes in the selected language', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+      wrapper.vm.vulnerabilityDrafts = [
+        { scope: 'vuln-modal-edit', refKey: 'vuln1', status: 'active_draft' },
+        { scope: 'vuln-modal-edit', refKey: 'vuln2', status: 'active_draft' },
+        { scope: 'vuln-modal-create', refKey: '_new:none', status: 'active_draft' }
+      ]
+
+      expect(wrapper.vm.unsavedChangesCount).toBe(2)
+
+      wrapper.vm.vulnerabilityId = 'vuln1'
+      expect(wrapper.vm.unsavedChangesCount).toBe(1)
+    })
+
     it('should filter by unsaved changes only', async () => {
       const wrapper = createWrapper()
       await flushPromises()
@@ -1334,6 +1369,49 @@ describe('Vulnerabilities Page', () => {
   })
 
   describe('Merge computed filters', () => {
+    it('should show each merge search only after its language is selected', async () => {
+      const wrapper = createWrapper({
+        stubs: {
+          'q-card-section': { template: '<div><slot /></div>' },
+          'q-input': { template: '<input v-bind="$attrs" />' }
+        }
+      })
+      await flushPromises()
+      wrapper.vm.activePane = 'merge'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('[data-testid="merge-search-left"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="merge-search-right"]').exists()).toBe(false)
+
+      wrapper.vm.mergeLanguageLeft = 'en'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="merge-search-left"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="merge-search-right"]').exists()).toBe(false)
+
+      wrapper.vm.mergeLanguageRight = 'fr'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="merge-search-right"]').exists()).toBe(true)
+    })
+
+    it('should independently search merge candidates by their localized titles', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.vulnerabilities = [
+        { _id: 'en-alpha', details: [{ locale: 'en', title: 'Alpha finding' }] },
+        { _id: 'en-beta', details: [{ locale: 'en', title: 'Beta finding' }] },
+        { _id: 'fr-gamma', details: [{ locale: 'fr', title: 'Constat Gamma' }] },
+        { _id: 'fr-delta', details: [{ locale: 'fr', title: 'Constat Delta' }] }
+      ]
+      wrapper.vm.mergeLanguageLeft = 'en'
+      wrapper.vm.mergeLanguageRight = 'fr'
+      wrapper.vm.mergeSearchLeft = 'BETA'
+      wrapper.vm.mergeSearchRight = 'delta'
+
+      expect(wrapper.vm.filteredVulnerabilitiesMergeLeft.map(vuln => vuln._id)).toEqual(['en-beta'])
+      expect(wrapper.vm.filteredVulnerabilitiesMergeRight.map(vuln => vuln._id)).toEqual(['fr-delta'])
+    })
+
     it('should filter vulnerabilities for merge left panel', async () => {
       const wrapper = createWrapper()
       await flushPromises()

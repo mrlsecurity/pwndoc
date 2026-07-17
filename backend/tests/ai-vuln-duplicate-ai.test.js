@@ -214,7 +214,7 @@ module.exports = function() {
 
                 expect(mockFn.mock.calls.length).toBeGreaterThan(1);
                 mockFn.mock.calls.forEach((call) => {
-                    expect(call[0].templates.length).toBeLessThanOrEqual(40);
+                    expect(call[0].templates.length).toBeLessThanOrEqual(TYPE_BATCH_CEILING);
                     expect(call[0].mode).toBe('all');
                 });
             });

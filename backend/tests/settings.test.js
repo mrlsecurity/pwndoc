@@ -32,7 +32,8 @@ module.exports = function(request, app) {
           "redaction": true,
           "customer": true,
           "instructions": true
-        }
+        },
+        "globalPrompts": []
       }
 
       const defaultAiPrivateSettings = {
@@ -60,7 +61,9 @@ module.exports = function(request, app) {
       const defaultPublicSettings = {
         "ai": {
           "public": {
-            "enabled": false
+            "enabled": false,
+            "qaChecks": defaultAiPublicSettings.qaChecks,
+            "globalPrompts": []
           },
         },
         "report": {

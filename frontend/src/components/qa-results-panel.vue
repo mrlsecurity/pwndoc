@@ -27,9 +27,30 @@
 
     <template v-else>
       <q-card-section class="col-auto q-pb-none" @mousedown.prevent>
-        <div v-if="running" class="qa-run-inprogress q-mb-md">
-          <q-spinner-dots color="primary" size="20px" class="q-mr-sm" />
-          <span>{{ inProgressLabel }}</span>
+        <div v-if="running" class="q-mb-md">
+          <div class="qa-run-inprogress">
+            <q-spinner-dots color="primary" size="20px" class="q-mr-sm" />
+            <span>{{ inProgressLabel }}</span>
+            <q-space />
+            <q-btn
+            v-if="showCancel"
+            data-testid="qa-cancel-run"
+            flat
+            dense
+            no-caps
+            size="sm"
+            color="negative"
+            :label="$t('vulnerabilityQa.cancel')"
+            @click="$emit('cancel')"
+            />
+          </div>
+          <template v-if="progressView">
+            <q-linear-progress :value="progressView.ratio" color="primary" class="q-mt-xs" />
+            <div class="text-caption text-grey-7 q-mt-xs">
+              {{ progressView.label }}
+              <span v-if="progressView.reusedLabel"> · {{ progressView.reusedLabel }}</span>
+            </div>
+          </template>
         </div>
 
         <q-banner v-if="topBanner" dense rounded class="bg-blue-grey-1 text-grey-9 q-mb-md">
@@ -71,7 +92,9 @@
           </div>
         </q-banner>
 
-        <div v-if="hasRunActions" class="column q-gutter-sm q-mb-md">
+        <!-- Before the first run the scope choices are the main content; once a report
+             exists they collapse into one split button so findings keep the space. -->
+        <div v-if="hasRunActions && !hasReportData" class="column q-gutter-sm q-mb-md">
           <q-btn
           v-if="programmaticActionVisible"
           outline
@@ -100,17 +123,68 @@
           @click="$emit('run', 'all')"
           />
         </div>
+        <div v-else-if="hasRunActions" class="q-mb-md">
+          <q-btn-dropdown
+          v-if="otherRunScopeChoices.length"
+          data-testid="qa-run-again"
+          split
+          unelevated
+          no-caps
+          dense
+          color="primary"
+          :label="runAgainLabel"
+          :disable="loading || running"
+          @click="$emit('run', defaultRunScope)"
+          >
+            <q-list>
+              <q-item
+              v-for="choice in otherRunScopeChoices"
+              :key="choice.scope"
+              clickable
+              v-close-popup
+              :data-testid="`qa-run-scope-${choice.scope}`"
+              @click.stop="$emit('run', choice.scope)"
+              >
+                <q-item-section>{{ choice.label }}</q-item-section>
+              </q-item>
+            </q-list>
+          </q-btn-dropdown>
+          <q-btn
+          v-else
+          data-testid="qa-run-again"
+          unelevated
+          no-caps
+          dense
+          color="primary"
+          :label="runAgainLabel"
+          :disable="loading || running"
+          @click="$emit('run', defaultRunScope)"
+          />
+          <div v-if="runAgainHint" data-testid="qa-run-again-caption" class="text-caption text-grey-7 q-mt-xs">
+            {{ runAgainHint }}
+          </div>
+        </div>
 
         <template v-if="hasReportData">
           <q-banner
-          v-if="showOutdatedBanner"
+          v-if="showOutdatedBanner && !showStatusFilter"
           dense
           rounded
           class="bg-orange-1 text-orange-10 q-mb-md qa-outdated-banner"
           >
             {{ $t('auditQa.outdatedBanner') }}
             <template v-slot:action>
-              <q-btn flat dense round icon="close" @click="dismissOutdated" />
+              <q-btn
+              v-if="hasRunActions"
+              data-testid="qa-outdated-rerun"
+              flat
+              dense
+              no-caps
+              :label="$t('auditQa.runAgain')"
+              :disable="loading || running"
+              @click="$emit('run', defaultRunScope)"
+              />
+              <q-btn data-testid="qa-outdated-dismiss" flat dense round icon="close" @click="dismissOutdated" />
             </template>
           </q-banner>
 
@@ -156,6 +230,41 @@
               </div>
             </div>
           </div>
+
+          <div v-if="showTextFilter" class="row items-center q-gutter-sm q-mb-md">
+            <q-input
+            data-testid="qa-text-filter"
+            class="col qa-text-filter"
+            dense
+            outlined
+            clearable
+            :debounce="300"
+            :model-value="textFilter"
+            :placeholder="$t('vulnerabilityQa.filterRows')"
+            @mousedown.stop
+            @update:model-value="$emit('update:textFilter', $event || '')"
+            >
+              <template v-slot:prepend>
+                <q-icon name="search" size="18px" />
+              </template>
+            </q-input>
+          </div>
+
+          <div v-if="showStatusFilter" class="row items-center q-gutter-xs q-mb-md">
+            <q-chip
+            v-for="option in statusFilterOptions"
+            :key="option.value"
+            :data-testid="`qa-status-filter-${option.value}`"
+            clickable
+            dense
+            :outline="statusFilter !== option.value"
+            :color="statusFilter === option.value ? 'primary' : 'grey-7'"
+            :text-color="statusFilter === option.value ? 'white' : ''"
+            @click="$emit('update:statusFilter', option.value)"
+            >
+              {{ option.label }}<span v-if="option.count"> ({{ option.count }})</span>
+            </q-chip>
+          </div>
         </template>
       </q-card-section>
 
@@ -167,109 +276,31 @@
             {{ $t('auditQa.noIssues') }}
           </div>
 
+          <!-- Each group is its own component: toggling/filtering only re-renders groups
+               whose props changed, and collapsed groups keep zero DOM — required for the
+               vulnerability-database report which can hold hundreds of rows. -->
           <q-list v-else separator>
-            <q-expansion-item
+            <qa-results-group
             v-for="group in groupedIssues"
             :key="group.key || group.label"
-            v-model="expandedGroups[groupKey(group)]"
-            header-class="qa-group__header"
-            expand-icon-class="text-grey-7"
-            >
-              <template v-slot:header>
-                <q-item-section>
-                  <q-item-label>{{ group.label }}</q-item-label>
-                </q-item-section>
-                <q-item-section v-if="showNavigation && !group.findingRows && group.key !== 'report'" side>
-                  <q-btn
-                  outline
-                  dense
-                  no-caps
-                  color="primary"
-                  :label="$t('auditQa.goToSection')"
-                  icon-right="chevron_right"
-                  @click.stop="$emit('navigate', group.issues[0].location)"
-                  />
-                </q-item-section>
-                <q-item-section side>
-                  <q-badge class="qa-group__count" color="grey-4" text-color="grey-9">{{ groupIssueCount(group) }}</q-badge>
-                </q-item-section>
-              </template>
-
-              <!-- Category groups (audit findings): one row per finding aggregating every
-                   issue that finding has, with a single "Go to finding" button on the row
-                   itself — not per field, not per issue. -->
-              <q-list v-if="group.findingRows" separator class="q-ma-sm">
-                <q-card
-                v-for="row in group.findingRows"
-                :key="row.key"
-                flat
-                bordered
-                class="q-mb-sm qa-finding-row"
-                >
-                  <q-item>
-                    <q-item-section>
-                      <q-item-label class="text-weight-medium">{{ row.title }}</q-item-label>
-                    </q-item-section>
-                    <q-item-section v-if="showNavigation" side>
-                      <q-btn
-                      outline
-                      dense
-                      no-caps
-                      color="primary"
-                      :label="$t('auditQa.goToFinding')"
-                      icon-right="chevron_right"
-                      @click="$emit('navigate', row.issues[0].location)"
-                      />
-                    </q-item-section>
-                  </q-item>
-                  <q-separator />
-                  <q-list separator>
-                    <q-item
-                    v-for="(issue, index) in row.issues"
-                    :key="`${issue.location}:${issue.title}:${index}`"
-                    class="qa-issue"
-                    >
-                      <q-item-section avatar top>
-                        <q-icon :name="severityIcon(issue.severity)" :color="severityColor(issue.severity)" />
-                      </q-item-section>
-                      <q-item-section>
-                        <q-item-label class="text-weight-medium">{{ issue.title }}</q-item-label>
-                        <q-item-label caption>{{ issue.message }}</q-item-label>
-                        <q-item-label caption class="q-mt-xs text-grey-7">
-                          {{ categoryLabel(issue.category) }}
-                          <span v-if="issue.source === 'ai'"> · {{ $t('auditQa.aiReview') }}</span>
-                        </q-item-label>
-                      </q-item-section>
-                    </q-item>
-                  </q-list>
-                </q-card>
-              </q-list>
-
-              <!-- Flat groups: report / general / network / sections, and the vulnerability
-                   QA panel's own groups — plain issue rows, no per-issue button (the group
-                   header above already carries the single "Go to section" action). -->
-              <q-card v-else flat bordered class="q-ma-sm">
-                <q-list separator>
-                  <q-item
-                  v-for="(issue, index) in group.issues"
-                  :key="`${issue.location}:${issue.title}:${index}`"
-                  class="qa-issue"
-                  >
-                    <q-item-section avatar top>
-                      <q-icon :name="severityIcon(issue.severity)" :color="severityColor(issue.severity)" />
-                    </q-item-section>
-                    <q-item-section>
-                      <q-item-label class="text-weight-medium">{{ issue.title }}</q-item-label>
-                      <q-item-label caption>{{ issue.message }}</q-item-label>
-                      <q-item-label caption class="q-mt-xs text-grey-7">
-                        {{ categoryLabel(issue.category) }}
-                        <span v-if="issue.source === 'ai'"> · {{ $t('auditQa.aiReview') }}</span>
-                      </q-item-label>
-                    </q-item-section>
-                  </q-item>
-                </q-list>
-              </q-card>
-            </q-expansion-item>
+            :group="group"
+            :expanded="expandedGroups[groupKey(group)] === true"
+            :show-navigation="showNavigation"
+            :show-recheck="showRecheck"
+            :rechecking-keys="recheckingKeys"
+            :show-row-resolve="showRowResolve"
+            :resolving-row-keys="resolvingRowKeys"
+            :row-navigation-label="rowNavigationLabel"
+            :count-rows="countRows"
+            :show-dismiss-actions="showDismissActions"
+            :dismissing-keys="dismissingKeys"
+            :running="running"
+            @update:expanded="setGroupExpanded(group, $event)"
+            @navigate="forwardNavigate"
+            @recheck="$emit('recheck', $event)"
+            @resolve-row="$emit('resolve-row', $event)"
+            @dismiss="$emit('dismiss', $event)"
+            />
           </q-list>
         </q-card-section>
       </template>
@@ -284,10 +315,19 @@
 <script>
 import { $t } from '@/boot/i18n'
 import { hasAnyProgrammaticQaCheckEnabled, hasAnyAiQaCheckEnabled } from '@/services/qa-checks'
-import { buildPreviousRunEntries } from '@/services/qa-display'
+import { buildPreviousRunEntries, countGroupEntries } from '@/services/qa-display'
+import QaResultsGroup from '@/components/qa-results-group.vue'
+
+// Above this many total issues, groups start collapsed: expanding on demand keeps the
+// initial render (and every subsequent interaction) cheap on large reports.
+const DEFAULT_EXPAND_ISSUE_LIMIT = 100
 
 export default {
   name: 'QaResultsPanel',
+
+  components: {
+    QaResultsGroup
+  },
 
   props: {
     title: {
@@ -378,10 +418,98 @@ export default {
     showNavigation: {
       type: Boolean,
       default: false
+    },
+    // Determinate job progress ({ processed, total, reused, phase, catalogDone,
+    // catalogTotal }) — rendered under the in-progress line while `running`.
+    progress: {
+      type: Object,
+      default: null
+    },
+    showCancel: {
+      type: Boolean,
+      default: false
+    },
+    // Per-row recheck action on findingRows groups; keys currently being rechecked
+    // show a spinner.
+    showRecheck: {
+      type: Boolean,
+      default: false
+    },
+    recheckingKeys: {
+      type: Array,
+      default: () => []
+    },
+    // Whole-vulnerability resolve action on findingRows groups; keys being resolved
+    // show a spinner.
+    showRowResolve: {
+      type: Boolean,
+      default: false
+    },
+    resolvingRowKeys: {
+      type: Array,
+      default: () => []
+    },
+    // Label for the per-row navigation button (findings vs. vulnerabilities).
+    rowNavigationLabel: {
+      type: String,
+      default: () => $t('auditQa.goToFinding')
+    },
+    // Count category groups by vulnerability (finding row) rather than issue total.
+    countRows: {
+      type: Boolean,
+      default: false
+    },
+    // Per-issue dismiss/restore action; keys currently being updated show a spinner.
+    showDismissActions: {
+      type: Boolean,
+      default: false
+    },
+    dismissingKeys: {
+      type: Array,
+      default: () => []
+    },
+    // Free-text filter over row titles (QA-all panel).
+    showTextFilter: {
+      type: Boolean,
+      default: false
+    },
+    textFilter: {
+      type: String,
+      default: ''
+    },
+    // Status filter chips (active / outdated / resolved / all) — QA-all panel.
+    showStatusFilter: {
+      type: Boolean,
+      default: false
+    },
+    statusFilter: {
+      type: String,
+      default: 'active'
+    },
+    statusCounts: {
+      type: Object,
+      default: () => ({ outdated: 0, resolved: 0 })
+    },
+    // Hint rendered under the "Run again" button (QA-all panel passes the vuln-specific
+    // copy). Empty hides it — audit / single-vuln panels don't set it.
+    runAgainHint: {
+      type: String,
+      default: ''
     }
   },
 
-  emits: ['close', 'run', 'update:severityFilter', 'navigate'],
+  emits: [
+    'close',
+    'run',
+    'update:severityFilter',
+    'navigate',
+    'cancel',
+    'recheck',
+    'resolve-row',
+    'dismiss',
+    'update:statusFilter',
+    'update:textFilter'
+  ],
 
   data() {
     return {
@@ -399,12 +527,14 @@ export default {
     groupedIssues: {
       immediate: true,
       handler(groups) {
+        const totalIssues = groups.reduce((sum, group) => sum + this.groupIssueCount(group), 0)
+        const defaultExpanded = totalIssues <= DEFAULT_EXPAND_ISSUE_LIMIT
         const nextExpandedGroups = {}
         groups.forEach((group) => {
           const key = this.groupKey(group)
           nextExpandedGroups[key] = Object.prototype.hasOwnProperty.call(this.expandedGroups, key)
             ? this.expandedGroups[key]
-            : true
+            : defaultExpanded
         })
         this.expandedGroups = nextExpandedGroups
       }
@@ -437,6 +567,35 @@ export default {
 
     showOutdatedBanner() {
       return this.outdated && !this.dismissedOutdated
+    },
+
+    progressView() {
+      if (!this.progress)
+        return null
+
+      if (this.progress.phase === 'catalog') {
+        const total = this.progress.catalogTotal || 0
+        return {
+          ratio: total ? (this.progress.catalogDone || 0) / total : 1,
+          label: $t('vulnerabilityQa.progressCatalog', {
+            done: this.progress.catalogDone || 0,
+            total: total
+          }),
+          reusedLabel: ''
+        }
+      }
+
+      const total = this.progress.total || 0
+      return {
+        ratio: total ? (this.progress.processed || 0) / total : 0,
+        label: $t('vulnerabilityQa.progressTemplates', {
+          processed: this.progress.processed || 0,
+          total: total
+        }),
+        reusedLabel: this.progress.reused
+          ? $t('vulnerabilityQa.reusedCached', { count: this.progress.reused })
+          : ''
+      }
     },
 
     qaChecks() {
@@ -476,13 +635,61 @@ export default {
         this.allActionVisible
     },
 
+    // "Run again" repeats the last run's scope when it is still available, so a
+    // programmatic-only review never silently escalates to AI checks.
+    defaultRunScope() {
+      if (this.runScope === 'programmatic' && this.programmaticActionVisible)
+        return 'programmatic'
+      if (this.runScope === 'ai' && this.aiActionVisible)
+        return 'ai'
+      if (this.runScope === 'all' && this.allActionVisible)
+        return 'all'
+      if (this.allActionVisible)
+        return 'all'
+      return this.programmaticActionVisible ? 'programmatic' : 'ai'
+    },
+
+    runScopeChoices() {
+      const choices = []
+      if (this.programmaticActionVisible)
+        choices.push({ scope: 'programmatic', label: $t('auditQa.runProgrammatic') })
+      if (this.aiActionVisible)
+        choices.push({ scope: 'ai', label: $t('auditQa.runAi') })
+      if (this.allActionVisible)
+        choices.push({ scope: 'all', label: $t('auditQa.runAll') })
+      return choices
+    },
+
+    // "Run again" main button shows the last run's scope; the dropdown offers the others.
+    runAgainLabel() {
+      return $t('auditQa.runAgainScoped', { scope: this.scopeLabel(this.defaultRunScope) })
+    },
+
+    otherRunScopeChoices() {
+      return this.runScopeChoices
+        .filter((choice) => choice.scope !== this.defaultRunScope)
+        .map((choice) => ({
+          scope: choice.scope,
+          label: $t('auditQa.runAgainScoped', { scope: this.scopeLabel(choice.scope) })
+        }))
+    },
+
+    statusFilterOptions() {
+      return [
+        { value: 'active', label: $t('vulnerabilityQa.filterActive') },
+        { value: 'outdated', label: $t('vulnerabilityQa.filterOutdated'), count: this.statusCounts.outdated },
+        { value: 'resolved', label: $t('vulnerabilityQa.filterResolved'), count: this.statusCounts.resolved },
+        { value: 'all', label: $t('vulnerabilityQa.filterAllStatus') }
+      ]
+    },
+
     showGroupToggle() {
       return this.hasReportData && this.groupedIssues.length > 1
     },
 
     allGroupsExpanded() {
       return this.groupedIssues.length > 0 && this.groupedIssues.every((group) =>
-        this.expandedGroups[this.groupKey(group)] !== false
+        this.expandedGroups[this.groupKey(group)] === true
       )
     },
 
@@ -496,6 +703,14 @@ export default {
   },
 
   methods: {
+    scopeLabel(scope) {
+      if (scope === 'programmatic')
+        return $t('auditQa.scopeProgrammatic')
+      if (scope === 'ai')
+        return $t('auditQa.scopeAi')
+      return $t('auditQa.scopeAll')
+    },
+
     groupKey(group) {
       return String(group.key || group.label)
     },
@@ -510,9 +725,23 @@ export default {
     },
 
     groupIssueCount(group) {
-      if (group.findingRows)
-        return group.findingRows.reduce((sum, row) => sum + row.issues.length, 0)
-      return group.issues.length
+      // Expand heuristic always counts issues (not rows) regardless of the badge mode.
+      return countGroupEntries(group, false)
+    },
+
+    setGroupExpanded(group, expanded) {
+      this.expandedGroups = {
+        ...this.expandedGroups,
+        [this.groupKey(group)]: expanded
+      }
+    },
+
+    // Group-header navigation has no row; keep the single-argument emit shape for it.
+    forwardNavigate(location, row) {
+      if (row === undefined)
+        this.$emit('navigate', location)
+      else
+        this.$emit('navigate', location, row)
     },
 
     dismissOutdated() {
@@ -521,38 +750,6 @@ export default {
 
     setSeverityFilter(filter) {
       this.$emit('update:severityFilter', filter)
-    },
-
-    severityColor(severity) {
-      if (severity === 'error')
-        return 'negative'
-      if (severity === 'warning')
-        return 'warning'
-      return 'info'
-    },
-
-    severityIcon(severity) {
-      if (severity === 'error')
-        return 'error'
-      if (severity === 'warning')
-        return 'warning'
-      return 'info'
-    },
-
-    categoryLabel(category) {
-      const labels = {
-        completeness: $t('auditQa.category.completeness'),
-        redaction: $t('auditQa.category.redaction'),
-        customer: $t('auditQa.category.customer'),
-        instructions: $t('auditQa.category.instructions'),
-        references: $t('auditQa.category.references'),
-        imageCaptions: $t('auditQa.category.imageCaptions'),
-        duplicates: $t('auditQa.category.duplicates'),
-        aiDuplicates: $t('auditQa.category.aiDuplicates'),
-        aiUnlinkedTranslations: $t('auditQa.category.aiUnlinkedTranslations'),
-        other: $t('auditQa.category.other')
-      }
-      return labels[category] || labels.other
     }
   }
 }
@@ -579,6 +776,14 @@ export default {
 
 .qa-results-panel :deep(.q-item__label) {
   overflow-wrap: anywhere;
+}
+
+/* The panel suppresses text selection/caret to behave like a docked toolbar; the filter
+   input is a real text field, so restore both for it (and let it receive focus — the
+   @mousedown.stop on the input keeps the section's focus-guard from eating the click). */
+.qa-results-panel :deep(.qa-text-filter input) {
+  caret-color: auto;
+  user-select: text;
 }
 
 .qa-run-progress {

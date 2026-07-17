@@ -4,7 +4,7 @@ const {
     getVulnerabilityDetail,
     formatVulnerabilityLocation,
     buildVulnerabilitySnapshot,
-    runAllVulnerabilitiesQa
+    buildQaTargets
 } = require('../src/lib/ai-vuln-qa');
 
 module.exports = function() {
@@ -115,116 +115,30 @@ module.exports = function() {
             expect(issues.some((issue) => /remediation/i.test(issue.title))).toBe(true);
         });
 
-        it('should batch programmatical checks across the vulnerability catalog', async () => {
-            const result = await runAllVulnerabilitiesQa({
+        it('should attach the involved template ids to duplicate issues', () => {
+            const issues = runDuplicateChecks({
                 vulnerabilities: sampleVulnerabilities,
-                locale: 'en',
-                settings: {
-                    ai: {
-                        public: {
-                            qaChecks: {
-                                completeness: true,
-                                references: false,
-                                imageCaptions: false,
-                                duplicates: true,
-                                aiDuplicates: false,
-                                aiUnlinkedTranslations: false,
-                                redaction: false,
-                                customer: false,
-                                instructions: false
-                            }
-                        }
-                    }
-                },
-                provider: 'openai',
-                scope: 'programmatic'
+                locale: 'en'
             });
 
-            expect(result.mode).toBe('all');
-            expect(result.vulnerabilityCount).toBe(3);
-            expect(result.progress).toEqual({
-                done: true,
-                offset: 3,
-                total: 3,
-                processed: 3,
-                phase: 'templates'
+            expect(issues.length).toBeGreaterThan(0);
+            issues.forEach((issue) => {
+                expect(Array.isArray(issue.vulnerabilityIds)).toBe(true);
+                expect(issue.vulnerabilityIds.length).toBe(2);
             });
-            expect(result.issues.some((issue) => issue.category === 'duplicates')).toBe(true);
-            expect(result.issues.some((issue) => issue.source === 'ai')).toBe(false);
         });
 
-        it('should return partial progress for chunked catalog runs', async () => {
-            const settings = {
-                ai: {
-                    public: {
-                        qaChecks: {
-                            completeness: true,
-                            references: false,
-                            imageCaptions: false,
-                            duplicates: true,
-                            aiDuplicates: false,
-                            aiUnlinkedTranslations: false,
-                            redaction: false,
-                            customer: false,
-                            instructions: false
-                        }
-                    }
-                }
-            };
+        it('should build QA targets only for templates with content in the locale', () => {
+            const targets = buildQaTargets([
+                ...sampleVulnerabilities,
+                { _id: 'vuln-fr', details: [{ locale: 'fr', title: 'Injection SQL' }] },
+                { _id: 'vuln-empty', details: [] }
+            ], 'en');
 
-            const first = await runAllVulnerabilitiesQa({
-                vulnerabilities: sampleVulnerabilities,
-                locale: 'en',
-                settings,
-                provider: 'openai',
-                scope: 'programmatic',
-                offset: 0,
-                limit: 1
+            expect(targets).toHaveLength(3);
+            targets.forEach((target) => {
+                expect(target.detail.locale).toBe('en');
             });
-            expect(first.progress).toEqual({
-                done: false,
-                offset: 1,
-                total: 3,
-                processed: 1,
-                phase: 'templates',
-                catalogBatch: 0,
-                typeBatchCount: 0
-            });
-            expect(first.issues.some((issue) => issue.category === 'duplicates')).toBe(false);
-
-            const mid = await runAllVulnerabilitiesQa({
-                vulnerabilities: sampleVulnerabilities,
-                locale: 'en',
-                settings,
-                provider: 'openai',
-                scope: 'programmatic',
-                offset: 1,
-                limit: 2
-            });
-            expect(mid.progress).toEqual({
-                done: false,
-                offset: 3,
-                total: 3,
-                processed: 3,
-                phase: 'templates',
-                catalogBatch: 0,
-                typeBatchCount: 0
-            });
-            expect(mid.issues.some((issue) => issue.category === 'duplicates')).toBe(false);
-
-            const catalog = await runAllVulnerabilitiesQa({
-                vulnerabilities: sampleVulnerabilities,
-                locale: 'en',
-                settings,
-                provider: 'openai',
-                scope: 'programmatic',
-                offset: 3,
-                limit: 1
-            });
-            expect(catalog.progress.done).toBe(true);
-            expect(catalog.progress.phase).toBe('catalog');
-            expect(catalog.progress.catalogBatch).toBe(0);
-            expect(catalog.issues.some((issue) => issue.category === 'duplicates')).toBe(true);
         });
     });
 };

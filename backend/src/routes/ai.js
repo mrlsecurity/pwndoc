@@ -10,9 +10,16 @@ const { MASKED_SECRET } = require('../lib/settings-secrets');
 const { runAuditQa } = require('../lib/ai-qa');
 const {
     runVulnerabilityQa,
-    runAllVulnerabilitiesQa,
     getVulnerabilityDetail
 } = require('../lib/ai-vuln-qa');
+const VulnerabilityQaCatalog = require('mongoose').model('VulnerabilityQaCatalog');
+const {
+    startVulnerabilityQaJob,
+    getVulnerabilityQaJobStatus,
+    isVulnerabilityQaJobActive,
+    cancelVulnerabilityQaJob,
+    serializeJob
+} = require('../lib/ai-vuln-qa-job');
 
 const DRAFT_VULNERABILITY_ID = '__draft__';
 
@@ -36,18 +43,19 @@ const {
 } = require('../lib/ai-qa-cache');
 const {
     computeVulnerabilityQaFingerprint,
-    computeAllVulnerabilitiesQaFingerprint,
     getLatestVulnerabilityQaReport,
-    getLatestAllVulnerabilitiesQaReport,
     buildVulnerabilityQaReportCache,
-    formatVulnerabilityQaReportResponse
+    formatVulnerabilityQaReportResponse,
+    buildCatalogSliceForVulnerability,
+    assembleAllVulnerabilitiesQaReport
 } = require('../lib/ai-vuln-qa-cache');
 const {
     normalizeQaScope,
     mergeQaIssues,
     emptyQaCounts,
     finalizeMergedQaResult,
-    isAiQaIssue
+    getQaChecksFromSettings,
+    hasEnabledQaChecks
 } = require('../lib/ai-qa-checks');
 const {
     AI_PROVIDERS,
@@ -200,38 +208,6 @@ const handleAiGenerate = async function(req, res) {
     }
 };
 
-const appendScopedQaIssues = (existingIssues = [], incomingIssues = [], scope = 'all') => {
-    const existing = Array.isArray(existingIssues) ? existingIssues : [];
-    const incoming = Array.isArray(incomingIssues) ? incomingIssues : [];
-
-    if (scope === 'programmatic')
-        return [
-            ...existing.filter(isAiQaIssue),
-            ...existing.filter((issue) => !isAiQaIssue(issue)),
-            ...incoming.filter((issue) => !isAiQaIssue(issue))
-        ];
-
-    if (scope === 'ai')
-        return [
-            ...existing.filter((issue) => !isAiQaIssue(issue)),
-            ...existing.filter(isAiQaIssue),
-            ...incoming.filter(isAiQaIssue)
-        ];
-
-    return [...existing, ...incoming];
-};
-
-const parseQaChunkLimit = (value) => {
-    if (value === undefined || value === null || value === '')
-        return null;
-
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed))
-        return 40;
-
-    return Math.max(1, Math.min(100, parsed));
-};
-
 const emptyAuditQaResponse = () => ({
     summary: '',
     issues: [],
@@ -371,8 +347,18 @@ const handleVulnerabilityQa = async function(req, res) {
         }
 
         const vulnerabilityId = String(req.body.vulnerabilityId || '').trim();
-        const settingsObject = typeof settings.toObject === 'function' ? settings.toObject() : settings;
         const draftVulnerability = normalizeDraftVulnerability(req.body.vulnerability);
+
+        // Catalog-level findings (duplicates, unlinked translations) involving this
+        // vulnerability, served from the stored catalog document — the per-vuln run no
+        // longer recomputes catalog checks.
+        const buildCatalogSlice = async (targetVulnerabilityId) => {
+            const [catalogDoc, vulnerabilities] = await Promise.all([
+                VulnerabilityQaCatalog.getByLocale(locale),
+                Vulnerability.getAllForQa()
+            ]);
+            return buildCatalogSliceForVulnerability(catalogDoc, vulnerabilities, locale, targetVulnerabilityId);
+        };
 
         if (req.body.loadOnly) {
             if (vulnerabilityId) {
@@ -385,7 +371,10 @@ const handleVulnerabilityQa = async function(req, res) {
                     vulnerabilityDoc.toObject() : vulnerabilityDoc;
 
                 const report = getLatestVulnerabilityQaReport(vulnerability, locale);
-                Response.Ok(res, respondVulnerabilityQaReport(report, { mode: 'single' }));
+                Response.Ok(res, {
+                    ...respondVulnerabilityQaReport(report, { mode: 'single' }),
+                    catalog: await buildCatalogSlice(vulnerabilityId)
+                });
                 return;
             }
 
@@ -394,11 +383,15 @@ const handleVulnerabilityQa = async function(req, res) {
                 return;
             }
 
-            const allVulnerabilities = await Vulnerability.getAll();
-            const vulnerabilityObjects = allVulnerabilities.map((entry) => {
-                return typeof entry.toObject === 'function' ? entry.toObject() : entry;
+            const [vulnerabilities, catalogDoc] = await Promise.all([
+                Vulnerability.getAllForQa(),
+                VulnerabilityQaCatalog.getByLocale(locale)
+            ]);
+            const report = assembleAllVulnerabilitiesQaReport({
+                vulnerabilities: vulnerabilities,
+                locale: locale,
+                catalogDoc: catalogDoc
             });
-            const report = getLatestAllVulnerabilitiesQaReport(settingsObject, vulnerabilityObjects, locale);
             Response.Ok(res, respondVulnerabilityQaReport(report, { mode: 'all' }));
             return;
         }
@@ -415,30 +408,37 @@ const handleVulnerabilityQa = async function(req, res) {
             return;
         }
 
-        const allVulnerabilities = await Vulnerability.getAll();
-        const vulnerabilityObjects = allVulnerabilities.map((entry) => {
-            return typeof entry.toObject === 'function' ? entry.toObject() : entry;
-        });
-
         if (vulnerabilityId) {
-            const vulnerability = vulnerabilityObjects.find((entry) => String(entry._id) === vulnerabilityId);
-            if (!vulnerability) {
-                Response.NotFound(res, 'Vulnerability not found');
+            if (isVulnerabilityQaJobActive(locale)) {
+                Response.BadParameters(res, 'A catalog-wide QA run is in progress for this language. Wait for it to finish before rechecking a single template.');
                 return;
             }
 
-            const existingReport = getLatestVulnerabilityQaReport(vulnerability, locale) || {};
+            const vulnerabilityDoc = await Vulnerability.findById(vulnerabilityId);
+            if (!vulnerabilityDoc) {
+                Response.NotFound(res, 'Vulnerability not found');
+                return;
+            }
+            const vulnerability = typeof vulnerabilityDoc.toObject === 'function' ?
+                vulnerabilityDoc.toObject() : vulnerabilityDoc;
+
             const partialResult = await runVulnerabilityQa({
                 vulnerability: vulnerability,
                 locale: locale,
                 settings: settings,
                 provider: provider,
-                allVulnerabilities: vulnerabilityObjects,
                 scope: scope
             });
+            const fingerprint = computeVulnerabilityQaFingerprint(vulnerability, locale);
+            // Only merge the other scope's previous results when they describe the same
+            // content: a stale-fingerprint entry must not contribute issues or timestamps.
+            const storedEntry = (vulnerability.qaReports || []).find((entry) => entry?.locale === locale);
+            const fingerprintMatches = storedEntry?.fingerprint === fingerprint;
+            const existingReport = fingerprintMatches ?
+                (getLatestVulnerabilityQaReport(vulnerability, locale) || {}) :
+                {};
             const mergedIssues = mergeQaIssues(existingReport.issues || [], partialResult.issues || [], scope);
             const mergedResult = finalizeMergedQaResult(existingReport, partialResult, mergedIssues);
-            const fingerprint = computeVulnerabilityQaFingerprint(vulnerability, locale);
             const qaReport = buildVulnerabilityQaReportCache(fingerprint, mergedResult, {
                 locale: locale,
                 mode: 'single',
@@ -450,10 +450,13 @@ const handleVulnerabilityQa = async function(req, res) {
             });
             await Vulnerability.saveQaReportForLocale(vulnerabilityId, locale, qaReport);
 
-            Response.Ok(res, respondVulnerabilityQaReport(
-                formatVulnerabilityQaReportResponse(qaReport, { cached: false, outdated: false }),
-                { mode: 'single' }
-            ));
+            Response.Ok(res, {
+                ...respondVulnerabilityQaReport(
+                    formatVulnerabilityQaReportResponse(qaReport, { cached: false, outdated: false }),
+                    { mode: 'single' }
+                ),
+                catalog: await buildCatalogSlice(vulnerabilityId)
+            });
             return;
         }
 
@@ -464,16 +467,11 @@ const handleVulnerabilityQa = async function(req, res) {
                 return;
             }
 
-            const comparisons = vulnerabilityObjects.filter((entry) => {
-                return String(entry._id || entry.id || '') !== DRAFT_VULNERABILITY_ID;
-            });
-
             const result = await runVulnerabilityQa({
                 vulnerability: draftVulnerability,
                 locale: locale,
                 settings: settings,
                 provider: provider,
-                allVulnerabilities: [...comparisons, draftVulnerability],
                 scope: scope
             });
 
@@ -497,51 +495,200 @@ const handleVulnerabilityQa = async function(req, res) {
             return;
         }
 
-        const existingReport = getLatestAllVulnerabilitiesQaReport(
-            settingsObject,
-            vulnerabilityObjects,
-            locale
-        ) || {};
-        const offset = Math.max(0, Number.parseInt(req.body.offset, 10) || 0);
-        const limit = parseQaChunkLimit(req.body.limit);
-        const catalogBatch = Math.max(0, Number.parseInt(req.body.catalogBatch, 10) || 0);
-        const partialResult = await runAllVulnerabilitiesQa({
-            vulnerabilities: vulnerabilityObjects,
+        // Catalog-wide runs are handled by the background job endpoints.
+        Response.BadParameters(res, 'Catalog-wide QA runs use POST /api/ai/vulnerabilities/qa/run');
+    } catch (err) {
+        Response.Internal(res, err);
+    }
+};
+
+const handleVulnerabilityQaRun = (io) => async function(req, res) {
+    try {
+        const locale = String(req.body.locale || '').trim();
+        if (!locale) {
+            Response.BadParameters(res, 'Missing required parameter: locale');
+            return;
+        }
+
+        const settings = await Settings.getAll();
+        if (!settings || settings?.ai?.public?.enabled === false) {
+            Response.Forbidden(res, 'AI integration is disabled in organization settings');
+            return;
+        }
+
+        const scope = normalizeQaScope(req.body.scope);
+        if (!scope) {
+            Response.BadParameters(res, 'Missing or invalid scope');
+            return;
+        }
+
+        const provider = resolveProvider(req, settings);
+        if (!provider) {
+            Response.BadParameters(res, 'Unsupported provider');
+            return;
+        }
+
+        if (!hasEnabledQaChecks(getQaChecksFromSettings(settings))) {
+            Response.BadParameters(res, 'No QA checks are enabled in organization settings');
+            return;
+        }
+
+        const { alreadyRunning, job } = startVulnerabilityQaJob({
             locale: locale,
-            settings: settings,
-            provider: provider,
             scope: scope,
-            offset: offset,
-            limit: limit,
-            catalogBatch: catalogBatch
+            provider: provider,
+            settings: settings,
+            io: io
         });
-        const mergedIssues = offset === 0 ?
-            mergeQaIssues(existingReport.issues || [], partialResult.issues || [], scope) :
-            appendScopedQaIssues(existingReport.issues || [], partialResult.issues || [], scope);
-        const mergedResult = finalizeMergedQaResult(existingReport, partialResult, mergedIssues);
-        const fingerprint = computeAllVulnerabilitiesQaFingerprint(vulnerabilityObjects, locale);
-        const qaReport = buildVulnerabilityQaReportCache(fingerprint, mergedResult, {
-            locale: locale,
-            mode: 'all',
-            vulnerabilityCount: partialResult.vulnerabilityCount || 0
-        }, {
-            existing: existingReport,
-            scope: scope
-        });
-        await Settings.saveVulnerabilityQaReportForLocale(locale, qaReport);
 
         Response.Ok(res, {
-            ...respondVulnerabilityQaReport(
-                formatVulnerabilityQaReportResponse(qaReport, { cached: false, outdated: false }),
-                { mode: 'all' }
-            ),
-            progress: partialResult.progress || {
-                done: true,
-                offset: partialResult.vulnerabilityCount || 0,
-                total: partialResult.vulnerabilityCount || 0,
-                processed: partialResult.vulnerabilityCount || 0
-            }
+            alreadyRunning: alreadyRunning,
+            job: serializeJob(job)
         });
+    } catch (err) {
+        Response.Internal(res, err);
+    }
+};
+
+const handleVulnerabilityQaStatus = async function(req, res) {
+    try {
+        const locale = String(req.query.locale || '').trim();
+        if (!locale) {
+            Response.BadParameters(res, 'Missing required parameter: locale');
+            return;
+        }
+
+        const settings = await Settings.getAll();
+        if (!settings || settings?.ai?.public?.enabled === false) {
+            Response.Forbidden(res, 'AI integration is disabled in organization settings');
+            return;
+        }
+
+        const [vulnerabilities, catalogDoc] = await Promise.all([
+            Vulnerability.getAllForQa(),
+            VulnerabilityQaCatalog.getByLocale(locale)
+        ]);
+        const report = assembleAllVulnerabilitiesQaReport({
+            vulnerabilities: vulnerabilities,
+            locale: locale,
+            catalogDoc: catalogDoc
+        });
+
+        Response.Ok(res, {
+            job: getVulnerabilityQaJobStatus(locale),
+            report: respondVulnerabilityQaReport(report, { mode: 'all' })
+        });
+    } catch (err) {
+        Response.Internal(res, err);
+    }
+};
+
+const handleVulnerabilityQaCancel = async function(req, res) {
+    try {
+        const locale = String(req.body.locale || '').trim();
+        if (!locale) {
+            Response.BadParameters(res, 'Missing required parameter: locale');
+            return;
+        }
+
+        const job = cancelVulnerabilityQaJob(locale);
+        if (!job) {
+            Response.BadParameters(res, 'No QA run in progress for this language');
+            return;
+        }
+
+        Response.Ok(res, { job: serializeJob(job) });
+    } catch (err) {
+        Response.Internal(res, err);
+    }
+};
+
+// Dismiss or restore a single QA issue from the catalog-wide report. Template issues
+// (vulnerabilityId present) are stored on the vulnerability and scoped to its current
+// content fingerprint; catalog issues are stored on the catalog document and keyed on
+// issue identity so "not a duplicate" verdicts survive re-runs.
+const handleVulnerabilityQaDismiss = async function(req, res) {
+    try {
+        const locale = String(req.body.locale || '').trim();
+        const key = String(req.body.key || '').trim();
+        if (!locale || !key) {
+            Response.BadParameters(res, 'Missing required parameters: locale, key');
+            return;
+        }
+
+        const settings = await Settings.getAll();
+        if (!settings || settings?.ai?.public?.enabled === false) {
+            Response.Forbidden(res, 'AI integration is disabled in organization settings');
+            return;
+        }
+
+        const dismissed = req.body.dismissed !== false;
+        const username = req.decodedToken?.username || '';
+        const vulnerabilityId = String(req.body.vulnerabilityId || '').trim();
+
+        if (vulnerabilityId) {
+            const vulnerability = await Vulnerability.findById(vulnerabilityId).lean().exec();
+            if (!vulnerability) {
+                Response.NotFound(res, 'Vulnerability not found');
+                return;
+            }
+
+            const fingerprint = computeVulnerabilityQaFingerprint(vulnerability, locale);
+            if (!fingerprint) {
+                Response.BadParameters(res, 'Vulnerability has no content for this language');
+                return;
+            }
+
+            await Vulnerability.setQaIssueDismissed(vulnerabilityId, locale, key, dismissed, fingerprint, username);
+        } else {
+            const catalog = await VulnerabilityQaCatalog.setIssueDismissed(locale, key, dismissed, username);
+            if (!catalog) {
+                Response.BadParameters(res, 'No catalog QA report for this language');
+                return;
+            }
+        }
+
+        Response.Ok(res, { dismissed: dismissed });
+    } catch (err) {
+        Response.Internal(res, err);
+    }
+};
+
+// Resolve or unresolve an entire vulnerability's QA from the catalog-wide report. The
+// resolution is stored on the vulnerability scoped to its current content fingerprint, so
+// editing the template reopens its issues on the next run.
+const handleVulnerabilityQaResolve = async function(req, res) {
+    try {
+        const locale = String(req.body.locale || '').trim();
+        const vulnerabilityId = String(req.body.vulnerabilityId || '').trim();
+        if (!locale || !vulnerabilityId) {
+            Response.BadParameters(res, 'Missing required parameters: locale, vulnerabilityId');
+            return;
+        }
+
+        const settings = await Settings.getAll();
+        if (!settings || settings?.ai?.public?.enabled === false) {
+            Response.Forbidden(res, 'AI integration is disabled in organization settings');
+            return;
+        }
+
+        const vulnerability = await Vulnerability.findById(vulnerabilityId).lean().exec();
+        if (!vulnerability) {
+            Response.NotFound(res, 'Vulnerability not found');
+            return;
+        }
+
+        const fingerprint = computeVulnerabilityQaFingerprint(vulnerability, locale);
+        if (!fingerprint) {
+            Response.BadParameters(res, 'Vulnerability has no content for this language');
+            return;
+        }
+
+        const resolved = req.body.resolved !== false;
+        const username = req.decodedToken?.username || '';
+        await Vulnerability.setQaResolved(vulnerabilityId, locale, resolved, fingerprint, username);
+
+        Response.Ok(res, { resolved: resolved });
     } catch (err) {
         Response.Internal(res, err);
     }
@@ -652,10 +799,15 @@ const requireVulnerabilityQaPermission = function(req, res, next) {
     Response.Forbidden(res, 'Insufficient privileges');
 };
 
-module.exports = function(app) {
+module.exports = function(app, io) {
     app.get('/api/ai/enabled-fields', acl.hasPermission('validtoken'), requireAiGeneratePermission, handleAiEnabledFields);
     app.post('/api/ai/generate', acl.hasPermission('validtoken'), requireAiGeneratePermission, handleAiGenerate);
     app.post('/api/ai/qa', acl.hasPermission('audits:ai-qa'), handleAiQa);
     app.post('/api/ai/vulnerabilities/qa', acl.hasPermission('validtoken'), requireVulnerabilityQaPermission, handleVulnerabilityQa);
+    app.post('/api/ai/vulnerabilities/qa/run', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaRun(io));
+    app.get('/api/ai/vulnerabilities/qa/status', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaStatus);
+    app.post('/api/ai/vulnerabilities/qa/cancel', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaCancel);
+    app.post('/api/ai/vulnerabilities/qa/dismiss', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaDismiss);
+    app.post('/api/ai/vulnerabilities/qa/resolve', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaResolve);
     app.post('/api/ai/test', acl.hasPermission('settings:update'), handleAiTestConnection);
 };

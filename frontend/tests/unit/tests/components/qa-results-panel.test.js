@@ -65,15 +65,23 @@ describe('QaResultsPanel outdated banner', () => {
   it('dismisses the banner when the close button is clicked', async () => {
     const wrapper = createWrapper({ outdated: true })
 
-    await wrapper.find('.qa-outdated-banner q-btn').trigger('click')
+    await wrapper.find('[data-testid="qa-outdated-dismiss"]').trigger('click')
 
     expect(wrapper.text()).not.toContain('These results are out of date')
+  })
+
+  it('re-runs QA from the banner with the last run scope', async () => {
+    const wrapper = createWrapper({ outdated: true, runScope: 'programmatic' })
+
+    await wrapper.find('[data-testid="qa-outdated-rerun"]').trigger('click')
+
+    expect(wrapper.emitted('run')).toEqual([['programmatic']])
   })
 
   it('re-shows the banner after a fresh run completes while still outdated', async () => {
     const wrapper = createWrapper({ outdated: true })
 
-    await wrapper.find('.qa-outdated-banner q-btn').trigger('click')
+    await wrapper.find('[data-testid="qa-outdated-dismiss"]').trigger('click')
     expect(wrapper.text()).not.toContain('These results are out of date')
 
     await wrapper.setProps({ loading: true })
@@ -265,12 +273,15 @@ describe('QaResultsPanel finding-row rendering', () => {
     rows.forEach((row) => expect(row.find('q-btn').exists()).toBe(false))
   })
 
-  it('emits navigate with the first issue\'s location on click', async () => {
+  it('emits navigate with the first issue\'s location and the row on click', async () => {
     const wrapper = createFindingRowWrapper()
 
     await wrapper.find('.qa-finding-row').find('q-btn').trigger('click')
 
-    expect(wrapper.emitted('navigate')).toEqual([['finding:finding-1::XSS']])
+    const emitted = wrapper.emitted('navigate')
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0][0]).toBe('finding:finding-1::XSS')
+    expect(emitted[0][1]).toMatchObject({ key: expect.anything() })
   })
 })
 
@@ -338,5 +349,103 @@ describe('QaResultsPanel AI-unavailable banner', () => {
     const wrapper = createWrapper({ aiUnavailableMessages: [] })
 
     expect(wrapper.find('.qa-ai-unavailable-banner').exists()).toBe(false)
+  })
+})
+
+describe('QaResultsPanel run actions', () => {
+  it('collapses the scope buttons into a single "Run again" control once a report exists', () => {
+    const wrapper = createWrapper()
+
+    expect(wrapper.find('[data-testid="qa-run-again"]').exists()).toBe(true)
+  })
+
+  it('keeps the stacked scope buttons before the first run', () => {
+    const wrapper = createWrapper({ hasReportData: false })
+
+    expect(wrapper.find('[data-testid="qa-run-again"]').exists()).toBe(false)
+  })
+
+  it('repeats the last run scope from the main button and offers the other scopes in the menu', async () => {
+    const wrapper = createWrapper({ runScope: 'ai' })
+
+    await wrapper.find('[data-testid="qa-run-again"]').trigger('click')
+    expect(wrapper.emitted('run')).toEqual([['ai']])
+
+    // The default scope is on the main button, so it is not repeated in the dropdown.
+    expect(wrapper.find('[data-testid="qa-run-scope-ai"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="qa-run-scope-programmatic"]').trigger('click')
+    expect(wrapper.emitted('run')).toEqual([['ai'], ['programmatic']])
+  })
+
+  it('defaults "Run again" to the full run when no scope was recorded', async () => {
+    const wrapper = createWrapper()
+
+    await wrapper.find('[data-testid="qa-run-again"]').trigger('click')
+    expect(wrapper.emitted('run')).toEqual([['all']])
+  })
+})
+
+describe('QaResultsPanel dismiss controls', () => {
+  const dismissableGroups = [{
+    key: 'catalog',
+    label: 'Cross-template checks',
+    issues: [{
+      severity: 'warning',
+      category: 'duplicates',
+      title: 'Possible duplicate',
+      message: 'Looks the same',
+      location: 'database',
+      source: 'structural',
+      key: 'k1',
+      dismissed: false,
+      linkedTemplates: [
+        { id: 'v1', title: 'SQL Injection' },
+        { id: 'v2', title: 'SQLi (copy)' }
+      ]
+    }]
+  }]
+
+  it('shows the status filter chips only when enabled and emits the chosen status', async () => {
+    expect(createWrapper().find('[data-testid="qa-status-filter-active"]').exists()).toBe(false)
+
+    const wrapper = createWrapper({ showStatusFilter: true, statusCounts: { outdated: 2, resolved: 3 } })
+    expect(wrapper.find('[data-testid="qa-status-filter-active"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="qa-status-filter-outdated"]').text()).toContain('(2)')
+    expect(wrapper.find('[data-testid="qa-status-filter-resolved"]').text()).toContain('(3)')
+
+    await wrapper.find('[data-testid="qa-status-filter-resolved"]').trigger('click')
+    expect(wrapper.emitted('update:statusFilter')).toEqual([['resolved']])
+  })
+
+  it('renders the run-again hint under the button only when provided', () => {
+    expect(createWrapper().find('[data-testid="qa-run-again-caption"]').exists()).toBe(false)
+    expect(createWrapper({ runAgainHint: 'only outdated re-run' })
+      .find('[data-testid="qa-run-again-caption"]').text()).toBe('only outdated re-run')
+  })
+
+  it('shows the text filter only when enabled', () => {
+    expect(createWrapper().find('[data-testid="qa-text-filter"]').exists()).toBe(false)
+    expect(createWrapper({ showTextFilter: true }).find('[data-testid="qa-text-filter"]').exists()).toBe(true)
+  })
+
+  it('emits dismiss with the clicked issue', async () => {
+    const wrapper = createWrapper({ showDismissActions: true, groupedIssues: dismissableGroups })
+
+    await wrapper.find('[data-testid="qa-dismiss-issue"]').trigger('click')
+
+    const emitted = wrapper.emitted('dismiss')
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0][0]).toMatchObject({ key: 'k1' })
+  })
+
+  it('navigates to each linked template from catalog issue chips', async () => {
+    const wrapper = createWrapper({ groupedIssues: dismissableGroups })
+
+    const chips = wrapper.findAll('[data-testid="qa-linked-template"]')
+    expect(chips).toHaveLength(2)
+
+    await chips[1].trigger('click')
+    expect(wrapper.emitted('navigate')).toEqual([['database', { findingId: 'v2' }]])
   })
 })

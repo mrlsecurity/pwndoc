@@ -8,9 +8,9 @@ const {
 
 const AI_TRANSLATION_SEVERITIES = ['error', 'warning', 'info'];
 const FIELD_SLICE_LENGTH = 2500;
-// Keeps a single request's template catalog within provider context limits on large libraries.
+// Single-template QA can safely walk candidate batches. QA-all keeps the pulled behavior:
+// one provider call up to the catalog ceiling, otherwise the check is reported as skipped.
 const AI_TRANSLATION_BATCH_SIZE = 40;
-const AI_TRANSLATION_BATCH_OVERLAP = 5;
 
 const pushIssue = (issues, issue, source = 'ai') => {
     const normalized = normalizeIssue({
@@ -110,7 +110,8 @@ const normalizeAiUnlinkedTranslationIssues = (issues = [], {
                 severity: severity,
                 title: title,
                 message: message,
-                location: location || formatVulnerabilityLocation(focalTitle)
+                location: location || formatVulnerabilityLocation(focalTitle),
+                vulnerabilityIds: focalId ? [focalId] : []
             });
             return;
         }
@@ -147,12 +148,16 @@ const normalizeAiUnlinkedTranslationIssues = (issues = [], {
             const issueMessage = reason.includes(relatedLabel) && reason.includes(focalLabel) ?
                 reason :
                 `"${focalLabel}" and "${relatedLabel}" appear to be the same template in different languages${localeSuffix} but are stored as separate records. Merge them to associate both languages. ${reason}`.trim();
+            const locationLabel = targetVulnerabilityId && relatedId === String(targetVulnerabilityId) ?
+                relatedLabel :
+                focalLabel;
 
             pushIssue(normalizedIssues, {
                 severity: severity,
                 title: title,
                 message: issueMessage.replace(/\s+/g, ' ').trim(),
-                location: formatVulnerabilityLocation(focalLabel)
+                location: formatVulnerabilityLocation(locationLabel),
+                vulnerabilityIds: [focalId, relatedId]
             });
         });
     });
@@ -189,12 +194,33 @@ const runAiUnlinkedTranslationChecks = async ({
         .trim()
         .toLowerCase();
 
-    // A fixed target is compared against every candidate batch, so no overlap is needed to
-    // cover all pairs. A full-catalog run compares many-to-many, so batches overlap to reduce
-    // pairs missed at a batch boundary.
-    const templateBatches = targetEntry ?
-        chunkWithOverlap(candidates, AI_TRANSLATION_BATCH_SIZE, 0) :
-        chunkWithOverlap(catalog, AI_TRANSLATION_BATCH_SIZE, AI_TRANSLATION_BATCH_OVERLAP);
+    if (!targetEntry) {
+        if (catalog.length > 75) {
+            throw new Error(
+                `Catalog has ${catalog.length} templates; AI unlinked-translation review is skipped above 75 (upgrade: batched catalog prompts).`
+            );
+        }
+
+        const aiResult = await runVulnerabilityUnlinkedTranslationQaWithProvider({
+            provider: selectedProvider,
+            settings: settings,
+            mode: 'all',
+            target: null,
+            templates: catalog
+        });
+        const catalogById = new Map(catalog.map((entry) => [entry.vulnerabilityId, entry]));
+
+        return {
+            issues: normalizeAiUnlinkedTranslationIssues(aiResult.issues || [], {
+                catalogById: catalogById
+            }),
+            summary: String(aiResult.summary || '').trim(),
+            model: aiResult.model || null,
+            provider: selectedProvider
+        };
+    }
+
+    const templateBatches = chunkWithOverlap(candidates, AI_TRANSLATION_BATCH_SIZE, 0);
 
     const rawIssues = [];
     let model = null;

@@ -108,6 +108,15 @@ export const useQaRunsStore = defineStore('qaRuns', {
       }
     },
 
+    // Replace a run's report directly — used by server-driven runs (the QA-all background
+    // job) where progress and results arrive via socket/status fetches rather than a
+    // client-owned request.
+    setReport(key, data) {
+      const run = this.ensureRun(key)
+      run.report = data || {}
+      run.loaded = true
+    },
+
     reset(key) {
       if (this.runs[key])
         this.runs[key] = emptyRun()

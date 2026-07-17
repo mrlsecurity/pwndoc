@@ -143,13 +143,17 @@
                                 <q-separator />
 
                                 <div class="q-px-md q-py-sm">
-                                    <q-checkbox
-                                    dense
-                                    size="sm"
-                                    v-model="search.unsavedOnly"
-                                    :label="$t('unsavedChangesOnly')"
-                                    data-testid="filter-unsaved-only"
-                                    />
+                                    <div class="row items-center no-wrap">
+                                        <q-checkbox
+                                        dense
+                                        size="sm"
+                                        v-model="search.unsavedOnly"
+                                        :label="$t('unsavedChangesOnly')"
+                                        class="col ellipsis"
+                                        data-testid="filter-unsaved-only"
+                                        />
+                                        <span class="text-caption text-grey-6" data-testid="filter-unsaved-count">{{unsavedChangesCount}}</span>
+                                    </div>
                                 </div>
 
                                 <q-separator />
@@ -270,13 +274,17 @@
                     />
                     <q-btn
                     v-if="aiQaAllEnabled"
-                    :label="$t('vulnerabilityQa.runAll')"
-                    outline
+                    :label="$t(vulnQaAllOpen ? 'vulnerabilityQa.hideReview' : 'vulnerabilityQa.showReview')"
+                    :outline="!vulnQaAllOpen"
+                    :unelevated="vulnQaAllOpen"
                     color="secondary"
                     no-caps
-                    :disable="vulnerabilityQaCount === 0"
-                    @click="openRunAllQaModal()"
-                    />
+                    data-testid="vulnerability-qa-all-toggle"
+                    :disable="vulnerabilityQaCount === 0 && !vulnQaAllOpen"
+                    @click="toggleRunAllQa()"
+                    >
+                        <q-badge v-if="vulnQaAllRunning" floating rounded color="orange" class="qa-run-badge" />
+                    </q-btn>
                 </div>
 
                 <div class="row items-center q-mt-sm">
@@ -438,7 +446,7 @@
                 </q-bar>
 
                 <div class="row col vuln-modal-content items-stretch no-wrap">
-                    <div class="vuln-modal-form">
+                    <div class="vuln-modal-form" ref="detailScroll">
                 <q-card-section>
                     <div class="q-col-gutter-md row">
                         <q-input
@@ -704,7 +712,7 @@
                 </q-bar>
 
                 <div class="row col vuln-modal-content items-stretch no-wrap">
-                    <div class="vuln-modal-form">
+                    <div class="vuln-modal-form" ref="detailScroll">
                 <q-card-section>
                     <div class="q-col-gutter-md row">
                         <q-input
@@ -895,7 +903,7 @@
                     <q-btn dense flat icon="close" class="q-ml-sm" data-testid="edit-vulnerability-close" @click="closePane()" />
                 </q-bar>
 
-                <div class="col scroll">
+                <div class="col scroll" ref="detailScroll">
                     <div class="row items-stretch">
                         <q-card class="col-md-6 col-12" flat>
                             <q-card-section>
@@ -1238,6 +1246,20 @@
                                 options-sanitize
                                 outlined
                                 />
+                                <q-input
+                                v-if="mergeLanguageLeft"
+                                v-model="mergeSearchLeft"
+                                :placeholder="$t('search')"
+                                class="q-mt-sm"
+                                dense
+                                clearable
+                                outlined
+                                data-testid="merge-search-left"
+                                >
+                                    <template v-slot:prepend>
+                                        <q-icon name="search" size="xs" />
+                                    </template>
+                                </q-input>
                             </q-card-section>
                             <q-card-section class="col vuln-merge-list">
                                 <q-scroll-area class="full-height">
@@ -1269,6 +1291,20 @@
                                 options-sanitize
                                 outlined
                                 />
+                                <q-input
+                                v-if="mergeLanguageRight"
+                                v-model="mergeSearchRight"
+                                :placeholder="$t('search')"
+                                class="q-mt-sm"
+                                dense
+                                clearable
+                                outlined
+                                data-testid="merge-search-right"
+                                >
+                                    <template v-slot:prepend>
+                                        <q-icon name="search" size="xs" />
+                                    </template>
+                                </q-input>
                             </q-card-section>
                             <q-card-section class="col vuln-merge-list">
                                 <q-scroll-area class="full-height">
@@ -1293,20 +1329,20 @@
                 </template>
             </div>
         </div>
-    </div>
 
-    <q-dialog persistent ref="runAllQaModal" @hide="runAllQaOpen = false">
-        <q-card class="vulnerability-qa-dialog">
-            <vulnerability-qa-panel
-            v-if="runAllQaOpen"
-            :key="runAllQaKey"
-            :locale="dtLanguage"
-            :expected-count="vulnerabilityQaCount"
-            :language-label="dtLanguageLabel"
-            @close="closeRunAllQaModal()"
-            />
-        </q-card>
-    </q-dialog>
+        <!-- Docked QA-all panel: shown as its own column when no create/edit pane hosts
+             the right-hand slot; otherwise the panel renders inside .vuln-modal-ai above. -->
+        <template v-if="vulnQaAllDockVisible">
+            <q-separator vertical />
+            <div class="vuln-qa-dock column no-wrap" data-testid="vulnerability-qa-dock">
+                <vulnerability-qa-all-panel
+                :expected-count="vulnerabilityQaCount"
+                :language-label="dtLanguageLabel"
+                @navigate="navigateToVulnerabilityFromQa"
+                />
+            </div>
+        </template>
+    </div>
 </template>
 
 <script src='./vulnerabilities.js'></script>
@@ -1472,17 +1508,19 @@ body.body--dark .vuln-pane-header {
     min-height: 0;
 }
 
-.vulnerability-qa-dialog {
-    width: min(1100px, 95vw);
-    max-width: 95vw;
-    height: 90vh;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
+/* Docked QA-all column (no create/edit pane open) — same sizing as .vuln-modal-ai so the
+   panel doesn't jump when it moves between the dock and the pane slot. */
+.vuln-qa-dock {
+    flex: 0 1 clamp(420px, 32vw, 560px);
+    min-width: 420px;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
 }
 
-.vulnerability-qa-dialog :deep(.qa-results-panel) {
+.vuln-qa-dock :deep(.qa-results-panel) {
     flex: 1 1 0;
     min-height: 0;
+    min-width: 0;
 }
 </style>
