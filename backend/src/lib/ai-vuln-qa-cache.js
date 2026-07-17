@@ -16,12 +16,25 @@ const {
     buildIssueSummary
 } = require('./ai-qa-checks');
 
+// Custom-field definitions are populated for QA so the model and issue locations can
+// use their real labels. Population is a read-time representation change, though, and
+// must not make an otherwise unchanged vulnerability look edited. Build fingerprints
+// from the same content-only custom-field shape used before population was introduced.
+const buildVulnerabilityFingerprintSnapshot = (vulnerability = {}, detail = {}) => {
+    const fingerprintDetail = {
+        ...detail,
+        customFields: (Array.isArray(detail.customFields) ? detail.customFields : [])
+            .map((field) => ({ text: field?.text }))
+    };
+    return buildVulnerabilitySnapshot(vulnerability, fingerprintDetail);
+};
+
 const computeVulnerabilityQaFingerprint = (vulnerability = {}, locale = '') => {
     const detail = getVulnerabilityDetail(vulnerability, locale);
     if (!detail)
         return '';
 
-    const snapshot = buildVulnerabilitySnapshot(vulnerability, detail);
+    const snapshot = buildVulnerabilityFingerprintSnapshot(vulnerability, detail);
     return crypto
         .createHash('sha256')
         .update(JSON.stringify({ locale: String(locale || '').trim(), snapshot }))
@@ -37,7 +50,7 @@ const computeAllVulnerabilitiesQaFingerprint = (vulnerabilities = [], locale = '
 
             return {
                 id: String(vulnerability._id || vulnerability.id || ''),
-                snapshot: buildVulnerabilitySnapshot(vulnerability, detail)
+                snapshot: buildVulnerabilityFingerprintSnapshot(vulnerability, detail)
             };
         })
         .filter(Boolean)

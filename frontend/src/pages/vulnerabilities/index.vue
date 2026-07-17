@@ -314,9 +314,16 @@
             <q-separator />
 
             <div class="col vuln-list-container relative-position">
-                <q-list separator>
+                <q-virtual-scroll
+                v-if="paginatedVulnerabilities.length"
+                ref="vulnerabilityList"
+                class="full-height"
+                :items="paginatedVulnerabilities"
+                :virtual-scroll-item-size="64"
+                separator
+                v-slot="{ item: vuln }"
+                >
                     <q-item
-                    v-for="vuln of paginatedVulnerabilities"
                     :key="vuln._id"
                     clickable
                     :active="activePane !== null && activePane !== 'merge' && vulnerabilityId === vuln._id"
@@ -345,8 +352,8 @@
                             </div>
                         </q-item-section>
                     </q-item>
-                </q-list>
-                <div v-if="!loading && paginatedVulnerabilities.length === 0" class="text-center q-pa-lg text-grey">
+                </q-virtual-scroll>
+                <div v-else-if="!loading" class="text-center q-pa-lg text-grey">
                     {{$t('noMatchingRecords')}}
                 </div>
                 <q-inner-loading :showing="loading" />
@@ -420,18 +427,38 @@
             <!-- Create pane -->
             <div v-else-if="activePane === 'create'" class="col column no-wrap vuln-pane" data-testid="vulnerability-create-pane">
                 <q-bar class="vuln-pane-header vuln-modal-bar">
-                    <div class="q-toolbar-title">
-                        <span v-if="currentCategory">{{$t('addVulnerability')}} ({{currentCategory.name}})</span>
-                        <span v-else>{{$t('addVulnerability')}} ({{$t('noCategory')}})</span>
+                    <q-btn-dropdown
+                    v-if="userStore.isAllowed('vulnerabilities:create')"
+                    :label="$t('changeCategory')"
+                    outline
+                    color="primary"
+                    no-caps
+                    class="vuln-toolbar-button"
+                    >
+                        <q-list separator>
+                            <q-item-label header>{{$t('selectCategory')}}</q-item-label>
+                            <q-item clickable v-close-popup @click="editChangeCategory()">
+                                <q-item-section><q-item-label>{{$t('noCategory')}}</q-item-label></q-item-section>
+                            </q-item>
+                            <q-item v-for="category of vulnCategories" :key="category.name" clickable v-close-popup @click="editChangeCategory(category)">
+                                <q-item-section><q-item-label>{{category.name}}</q-item-label></q-item-section>
+                            </q-item>
+                        </q-list>
+                    </q-btn-dropdown>
+                    <div v-if="currentCreatorName" class="vuln-creator" data-testid="vulnerability-created-by">
+                        <span class="vuln-creator-label">{{$t('createdBy')}}</span>
+                        <span class="vuln-creator-name">{{currentCreatorName}}</span>
                     </div>
                     <draft-recovery-status />
+                    <q-space />
                     <q-btn
                     v-if="aiQaEnabled"
                     outline
-                    dense
-                    icon="fas fa-list-check"
+                    icon="o_gpp_good"
+                    label="QA"
+                    no-caps
+                    class="vuln-toolbar-button"
                     :color="vulnQaOpen ? 'primary' : 'grey-8'"
-                    class="q-ml-md"
                     @click="toggleVulnerabilityQaView()"
                     >
                         <q-badge v-if="vulnQaRunning" floating rounded color="orange" class="qa-run-badge" />
@@ -439,10 +466,25 @@
                             {{ $t('tooltip.vulnerabilityQa') }}
                         </q-tooltip>
                     </q-btn>
-                    <q-separator vertical class="q-mx-md" />
-                    <q-space />
-                    <q-btn color="secondary" unelevated no-caps :label="$t('btn.create')" @click="createVulnerability()" />
-                    <q-btn dense flat icon="close" class="q-ml-sm" data-testid="create-vulnerability-close" @click="closePane()" />
+                    <q-separator vertical inset class="q-mx-md" />
+                    <q-btn
+                    v-if="userStore.isAllowed('vulnerabilities:create')"
+                    outline
+                    :color="saveButtonColor"
+                    :text-color="saveButtonTextColor"
+                    no-caps
+                    class="vuln-toolbar-button"
+                    data-testid="save-vulnerability-button"
+                    @click="createVulnerability()"
+                    >
+                        <q-icon v-if="saveButtonState === 'saved'" name="check" class="q-mr-sm" />
+                        <span>{{saveButtonLabel}}</span>
+                        <q-icon v-if="saveButtonState === 'dirty'" name="circle" size="12px" class="q-ml-sm" />
+                    </q-btn>
+                    <q-separator vertical inset class="q-mx-md" />
+                    <q-btn flat icon="close" class="vuln-toolbar-close" data-testid="create-vulnerability-close" @click="closePane()">
+                        <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('btn.close')}}</q-tooltip>
+                    </q-btn>
                 </q-bar>
 
                 <div class="row col vuln-modal-content items-stretch no-wrap">
@@ -629,20 +671,20 @@
             </div>
 
             <!-- Edit pane -->
-            <div v-else-if="activePane === 'edit'" class="col column no-wrap vuln-pane" data-testid="vulnerability-edit-pane">
+            <div
+            v-else-if="activePane === 'edit'"
+            :key="`vulnerability-edit:${vulnerabilityId}`"
+            class="col column no-wrap vuln-pane"
+            data-testid="vulnerability-edit-pane"
+            >
                 <q-bar class="vuln-pane-header vuln-modal-bar">
-                    <div class="q-toolbar-title">
-                        <span v-if="currentVulnerability.details[currentDetailsIndex] && currentVulnerability.details[currentDetailsIndex].title">{{$t('editVulnerability')}} ({{currentVulnerability.details[currentDetailsIndex].title}})</span>
-                        <span v-else-if="currentVulnerability.category">{{$t('editVulnerability')}} ({{currentVulnerability.category}})</span>
-                        <span v-else>{{$t('editVulnerability')}} ({{$t('noCategory')}})</span>
-                    </div>
-                    <draft-recovery-status />
-                    <q-separator vertical class="q-mx-md" />
                     <q-btn-dropdown
                     v-if="userStore.isAllowed('vulnerabilities:update')"
                     :label="$t('changeCategory')"
                     outline
                     color="primary"
+                    no-caps
+                    class="vuln-toolbar-button"
                     >
                     <q-list separator>
                         <q-item-label header>{{$t('selectCategory')}}</q-item-label>
@@ -658,13 +700,20 @@
                         </q-item>
                     </q-list>
                     </q-btn-dropdown>
+                    <div v-if="currentCreatorName" class="vuln-creator" data-testid="vulnerability-created-by">
+                        <span class="vuln-creator-label">{{$t('createdBy')}}</span>
+                        <span class="vuln-creator-name">{{currentCreatorName}}</span>
+                    </div>
+                    <draft-recovery-status />
+                    <q-space />
                     <q-btn
                     v-if="aiQaEnabled && vulnerabilityId"
                     outline
-                    dense
-                    icon="fas fa-list-check"
+                    icon="o_gpp_good"
+                    label="QA"
+                    no-caps
+                    class="vuln-toolbar-button"
                     :color="vulnQaOpen ? 'primary' : 'grey-8'"
-                    class="q-ml-md"
                     @click="toggleVulnerabilityQaView()"
                     >
                         <q-badge v-if="vulnQaRunning" floating rounded color="orange" class="qa-run-badge" />
@@ -672,43 +721,38 @@
                             {{ $t('tooltip.vulnerabilityQa') }}
                         </q-tooltip>
                     </q-btn>
-                    <div v-if="currentVulnerability.creator" class="q-toolbar-title q-ml-md" style="height:80%">
-                        <span>
-                            <q-badge color="grey" style="height:100%">
-                                Creator: {{currentVulnerability.creator.username}}
-                            </q-badge>
-                        </span>
-                    </div>
-                    <q-separator vertical class="q-mx-md" />
-                    <q-space />
+                    <q-separator vertical inset class="q-mx-md" />
                     <q-btn
                     v-if="userStore.isAllowed('vulnerabilities:delete')"
-                    dense
-                    flat
-                    icon="fa fa-trash"
+                    color="negative"
+                    unelevated
+                    no-caps
+                    icon="delete"
+                    :label="$t('btn.delete')"
+                    class="vuln-toolbar-button q-mr-sm"
                     data-testid="delete-vulnerability-button"
                     @click="confirmDeleteVulnerability(currentVulnerability)"
                     >
                         <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('tooltip.delete')}}</q-tooltip>
                     </q-btn>
                     <q-btn
-                    v-if="userStore.isAllowed('vulnerabilities:update') && currentVulnerability.status === 1"
-                    label="Approve"
-                    color="light-blue"
-                    unelevated
-                    class="q-ml-sm"
-                    @click="updateVulnerability()"
-                    />
-                    <q-btn
-                    v-else-if="userStore.isAllowed('vulnerabilities:update')"
-                    :label="$t('btn.update')"
-                    color="secondary"
-                    unelevated
+                    v-if="userStore.isAllowed('vulnerabilities:update')"
+                    outline
+                    :color="saveButtonColor"
+                    :text-color="saveButtonTextColor"
                     no-caps
-                    class="q-ml-sm"
+                    class="vuln-toolbar-button q-ml-sm"
+                    data-testid="save-vulnerability-button"
                     @click="updateVulnerability()"
-                    />
-                    <q-btn dense flat icon="close" class="q-ml-sm" data-testid="edit-vulnerability-close" @click="closePane()" />
+                    >
+                        <q-icon v-if="saveButtonState === 'saved'" name="check" class="q-mr-sm" />
+                        <span>{{saveButtonLabel}}</span>
+                        <q-icon v-if="saveButtonState === 'dirty'" name="circle" size="12px" class="q-ml-sm" />
+                    </q-btn>
+                    <q-separator vertical inset class="q-mx-md" />
+                    <q-btn flat icon="close" class="vuln-toolbar-close" data-testid="edit-vulnerability-close" @click="closePane()">
+                        <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('btn.close')}}</q-tooltip>
+                    </q-btn>
                 </q-bar>
 
                 <div class="row col vuln-modal-content items-stretch no-wrap">
@@ -899,8 +943,23 @@
                     </div>
                     <draft-recovery-status />
                     <q-space />
-                    <q-btn color="orange" unelevated no-caps :label="$t('btn.update')" @click="updateVulnerability()" />
-                    <q-btn dense flat icon="close" class="q-ml-sm" data-testid="edit-vulnerability-close" @click="closePane()" />
+                    <q-btn
+                    outline
+                    :color="saveButtonColor"
+                    :text-color="saveButtonTextColor"
+                    no-caps
+                    class="vuln-toolbar-button"
+                    data-testid="save-vulnerability-button"
+                    @click="updateVulnerability()"
+                    >
+                        <q-icon v-if="saveButtonState === 'saved'" name="check" class="q-mr-sm" />
+                        <span>{{saveButtonLabel}}</span>
+                        <q-icon v-if="saveButtonState === 'dirty'" name="circle" size="12px" class="q-ml-sm" />
+                    </q-btn>
+                    <q-separator vertical inset class="q-mx-md" />
+                    <q-btn flat icon="close" class="vuln-toolbar-close" data-testid="edit-vulnerability-close" @click="closePane()">
+                        <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('btn.close')}}</q-tooltip>
+                    </q-btn>
                 </q-bar>
 
                 <div class="col scroll" ref="detailScroll">
@@ -1370,7 +1429,7 @@ body.body--dark .vuln-page {
 }
 
 .vuln-list-container {
-    overflow-y: auto;
+    overflow: hidden;
     min-height: 0;
 }
 
@@ -1456,7 +1515,45 @@ body.body--dark .vuln-pane-header {
 
 .vuln-modal-bar {
     padding: 10px 16px;
-    min-height: 48px;
+    min-height: 64px;
+}
+
+.vuln-toolbar-button {
+    min-height: 40px;
+    padding-left: 16px;
+    padding-right: 16px;
+    font-size: 14px;
+}
+
+.vuln-toolbar-close {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+}
+
+.vuln-creator {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-left: 24px;
+    min-width: 110px;
+    line-height: 1.25;
+}
+
+.vuln-creator-label {
+    color: rgba(0, 0, 0, 0.6);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.vuln-creator-name {
+    font-size: 13px;
+    font-weight: 500;
+    margin-top: 3px;
+}
+
+body.body--dark .vuln-creator-label {
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .vuln-modal-content {

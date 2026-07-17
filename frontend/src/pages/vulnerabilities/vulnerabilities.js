@@ -27,6 +27,7 @@ import { hasAnyQaCheckEnabled } from '@/services/qa-checks'
 import { $t } from 'boot/i18n'
 
 const userStore = useUserStore()
+const SAVE_SUCCESS_TIMEOUT_MS = 2000
 
 // Memoized CVSS parsing per row object — rows are replaced on each list reload so
 // stale entries are garbage collected with them.
@@ -101,7 +102,9 @@ export default {
             aiFieldPrompts: [],
             // Content displayed in the detail pane: null | create | edit | updates | merge
             activePane: null,
-            vulnQaOpen: false
+            vulnQaOpen: false,
+            saveSuccess: false,
+            saveSuccessTimer: null
         }
     },
 
@@ -127,12 +130,15 @@ export default {
         this.refreshVulnerabilityDrafts()
         this.loadAiEnabledFieldKeys()
         this.setupVulnQaSocket()
+        document.addEventListener('keydown', this._listener, false)
     },
 
     unmounted: function() {
+        document.removeEventListener('keydown', this._listener, false)
         if (this.draftRecovery)
             this.draftRecovery.stop()
         this.teardownVulnQaSocket()
+        this.clearSaveSuccess()
     },
 
     watch: {
@@ -156,6 +162,13 @@ export default {
         },
         'pagination.rowsPerPage': function() {
             this.pagination.page = 1
+        },
+        currentVulnerability: {
+            handler() {
+                if (this.saveSuccess && this.hasUnsavedChanges)
+                    this.clearSaveSuccess()
+            },
+            deep: true
         }
     },
 
@@ -403,6 +416,44 @@ export default {
             if (this.vulnerabilityId)
                 return userStore.isAllowed('vulnerabilities:update')
             return userStore.isAllowed('vulnerabilities:create')
+        },
+
+        hasUnsavedChanges: function() {
+            return !!this.currentVulnerabilityOrig &&
+                !this.$_.isEqual(this.currentVulnerability, this.currentVulnerabilityOrig)
+        },
+
+        saveButtonState: function() {
+            if (this.hasUnsavedChanges)
+                return 'dirty'
+            return this.saveSuccess ? 'saved' : 'idle'
+        },
+
+        saveButtonColor: function() {
+            if (this.saveButtonState === 'dirty')
+                return 'orange'
+            if (this.saveButtonState === 'saved')
+                return 'green-1'
+            return this.activePane === 'updates' ? 'orange' : 'primary'
+        },
+
+        saveButtonTextColor: function() {
+            if (this.saveButtonState === 'saved')
+                return 'positive'
+            if (this.saveButtonState === 'dirty')
+                return 'orange'
+            return this.activePane === 'updates' ? 'orange' : 'primary'
+        },
+
+        saveButtonLabel: function() {
+            if (this.saveButtonState === 'saved')
+                return $t('btn.saved')
+            const action = this.activePane === 'updates' ? $t('btn.update') : $t('btn.save')
+            return `${action} (ctrl+s)`
+        },
+
+        currentCreatorName: function() {
+            return this.currentVulnerability.creator?.username || ''
         }
     },
 
@@ -457,7 +508,7 @@ export default {
 
         getVulnerabilities: function() {
             this.loading = true
-            VulnerabilityService.getVulnerabilities()
+            return VulnerabilityService.getVulnerabilities()
             .then((data) => {
                 this.vulnerabilities = data.data.datas
                 this.loading = false
@@ -474,6 +525,7 @@ export default {
         },
 
         createVulnerability: function() {
+            Utils.syncEditors(this.$refs)
             this.cleanErrors();
             var index = this.currentVulnerability.details.findIndex(obj => obj.title !== '');
             if (index < 0)
@@ -482,18 +534,27 @@ export default {
             if (this.errors.title)
                 return;
 
+            const createdLocale = this.currentLanguage
+            const createdTitle = this.currentVulnerability.details[index].title
             VulnerabilityService.createVulnerabilities([this.currentVulnerability])
-            .then(() => {
+            .then(async () => {
                 if (this.draftRecovery)
                     this.draftRecovery.clearDraft()
-                this.getVulnerabilities();
-                this.closePane();
-                Notify.create({
-                    message: $t('msg.vulnerabilityCreatedOk'),
-                    color: 'positive',
-                    textColor:'white',
-                    position: 'top-right'
-                })
+                await this.getVulnerabilities()
+                const created = this.vulnerabilities.find(vulnerability =>
+                    vulnerability.details?.some(detail =>
+                        detail.locale === createdLocale && detail.title === createdTitle
+                    )
+                )
+                if (created) {
+                    this.currentVulnerability = this.$_.cloneDeep(created)
+                    this.vulnerabilityId = created._id
+                    this.currentCategory = created.category ? {name: created.category} : null
+                    this.setCurrentDetails()
+                    this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
+                    this.activePane = 'edit'
+                    this.markSaveSuccess()
+                }
             })
             .catch((err) => {
                 Notify.create({
@@ -506,6 +567,7 @@ export default {
         },
 
         updateVulnerability: function() {
+            Utils.syncEditors(this.$refs)
             this.cleanErrors();
             var index = this.currentVulnerability.details.findIndex(obj => obj.title !== '');
             if (index < 0)
@@ -518,14 +580,10 @@ export default {
             .then(() => {
                 if (this.draftRecovery)
                     this.draftRecovery.clearDraft()
-                this.getVulnerabilities();
-                this.closePane();
-                Notify.create({
-                    message: $t('msg.vulnerabilityUpdatedOk'),
-                    color: 'positive',
-                    textColor:'white',
-                    position: 'top-right'
-                })
+                this.currentVulnerability.status = 0
+                this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
+                this.markSaveSuccess()
+                this.getVulnerabilities()
             })
             .catch((err) => {
                 Notify.create({
@@ -570,6 +628,34 @@ export default {
             .onOk(() => this.deleteVulnerability(row._id))
         },
 
+        _listener: function(e) {
+            if (!(window.navigator.platform.match('Mac') ? e.metaKey : e.ctrlKey) || e.keyCode !== 83)
+                return
+
+            e.preventDefault()
+            if (this.activePane === 'create' && userStore.isAllowed('vulnerabilities:create'))
+                this.createVulnerability()
+            else if (['edit', 'updates'].includes(this.activePane) && userStore.isAllowed('vulnerabilities:update'))
+                this.updateVulnerability()
+        },
+
+        markSaveSuccess: function() {
+            this.clearSaveSuccess()
+            this.saveSuccess = true
+            this.saveSuccessTimer = setTimeout(() => {
+                this.saveSuccess = false
+                this.saveSuccessTimer = null
+            }, SAVE_SUCCESS_TIMEOUT_MS)
+        },
+
+        clearSaveSuccess: function() {
+            if (this.saveSuccessTimer) {
+                clearTimeout(this.saveSuccessTimer)
+                this.saveSuccessTimer = null
+            }
+            this.saveSuccess = false
+        },
+
         getVulnUpdates: function(vulnId) {
             VulnerabilityService.getVulnUpdates(vulnId)
             .then((data) => {
@@ -593,6 +679,7 @@ export default {
             this.currentVulnerability = this.$_.cloneDeep(row)
             this.setCurrentDetails();
             this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
+            this.clearSaveSuccess()
 
             this.vulnerabilityId = row._id;
             if (userStore.isAllowed('vulnerabilities:update'))
@@ -635,6 +722,7 @@ export default {
             this.vulnerabilityId = ''
             this.cleanCurrentVulnerability()
             this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
+            this.clearSaveSuccess()
             this.activePane = 'create'
             await this.draftRecovery.maybePromptRecovery()
         },
@@ -676,6 +764,7 @@ export default {
             this.currentCategory = null
             this.cleanCurrentVulnerability()
             this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
+            this.clearSaveSuccess()
             await this.$nextTick()
             this.draftRecoveryPaused = false
             await this.refreshVulnerabilityDrafts()
@@ -695,6 +784,8 @@ export default {
                 else {
                     this.currentVulnerability.category = null
                 }
+                if (!this.vulnerabilityId)
+                    this.currentCategory = category ? this.$_.cloneDeep(category) : null
                 this.setCurrentDetails()
             })
         },
@@ -1054,8 +1145,14 @@ export default {
 
             await this.selectVulnerability(vuln)
             this.$nextTick(() => {
-                document.querySelector(`[data-testid="vulnerability-item-${vulnerabilityId}"]`)
-                    ?.scrollIntoView({ block: 'nearest' })
+                const visibleIndex = this.pagination.rowsPerPage
+                    ? index % this.pagination.rowsPerPage
+                    : index
+                if (this.$refs.vulnerabilityList?.scrollTo)
+                    this.$refs.vulnerabilityList.scrollTo(visibleIndex, 'center-force')
+                else
+                    document.querySelector(`[data-testid="vulnerability-item-${vulnerabilityId}"]`)
+                        ?.scrollIntoView({ block: 'nearest' })
             })
         },
 

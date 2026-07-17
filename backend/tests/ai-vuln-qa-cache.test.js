@@ -85,6 +85,60 @@ module.exports = function() {
             expect(getCachedVulnerabilityQaReport(changed, locale)).toBeNull();
         });
 
+        it('should keep fingerprints stable when custom-field definitions are populated', () => {
+            const unpopulated = {
+                ...vulnerability,
+                details: [{
+                    ...vulnerability.details[0],
+                    customFields: [{
+                        customField: '507f1f77bcf86cd799439011',
+                        text: '<p>Publicly reachable</p>'
+                    }]
+                }]
+            };
+            const populated = {
+                ...unpopulated,
+                details: [{
+                    ...unpopulated.details[0],
+                    customFields: [{
+                        customField: {
+                            _id: '507f1f77bcf86cd799439011',
+                            label: 'Aggravating Factors',
+                            fieldType: 'text'
+                        },
+                        text: '<p>Publicly reachable</p>'
+                    }]
+                }]
+            };
+
+            const fingerprint = computeVulnerabilityQaFingerprint(unpopulated, locale);
+            expect(computeVulnerabilityQaFingerprint(populated, locale)).toBe(fingerprint);
+            expect(computeAllVulnerabilitiesQaFingerprint([populated], locale))
+                .toBe(computeAllVulnerabilitiesQaFingerprint([unpopulated], locale));
+
+            const report = assembleAllVulnerabilitiesQaReport({
+                vulnerabilities: [{
+                    ...populated,
+                    qaReports: [buildStoredReport(fingerprint)]
+                }],
+                locale: locale,
+                catalogDoc: null
+            });
+            expect(report.templates[0].outdated).toBe(false);
+
+            const changed = {
+                ...populated,
+                details: [{
+                    ...populated.details[0],
+                    customFields: [{
+                        ...populated.details[0].customFields[0],
+                        text: '<p>Publicly reachable without authentication</p>'
+                    }]
+                }]
+            };
+            expect(computeVulnerabilityQaFingerprint(changed, locale)).not.toBe(fingerprint);
+        });
+
         it('should gate stored-report reuse on scope timestamps', () => {
             const fingerprint = computeVulnerabilityQaFingerprint(vulnerability, locale);
             const programmaticOnly = buildVulnerabilityQaReportCache(fingerprint, {

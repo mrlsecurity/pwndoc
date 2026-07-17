@@ -224,6 +224,12 @@ describe('qa-display', () => {
     })).toBe('Missing HSTS · references')
   })
 
+  it('formats canonical vulnerability custom-field locations with their label', () => {
+    expect(formatQaLocationLabel('vulnerability:Missing HSTS/custom-field:Aggravating Factors', {
+      defaultEntityTitle: 'Missing HSTS'
+    })).toBe('Missing HSTS · Aggravating Factors')
+  })
+
   it('formats AI field path locations using the current entity title', () => {
     expect(formatQaLocationLabel('field path: finding.cvssv3', {
       defaultEntityTitle: 'Missing HSTS'

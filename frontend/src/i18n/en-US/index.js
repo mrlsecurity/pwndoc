@@ -1050,7 +1050,8 @@ export default {
         notFoundInList: 'This vulnerability is no longer in the database — run QA again to refresh the report.',
         notVisibleWithFilters: 'This vulnerability is hidden by the current filters.',
         location: {
-            database: 'Vulnerability database'
+            database: 'Vulnerability database',
+            global: 'Global'
         }
     },
     aiChat: {

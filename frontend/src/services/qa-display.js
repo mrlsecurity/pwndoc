@@ -34,6 +34,14 @@ const splitEntityLocation = (value, prefix) => {
   if (idMatch)
     rest = idMatch[1];
 
+  let customFieldLabel = '';
+  const customFieldMarker = '/custom-field:';
+  const customFieldIndex = rest.lastIndexOf(customFieldMarker);
+  if (customFieldIndex !== -1) {
+    customFieldLabel = rest.slice(customFieldIndex + customFieldMarker.length).trim();
+    rest = rest.slice(0, customFieldIndex);
+  }
+
   Object.keys(fieldLabels).forEach((fieldKey) => {
     const suffix = `/${fieldKey}`;
     if (rest.endsWith(suffix)) {
@@ -42,14 +50,16 @@ const splitEntityLocation = (value, prefix) => {
     }
   });
 
-  return { title: rest, field };
+  return { title: rest, field, customFieldLabel };
 };
 
 export const formatQaLocationLabel = (location = '', options = {}) => {
   const {
     defaultEntityTitle = '',
     entityPrefixes = ['finding:', 'vulnerability:'],
-    databaseFallbackLabel = ''
+    databaseFallbackLabel = '',
+    showEntityTitle = true,
+    entityFallbackLabel = ''
   } = options;
 
   const value = String(location || '').trim();
@@ -74,12 +84,18 @@ export const formatQaLocationLabel = (location = '', options = {}) => {
     if (!parsed)
       continue;
 
-    let { title, field } = parsed;
+    let { title, field, customFieldLabel } = parsed;
     if (/^IDX-\d+$/i.test(title))
       title = $t('auditQa.location.untitledFinding');
 
-    if (field)
-      return `${title} · ${fieldLabels[field] || field}`;
+    if (customFieldLabel)
+      return showEntityTitle ? `${title} · ${customFieldLabel}` : customFieldLabel;
+    if (field) {
+      const fieldLabel = fieldLabels[field] || field;
+      return showEntityTitle ? `${title} · ${fieldLabel}` : fieldLabel;
+    }
+    if (entityFallbackLabel)
+      return entityFallbackLabel;
     return title;
   }
 
@@ -91,7 +107,7 @@ export const formatQaLocationLabel = (location = '', options = {}) => {
       const field = findingFieldMatch[1];
       const title = String(defaultEntityTitle || '').trim();
       const fieldLabel = fieldLabels[field] || field;
-      if (title)
+      if (title && showEntityTitle)
         return `${title} · ${fieldLabel}`;
       return fieldLabel;
     }
@@ -111,7 +127,7 @@ export const formatQaLocationLabel = (location = '', options = {}) => {
     const field = fieldOnlyMatch[1];
     const title = String(defaultEntityTitle || '').trim();
     const fieldLabel = fieldLabels[field] || field;
-    if (title)
+    if (title && showEntityTitle)
       return `${title} · ${fieldLabel}`;
     return fieldLabel;
   }

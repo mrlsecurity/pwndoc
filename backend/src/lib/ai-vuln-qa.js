@@ -49,6 +49,58 @@ const formatVulnerabilityLocation = (title = '', field = '') => {
     return `vulnerability:${label}`;
 };
 
+const formatVulnerabilityCustomFieldLocation = (title = '', customFieldLabel = '') => {
+    const label = String(customFieldLabel || '').trim();
+    if (!label)
+        return formatVulnerabilityLocation(title, 'customFields');
+    return `${formatVulnerabilityLocation(title)}/custom-field:${label}`;
+};
+
+// Providers commonly return the customFields container as the location even when their
+// message correctly names the field. Resolve that generic path against the snapshot and
+// store a canonical, displayable custom-field location.
+const normalizeVulnerabilityAiIssueLocation = (issue = {}, detail = {}, snapshot = {}) => {
+    const location = normalizeAiIssueLocation(
+        String(issue.location || '').replace(/^finding:/i, 'vulnerability:'),
+        {
+            entityPrefix: 'vulnerability',
+            defaultTitle: detail.title
+        }
+    );
+    const labels = (snapshot?.finding?.customFields || [])
+        .map((field) => String(field?.label || '').trim())
+        .filter(Boolean)
+        .sort((left, right) => right.length - left.length);
+    if (!labels.length)
+        return location;
+
+    const locationLower = location.toLowerCase();
+    const markerMatch = location.match(/\/custom-field:(.+)$/i);
+    const genericCustomFieldPath = /\/customfields(?:$|[\s/:.])/i.test(location);
+    const genericSuffixMatch = location.match(/\/customfields(?:[\s/:.]+(.+))?$/i);
+    const issueText = `${issue.title || ''} ${issue.message || ''}`.toLowerCase();
+    const matchesLabel = (candidate = '') => labels.find(
+        (label) => label.toLowerCase() === String(candidate || '').trim().toLowerCase()
+    );
+
+    let customFieldLabel = markerMatch ? matchesLabel(markerMatch[1]) : '';
+    if (!customFieldLabel) {
+        customFieldLabel = labels.find((label) => (
+            locationLower.endsWith(`/${label.toLowerCase()}`)
+        ));
+    }
+    if (!customFieldLabel && genericSuffixMatch?.[1])
+        customFieldLabel = matchesLabel(genericSuffixMatch[1]);
+    if (!customFieldLabel && genericCustomFieldPath)
+        customFieldLabel = labels.find((label) => issueText.includes(label.toLowerCase()));
+    if (!customFieldLabel && genericCustomFieldPath && labels.length === 1)
+        customFieldLabel = labels[0];
+
+    if (!customFieldLabel)
+        return location;
+    return formatVulnerabilityCustomFieldLocation(detail.title, customFieldLabel);
+};
+
 const getVulnerabilityDetail = (vulnerability = {}, locale = '') => {
     return (vulnerability.details || []).find((detail) => {
         return detail?.locale === locale && String(detail?.title || '').trim();
@@ -420,13 +472,7 @@ const runSingleVulnerabilityQa = async ({
     const aiIssues = filterAiIssuesByEnabledChecks(
         (aiResult?.issues || []).map((issue) => normalizeIssue({
             ...issue,
-            location: normalizeAiIssueLocation(
-                String(issue.location || '').replace(/^finding:/i, 'vulnerability:'),
-                {
-                    entityPrefix: 'vulnerability',
-                    defaultTitle: detail.title
-                }
-            )
+            location: normalizeVulnerabilityAiIssueLocation(issue, detail, snapshot)
         }, 'ai')),
         qaChecks
     );
@@ -538,6 +584,8 @@ const buildQaTargets = (vulnerabilities = [], locale = '') => {
 
 module.exports = {
     formatVulnerabilityLocation,
+    formatVulnerabilityCustomFieldLocation,
+    normalizeVulnerabilityAiIssueLocation,
     getVulnerabilityDetail,
     buildVulnerabilitySnapshot,
     buildDuplicatePairKey,

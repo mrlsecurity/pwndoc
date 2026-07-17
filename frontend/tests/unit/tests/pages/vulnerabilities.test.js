@@ -58,6 +58,7 @@ vi.mock('@/services/utils', () => ({
   default: {
     filterCustomFields: vi.fn().mockReturnValue([]),
     htmlEncode: vi.fn(v => v),
+    syncEditors: vi.fn(),
     strongPassword: vi.fn()
   }
 }))
@@ -198,6 +199,15 @@ const mockVulnerabilities = [
   }
 ]
 
+const virtualScrollStub = {
+  name: 'QVirtualScroll',
+  props: {
+    items: Array,
+    virtualScrollItemSize: Number
+  },
+  template: '<div><slot v-for="(item, index) in items" :key="item._id" :item="item" :index="index" /></div>'
+}
+
 function setupDefaultMocks() {
   mockApi.get.mockResolvedValue({ data: { datas: { fields: [] } } })
   DataService.getLanguages.mockResolvedValue({ data: { datas: mockLanguages } })
@@ -273,6 +283,7 @@ describe('Vulnerabilities Page', () => {
           'q-radio': true,
           'q-pagination': true,
           'q-scroll-area': true,
+          'q-virtual-scroll': virtualScrollStub,
           'q-tabs': true,
           'q-tab': true,
           'q-tab-panels': true,
@@ -300,7 +311,8 @@ describe('Vulnerabilities Page', () => {
             }
           },
           $_: {
-            cloneDeep: (obj) => JSON.parse(JSON.stringify(obj))
+            cloneDeep: (obj) => JSON.parse(JSON.stringify(obj)),
+            isEqual: (left, right) => JSON.stringify(left) === JSON.stringify(right)
           },
           $socket: {
             emit: () => {},
@@ -511,6 +523,48 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.pagination.rowsPerPage = 0
       expect(wrapper.vm.paginatedVulnerabilities.length).toBe(3)
       expect(wrapper.vm.pagesNumber).toBe(1)
+    })
+
+    it('uses virtual scrolling when results per page is All', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'en'
+      wrapper.vm.pagination.rowsPerPage = 0
+      await wrapper.vm.$nextTick()
+
+      const virtualList = wrapper.findComponent({ name: 'QVirtualScroll' })
+      expect(virtualList.exists()).toBe(true)
+      expect(virtualList.props('items')).toEqual(wrapper.vm.sortedVulnerabilities)
+      expect(virtualList.props('virtualScrollItemSize')).toBe(64)
+    })
+  })
+
+  describe('QA vulnerability navigation', () => {
+    it('scrolls the virtual list to a vulnerability when all results are selected', async () => {
+      const scrollTo = vi.fn()
+      const wrapper = createWrapper({
+        stubs: {
+          'q-virtual-scroll': {
+            name: 'QVirtualScroll',
+            props: { items: Array },
+            methods: { scrollTo },
+            template: '<div><slot v-for="(item, index) in items" :key="item._id" :item="item" :index="index" /></div>'
+          }
+        }
+      })
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'en'
+      wrapper.vm.pagination.rowsPerPage = 0
+      await wrapper.vm.$nextTick()
+      vi.spyOn(wrapper.vm, 'selectVulnerability').mockResolvedValue()
+
+      const expectedIndex = wrapper.vm.sortedVulnerabilities.findIndex(({ _id }) => _id === 'vuln2')
+      await wrapper.vm.navigateToVulnerabilityFromQa('vuln2')
+      await wrapper.vm.$nextTick()
+
+      expect(scrollTo).toHaveBeenCalledWith(expectedIndex, 'center-force')
     })
   })
 
@@ -773,8 +827,21 @@ describe('Vulnerabilities Page', () => {
       expect(VulnerabilityService.createVulnerabilities).toHaveBeenCalledWith([wrapper.vm.currentVulnerability])
     })
 
-    it('should show notification on create success', async () => {
+    it('should show the inline saved state without a success notification on create', async () => {
       VulnerabilityService.createVulnerabilities.mockResolvedValue({})
+      VulnerabilityService.getVulnerabilities.mockResolvedValue({
+        data: {
+          datas: [
+            ...mockVulnerabilities,
+            {
+              _id: 'new-vuln',
+              category: null,
+              status: 1,
+              details: [{ locale: 'en', title: 'New Vuln', customFields: [] }]
+            }
+          ]
+        }
+      })
       const wrapper = createWrapper()
       await flushPromises()
 
@@ -786,10 +853,8 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.createVulnerability()
       await flushPromises()
 
-      expect(Notify.create).toHaveBeenCalledWith(expect.objectContaining({
-        message: 'msg.vulnerabilityCreatedOk',
-        color: 'positive'
-      }))
+      expect(wrapper.vm.saveButtonState).toBe('saved')
+      expect(Notify.create).not.toHaveBeenCalled()
     })
 
     it('should show error notification on create failure', async () => {
@@ -844,7 +909,7 @@ describe('Vulnerabilities Page', () => {
       )
     })
 
-    it('should show notification on update success', async () => {
+    it('should show the inline saved state without a success notification on update', async () => {
       VulnerabilityService.updateVulnerability.mockResolvedValue({})
       const wrapper = createWrapper()
       await flushPromises()
@@ -858,10 +923,8 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.updateVulnerability()
       await flushPromises()
 
-      expect(Notify.create).toHaveBeenCalledWith(expect.objectContaining({
-        message: 'msg.vulnerabilityUpdatedOk',
-        color: 'positive'
-      }))
+      expect(wrapper.vm.saveButtonState).toBe('saved')
+      expect(Notify.create).not.toHaveBeenCalled()
     })
 
     it('should show error notification on update failure', async () => {
@@ -938,6 +1001,30 @@ describe('Vulnerabilities Page', () => {
   })
 
   describe('clone', () => {
+    it('remounts the full edit pane when navigating to another vulnerability', async () => {
+      let cvssMounts = 0
+      const wrapper = createWrapper({
+        stubs: {
+          'q-card-section': { template: '<div><slot /></div>' },
+          'cvss3-calculator': {
+            props: ['modelValue'],
+            mounted() { cvssMounts += 1 },
+            template: '<div />'
+          }
+        }
+      })
+      await flushPromises()
+
+      wrapper.vm.vulnerabilityId = 'vuln1'
+      wrapper.vm.activePane = 'edit'
+      await wrapper.vm.$nextTick()
+      expect(cvssMounts).toBe(1)
+
+      wrapper.vm.vulnerabilityId = 'vuln2'
+      await wrapper.vm.$nextTick()
+      expect(cvssMounts).toBe(2)
+    })
+
     it('should deep clone the row into currentVulnerability', async () => {
       const wrapper = createWrapper()
       await flushPromises()

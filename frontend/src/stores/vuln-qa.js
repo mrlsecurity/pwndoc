@@ -83,6 +83,7 @@ export const useVulnQaStore = defineStore('vulnQa', {
     issues() { return this.reportViewModel.issues },
     counts() { return this.reportViewModel.counts || emptyCounts() },
     hasReport() { return this.reportViewModel.hasReport },
+    outdated() { return this.reportViewModel.outdated },
     programmaticRanAt() { return this.reportViewModel.programmaticRanAt },
     aiRanAt() { return this.reportViewModel.aiRanAt },
 

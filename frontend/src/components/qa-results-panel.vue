@@ -123,7 +123,7 @@
           @click="$emit('run', 'all')"
           />
         </div>
-        <div v-else-if="hasRunActions" class="q-mb-md">
+        <div v-else-if="showRerunAction" class="q-mb-md">
           <q-btn-dropdown
           v-if="otherRunScopeChoices.length"
           data-testid="qa-run-again"
@@ -173,9 +173,9 @@
           class="bg-orange-1 text-orange-10 q-mb-md qa-outdated-banner"
           >
             {{ $t('auditQa.outdatedBanner') }}
-            <template v-slot:action>
+            <template v-if="showOutdatedRerun || showOutdatedDismiss" v-slot:action>
               <q-btn
-              v-if="hasRunActions"
+              v-if="hasRunActions && showOutdatedRerun"
               data-testid="qa-outdated-rerun"
               flat
               dense
@@ -184,7 +184,15 @@
               :disable="loading || running"
               @click="$emit('run', defaultRunScope)"
               />
-              <q-btn data-testid="qa-outdated-dismiss" flat dense round icon="close" @click="dismissOutdated" />
+              <q-btn
+              v-if="showOutdatedDismiss"
+              data-testid="qa-outdated-dismiss"
+              flat
+              dense
+              round
+              icon="close"
+              @click="dismissOutdated"
+              />
             </template>
           </q-banner>
 
@@ -495,6 +503,22 @@ export default {
     runAgainHint: {
       type: String,
       default: ''
+    },
+    // Vulnerability QA only offers a full rerun when cached results are stale. Audit
+    // QA keeps its existing always-available rerun behavior by using the default.
+    rerunOnlyWhenOutdated: {
+      type: Boolean,
+      default: false
+    },
+    // Some consumers use the main rerun control exclusively and keep the outdated
+    // banner informational.
+    showOutdatedRerun: {
+      type: Boolean,
+      default: true
+    },
+    showOutdatedDismiss: {
+      type: Boolean,
+      default: true
     }
   },
 
@@ -633,6 +657,10 @@ export default {
       return this.programmaticActionVisible ||
         this.aiActionVisible ||
         this.allActionVisible
+    },
+
+    showRerunAction() {
+      return this.hasRunActions && (!this.rerunOnlyWhenOutdated || this.outdated)
     },
 
     // "Run again" repeats the last run's scope when it is still available, so a

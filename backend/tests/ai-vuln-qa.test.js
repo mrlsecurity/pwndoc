@@ -3,9 +3,11 @@ const {
     runVulnerabilityStructuralChecks,
     getVulnerabilityDetail,
     formatVulnerabilityLocation,
+    normalizeVulnerabilityAiIssueLocation,
     buildVulnerabilitySnapshot,
     buildQaTargets
 } = require('../src/lib/ai-vuln-qa');
+const mongoose = require('mongoose');
 
 module.exports = function() {
     describe('AI vulnerability QA', () => {
@@ -53,6 +55,25 @@ module.exports = function() {
             expect(formatVulnerabilityLocation('SQL Injection')).toBe('vulnerability:SQL Injection');
             expect(formatVulnerabilityLocation('SQL Injection', 'description'))
                 .toBe('vulnerability:SQL Injection/description');
+        });
+
+        it('should resolve a generic custom-field issue location to the field label', () => {
+            const location = normalizeVulnerabilityAiIssueLocation({
+                title: 'Placeholder content in custom field',
+                message: "The 'Aggravating Factors' custom field contains placeholder content.",
+                location: 'vulnerability:Missing HSTS/customFields'
+            }, {
+                title: 'Missing HSTS'
+            }, {
+                finding: {
+                    customFields: [
+                        { label: 'Exploitation Info', fieldType: 'text', content: 'Details' },
+                        { label: 'Aggravating Factors', fieldType: 'text', content: 'N/A' }
+                    ]
+                }
+            });
+
+            expect(location).toBe('vulnerability:Missing HSTS/custom-field:Aggravating Factors');
         });
 
         it('should resolve vulnerability detail for locale', () => {
@@ -139,6 +160,53 @@ module.exports = function() {
             targets.forEach((target) => {
                 expect(target.detail.locale).toBe('en');
             });
+        });
+
+        it('should populate custom-field labels for single and catalog QA snapshots', async () => {
+            const Vulnerability = mongoose.model('Vulnerability');
+            const CustomField = mongoose.model('CustomField');
+            const suffix = `${Date.now()}-${Math.random()}`;
+            let customField;
+            let vulnerability;
+
+            try {
+                customField = await CustomField.create({
+                    fieldType: 'text',
+                    label: `Aggravating Factors ${suffix}`,
+                    display: 'vulnerability'
+                });
+                vulnerability = await new Vulnerability({
+                    category: 'Web',
+                    details: [{
+                        locale: 'en',
+                        title: `QA custom-field population ${suffix}`,
+                        customFields: [{
+                            customField: customField._id,
+                            text: '<p>Requires additional review.</p>'
+                        }]
+                    }]
+                }).save();
+
+                const single = await Vulnerability.getByIdForQa(vulnerability._id);
+                const catalog = await Vulnerability.getAllForQa();
+                const catalogEntry = catalog.find((entry) => String(entry._id) === String(vulnerability._id));
+                const singleSnapshot = buildVulnerabilitySnapshot(single, single.details[0]);
+                const catalogSnapshot = buildVulnerabilitySnapshot(catalogEntry, catalogEntry.details[0]);
+
+                expect(singleSnapshot.finding.customFields[0]).toMatchObject({
+                    label: customField.label,
+                    fieldType: 'text'
+                });
+                expect(catalogSnapshot.finding.customFields[0]).toMatchObject({
+                    label: customField.label,
+                    fieldType: 'text'
+                });
+            } finally {
+                if (vulnerability)
+                    await Vulnerability.deleteOne({ _id: vulnerability._id });
+                if (customField)
+                    await CustomField.deleteOne({ _id: customField._id });
+            }
         });
     });
 };

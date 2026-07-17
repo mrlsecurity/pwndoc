@@ -43,7 +43,7 @@ const createMouseEventsListener = (storage) => (e) => {
 }
 
 const addEventListenersToDecorations = (storage) => {
-  if (!storage.editorView || !storage.editorView.dom) return
+  if (storage.destroyed || !storage.editorView || !storage.editorView.dom) return
 
   // Query only within this editor's DOM element
   const decorations = storage.editorView.dom.querySelectorAll('span.lt')
@@ -61,6 +61,16 @@ const addEventListenersToDecorations = (storage) => {
     }
     el.addEventListener('mousedown', el._ltClickHandler)
   })
+}
+
+const scheduleDecorationListenerRefresh = (storage) => {
+  if (storage.destroyed) return
+
+  const timer = setTimeout(() => {
+    storage.pendingTimeouts.delete(timer)
+    addEventListenersToDecorations(storage)
+  }, 100)
+  storage.pendingTimeouts.add(timer)
 }
 
 const gimmeDecoration = (from, to, match) =>
@@ -92,8 +102,11 @@ const _cb = {
   cooldown: 30000,   // ms to wait before retrying
 }
 
-const fetchMatchesForChunk = async (apiUrl, text) => {
-  if (Date.now() < _cb.openUntil) return []
+const fetchMatchesForChunk = async (storage, text) => {
+  if (storage.destroyed || Date.now() < _cb.openUntil) return []
+
+  const controller = new AbortController()
+  storage.abortControllers.add(controller)
 
   try {
     const postOptions = {
@@ -113,7 +126,7 @@ const fetchMatchesForChunk = async (apiUrl, text) => {
       })(),
     }
 
-    const res = await fetch(apiUrl, postOptions)
+    const res = await fetch(storage.apiUrl, { ...postOptions, signal: controller.signal })
 
     // 429 = LT is up but rate-limited — don't count as a failure
     if (res.status === 429) return []
@@ -125,6 +138,10 @@ const fetchMatchesForChunk = async (apiUrl, text) => {
     _cb.failures = 0
     return ltRes.datas?.matches || []
   } catch (err) {
+    // Editor teardown deliberately aborts its checks. This is cleanup, not a service
+    // failure, so it must not trip the shared circuit breaker.
+    if (err?.name === 'AbortError') return []
+
     _cb.failures++
     if (_cb.failures >= _cb.threshold) {
       _cb.openUntil = Date.now() + _cb.cooldown
@@ -134,11 +151,17 @@ const fetchMatchesForChunk = async (apiUrl, text) => {
       console.warn('Spellcheck request failed:', err.message || err)
     }
     return []
+  } finally {
+    storage.abortControllers.delete(controller)
   }
 }
 
 const getMatchAndSetDecorations = async (storage, doc, text, originalFrom, offsetMap = null) => {
-  const matches = await fetchMatchesForChunk(storage.apiUrl, text)
+  const matches = await fetchMatchesForChunk(storage, text)
+
+  // The request can finish after its editor was replaced by another vulnerability.
+  // Never retain or dispatch through the destroyed ProseMirror view.
+  if (storage.destroyed || !storage.editorView || !storage.decorationSet) return
 
   // If offsetMap is empty or not provided with no originalFrom, we can't place decorations
   const hasValidOffsetMap = offsetMap && offsetMap.length > 0
@@ -177,19 +200,19 @@ const getMatchAndSetDecorations = async (storage, doc, text, originalFrom, offse
   if (storage.editorView)
     storage.editorView.dispatch(storage.editorView.state.tr.setMeta(LanguageToolHelpingWords.LanguageToolTransactionName, true))
 
-  setTimeout(() => addEventListenersToDecorations(storage), 100)
+  scheduleDecorationListenerRefresh(storage)
 }
 
 const createDebouncedGetMatchAndSetDecorations = (storage) => {
   return debounce((text, originalFrom) => {
-    if (!storage.editorView) return
+    if (storage.destroyed || !storage.editorView) return
     const doc = storage.editorView.state.doc
     getMatchAndSetDecorations(storage, doc, text, originalFrom)
   }, 1500)
 }
 
 const proofreadAndDecorateWholeDoc = async (storage, doc) => {
-  if (!doc || !storage.editorView) return
+  if (storage.destroyed || !doc || !storage.editorView) return
 
   let textNodesWithPosition = []
   let index = 0
@@ -264,12 +287,14 @@ const proofreadAndDecorateWholeDoc = async (storage, doc) => {
 
   Promise.all(requests)
     .then(() => {
-      if (storage.editorView) storage.editorView.dispatch(storage.editorView.state.tr.setMeta(LanguageToolHelpingWords.LoadingTransactionName, false))
+      if (!storage.destroyed && storage.editorView)
+        storage.editorView.dispatch(storage.editorView.state.tr.setMeta(LanguageToolHelpingWords.LoadingTransactionName, false))
       storage.proofReadInitially = true
     })
     .catch((err) => {
       console.warn('Spellcheck proofread failed:', err.message || err)
-      if (storage.editorView) storage.editorView.dispatch(storage.editorView.state.tr.setMeta(LanguageToolHelpingWords.LoadingTransactionName, false))
+      if (!storage.destroyed && storage.editorView)
+        storage.editorView.dispatch(storage.editorView.state.tr.setMeta(LanguageToolHelpingWords.LoadingTransactionName, false))
     })
 }
 
@@ -303,6 +328,9 @@ export const LanguageTool = Extension.create({
       debouncedGetMatchAndSetDecorations: null,
       debouncedProofreadAndDecorate: null,
       _pendingClickActivation: false,
+      destroyed: false,
+      abortControllers: new Set(),
+      pendingTimeouts: new Set(),
     }
   },
 
@@ -473,15 +501,22 @@ export const LanguageTool = Extension.create({
               }
             }
 
-            this.storage.decorationSet = this.storage.decorationSet.map(tr.mapping, tr.doc)
+            // ProseMirror can still apply a final focus/content transaction while
+            // the Vue editor is being replaced. Keep plugin state valid throughout
+            // teardown so that transaction never maps a null decoration set.
+            const decorationSet = this.storage.decorationSet || DecorationSet.empty
+            this.storage.decorationSet = decorationSet.map(tr.mapping, tr.doc)
             if (this.storage.editorView) {
-              setTimeout(() => addEventListenersToDecorations(this.storage), 100)
+              scheduleDecorationListenerRefresh(this.storage)
             }
             return this.storage.decorationSet
           },
         },
 
         view: (view) => {
+          this.storage.destroyed = false
+          this.storage.editorView = view
+
           // Handler for when another editor ignores a word
           const handleWordIgnored = (event) => {
             const ignoredWord = event.detail.word
@@ -517,7 +552,7 @@ export const LanguageTool = Extension.create({
             }
           }
 
-          setTimeout(() => addEventListenersToDecorations(this.storage), 100)
+          scheduleDecorationListenerRefresh(this.storage)
 
           return {
             update: (view) => {
@@ -525,6 +560,19 @@ export const LanguageTool = Extension.create({
             },
             destroy: () => {
               document.removeEventListener(LanguageToolHelpingWords.WordIgnoredEventName, handleWordIgnored)
+              this.storage.destroyed = true
+              this.storage.debouncedGetMatchAndSetDecorations?.cancel()
+              this.storage.debouncedProofreadAndDecorate?.cancel()
+              this.storage.abortControllers.forEach((controller) => controller.abort())
+              this.storage.abortControllers.clear()
+              this.storage.pendingTimeouts.forEach((timer) => clearTimeout(timer))
+              this.storage.pendingTimeouts.clear()
+              this.storage.editorView = null
+              this.storage.textNodesWithPosition = []
+              // A final ProseMirror transaction may run after the view cleanup.
+              // DecorationSet.empty remains safe to map without retaining document
+              // decorations or DOM references.
+              this.storage.decorationSet = DecorationSet.empty
             },
           }
         },

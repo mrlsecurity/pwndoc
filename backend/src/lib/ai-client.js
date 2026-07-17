@@ -616,7 +616,7 @@ const buildVulnerabilityTemplateQaSystemPrompt = (scopeInstruction = '') => {
         '"category" (completeness, redaction, customer, instructions, references, imageCaptions, duplicates, or other),',
         '"title" (short issue title),',
         '"message" (actionable explanation),',
-        '"location" (vulnerability:<template title> or vulnerability:<template title>/<field>).',
+        '"location" (vulnerability:<template title> or vulnerability:<template title>/<field>). For a custom-field issue, use vulnerability:<template title>/custom-field:<exact custom field label>.',
         'Only flag real problems supported by the snapshot. Do not invent missing data.'
     ].filter(Boolean).join(' ');
 };

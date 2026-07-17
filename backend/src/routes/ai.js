@@ -362,7 +362,7 @@ const handleVulnerabilityQa = async function(req, res) {
 
         if (req.body.loadOnly) {
             if (vulnerabilityId) {
-                const vulnerabilityDoc = await Vulnerability.findById(vulnerabilityId);
+                const vulnerabilityDoc = await Vulnerability.getByIdForQa(vulnerabilityId);
                 if (!vulnerabilityDoc) {
                     Response.NotFound(res, 'Vulnerability not found');
                     return;
@@ -414,7 +414,7 @@ const handleVulnerabilityQa = async function(req, res) {
                 return;
             }
 
-            const vulnerabilityDoc = await Vulnerability.findById(vulnerabilityId);
+            const vulnerabilityDoc = await Vulnerability.getByIdForQa(vulnerabilityId);
             if (!vulnerabilityDoc) {
                 Response.NotFound(res, 'Vulnerability not found');
                 return;

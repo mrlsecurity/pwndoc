@@ -78,6 +78,18 @@ describe('QaResultsPanel outdated banner', () => {
     expect(wrapper.emitted('run')).toEqual([['programmatic']])
   })
 
+  it('can render the outdated banner as an actionless hint', () => {
+    const wrapper = createWrapper({
+      outdated: true,
+      showOutdatedRerun: false,
+      showOutdatedDismiss: false
+    })
+
+    expect(wrapper.text()).toContain('These results are out of date')
+    expect(wrapper.find('[data-testid="qa-outdated-rerun"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="qa-outdated-dismiss"]').exists()).toBe(false)
+  })
+
   it('re-shows the banner after a fresh run completes while still outdated', async () => {
     const wrapper = createWrapper({ outdated: true })
 
@@ -363,6 +375,15 @@ describe('QaResultsPanel run actions', () => {
     const wrapper = createWrapper({ hasReportData: false })
 
     expect(wrapper.find('[data-testid="qa-run-again"]').exists()).toBe(false)
+  })
+
+  it('can restrict the main rerun control to outdated reports', async () => {
+    const wrapper = createWrapper({ rerunOnlyWhenOutdated: true, outdated: false })
+
+    expect(wrapper.find('[data-testid="qa-run-again"]').exists()).toBe(false)
+
+    await wrapper.setProps({ outdated: true })
+    expect(wrapper.find('[data-testid="qa-run-again"]').exists()).toBe(true)
   })
 
   it('repeats the last run scope from the main button and offers the other scopes in the menu', async () => {
