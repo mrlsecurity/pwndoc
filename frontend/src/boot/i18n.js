@@ -18,6 +18,14 @@ let language = localStorage.getItem("system_language");
 
 export default defineBoot(({ app }) => {
   app.use(i18n)
+
+  // Quasar's dev entry hardcodes app.config.performance = true, which makes Vue
+  // scan the whole User-Timing buffer on every render. vue-i18n emits 3 uncleared
+  // performance.measure entries per $t() call and never clears them, so the buffer
+  // grows unbounded over a session and renders get progressively slower. Disable
+  // it in dev; production builds never set the flag in the first place.
+  if (process.env.DEV)
+    app.config.performance = false
 })
 
 export const $t = (...args) => i18n.global.t(...args)
