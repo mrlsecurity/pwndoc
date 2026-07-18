@@ -65,6 +65,21 @@ module.exports = function() {
             ]);
         });
 
+        it('should keep balanced parentheses but strip trailing prose punctuation', () => {
+            expect(extractUrlsFromReferences([
+                'OWASP https://www.owasp.org/index.php/Testing_(OTG-AUTHZ-004)'
+            ])).toEqual(['https://www.owasp.org/index.php/Testing_(OTG-AUTHZ-004)']);
+
+            expect(extractUrlsFromReferences([
+                'wiki https://en.wikipedia.org/wiki/Foo_(disambiguation) here'
+            ])).toEqual(['https://en.wikipedia.org/wiki/Foo_(disambiguation)']);
+
+            // An unbalanced trailing ')' from surrounding prose must be dropped.
+            expect(extractUrlsFromReferences([
+                'see (https://example.com/page).'
+            ])).toEqual(['https://example.com/page']);
+        });
+
         it('should block private, local and CGNAT URLs', () => {
             expect(isBlockedReferenceUrl('http://localhost/test')).toBe(true);
             expect(isBlockedReferenceUrl('http://127.0.0.1/test')).toBe(true);
@@ -141,6 +156,28 @@ module.exports = function() {
 
             const result = await validateReferenceUrl('https://example.com/ok');
             expect(result.valid).toBe(true);
+        });
+
+        it('should retry with GET when HEAD is rejected but the resource is reachable', async () => {
+            // Many servers/CDNs bot-block or don't implement HEAD, answering 404/403 while a
+            // browser's GET succeeds. Return a bad status only for HEAD, 200 for GET.
+            const methods = [];
+            jest.spyOn(https, 'request').mockImplementation((url, options, callback) => {
+                methods.push(options.method);
+                const status = options.method === 'HEAD' ? 404 : 200;
+                const request = {
+                    setTimeout: jest.fn(),
+                    on: jest.fn(() => request),
+                    destroy: jest.fn(),
+                    end: jest.fn(() => setImmediate(() =>
+                        callback({ statusCode: status, headers: {}, resume: jest.fn() })))
+                };
+                return request;
+            });
+
+            const result = await validateReferenceUrl('https://example.com/head-hostile');
+            expect(result.valid).toBe(true);
+            expect(methods).toEqual(['HEAD', 'GET']);
         });
 
         it('should block redirects to private URLs', async () => {

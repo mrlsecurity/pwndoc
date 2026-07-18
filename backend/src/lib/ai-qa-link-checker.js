@@ -5,12 +5,43 @@ const https = require('https');
 const dns = require('dns').promises;
 const { formatFindingLocation } = require('./ai-qa-location');
 
-const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/gi;
+// Parentheses are allowed in the match so URLs that legitimately contain them
+// (Wikipedia / OWASP wiki pages like `..._(OTG-AUTHZ-004)`) are captured whole;
+// unbalanced trailing parens from surrounding prose are stripped by trimUrlTrailing.
+const URL_PATTERN = /https?:\/\/[^\s<>"'\]]+/gi;
 const DEFAULT_TIMEOUT_MS = 10000;
 const DEFAULT_CONCURRENCY = 5;
 const MAX_REDIRECTS = 5;
 
-const trimUrlTrailing = (url) => String(url || '').replace(/[.,;:!?)'\]]+$/g, '');
+// Statuses that a HEAD request often returns even though the resource is reachable:
+// many servers, CDNs and WAFs don't implement HEAD or bot-block it, answering with a
+// client error while a normal GET (what a browser issues) succeeds. When HEAD yields one
+// of these we retry with GET before concluding the link is broken.
+const HEAD_RETRY_WITH_GET_STATUSES = new Set([400, 403, 404, 405, 501]);
+
+// Strip trailing characters that are almost always sentence punctuation rather than part
+// of the URL. A trailing ')' is only removed when unbalanced (more ')' than '(' in the URL),
+// so `https://site/Foo_(bar)` keeps its ')' while `(see https://site/x)` drops the trailing one.
+const trimUrlTrailing = (rawUrl) => {
+    let url = String(rawUrl || '');
+
+    while (url.length) {
+        const last = url[url.length - 1];
+
+        if (last === ')') {
+            const opens = (url.match(/\(/g) || []).length;
+            const closes = (url.match(/\)/g) || []).length;
+            if (closes <= opens)
+                break;
+        } else if (!/[.,;:!?'\]]/.test(last)) {
+            break;
+        }
+
+        url = url.slice(0, -1);
+    }
+
+    return url;
+};
 
 const extractUrlsFromText = (text = '') => {
     const matches = String(text || '').match(URL_PATTERN) || [];
@@ -321,7 +352,7 @@ const validateReferenceUrl = async (rawUrl = '') => {
     try {
         let status = await requestReferenceUrl(url, 'HEAD');
 
-        if (status === 405 || status === 501)
+        if (HEAD_RETRY_WITH_GET_STATUSES.has(status))
             status = await requestReferenceUrl(url, 'GET');
 
         const classification = classifyHttpStatus(status);
