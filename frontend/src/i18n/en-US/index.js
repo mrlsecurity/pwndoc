@@ -1014,8 +1014,8 @@ export default {
         }
     },
     vulnerabilityQa: {
-        titleSingle: 'QA: {title}',
-        titleAll: 'Vulnerability database QA',
+        titleSingle: 'QA Review',
+        titleAll: 'Vulnerability Database QA Review',
         untitled: 'Untitled vulnerability',
         loading: 'Loading QA results…',
         running: 'Reviewing vulnerabilities for completeness, duplicate entries, reference links, and content guidelines...',

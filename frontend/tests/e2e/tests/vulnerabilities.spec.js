@@ -494,4 +494,36 @@ test.describe('Vulnerabilities Page', () => {
       }
     });
   });
+
+  test.describe('URL navigation', () => {
+    test('reflects the open vulnerability in the URL, supports deep-linking and history', async ({ page, request }) => {
+      const title = `URL Nav ${Date.now()}`;
+      const id = await createVulnerabilityViaApi(request, title);
+      try {
+        await page.goto('/vulnerabilities');
+        await openEditVulnerability(page, title);
+
+        // The open vulnerability is reflected in the URL.
+        await expect(page).toHaveURL(new RegExp(`/vulnerabilities/${id}$`));
+
+        // Deep-link: reloading the detail URL reopens that vulnerability's pane.
+        await page.reload();
+        await expect(page.getByTestId('vulnerability-edit-pane')).toBeVisible();
+        await expect(page.getByTestId('edit-vulnerability-title')).toHaveValue(title);
+
+        // Closing the pane resets the URL to the base list.
+        await page.getByTestId('edit-vulnerability-close').click();
+        await expect(page).toHaveURL(/\/vulnerabilities$/);
+        await expect(page.getByTestId('vulnerability-empty-state')).toBeVisible();
+
+        // Browser back navigation reopens the previously viewed vulnerability.
+        await page.goBack();
+        await expect(page).toHaveURL(new RegExp(`/vulnerabilities/${id}$`));
+        await expect(page.getByTestId('vulnerability-edit-pane')).toBeVisible();
+      }
+      finally {
+        await request.delete(`/api/vulnerabilities/${id}`);
+      }
+    });
+  });
 });

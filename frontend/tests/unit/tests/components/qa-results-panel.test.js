@@ -49,6 +49,15 @@ function createWrapper(props = {}) {
   })
 }
 
+describe('QaResultsPanel header', () => {
+  it('renders the title without a checklist icon', () => {
+    const wrapper = createWrapper()
+
+    expect(wrapper.text()).toContain('QA Review')
+    expect(wrapper.html()).not.toContain('fa-list-check')
+  })
+})
+
 describe('QaResultsPanel outdated banner', () => {
   it('shows the outdated banner when the report is stale', () => {
     const wrapper = createWrapper({ outdated: true })

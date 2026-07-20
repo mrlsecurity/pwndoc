@@ -104,7 +104,11 @@ export default {
             activePane: null,
             vulnQaOpen: false,
             saveSuccess: false,
-            saveSuccessTimer: null
+            saveSuccessTimer: null,
+            // Bumped after a save so the open QA panel(s) re-fetch their outdated state.
+            qaReloadToken: 0,
+            // Guards the route watcher from re-running while it drives a navigation itself.
+            routeSyncing: false
         }
     },
 
@@ -121,7 +125,13 @@ export default {
     },
 
     mounted: function() {
-        this.getLanguages()
+        // Languages must be loaded before opening a vuln (clone() derives currentLanguage from
+        // dtLanguage), so drive the initial route-based open off getLanguages resolving. The
+        // detail fetch is independent of the (heavier) list load.
+        this.getLanguages().then(() => {
+            if (this.$route.params.vulnerabilityId)
+                this.syncPaneWithRoute(this.$route.params.vulnerabilityId)
+        })
         this.getVulnTypes()
         this.getVulnerabilities()
         this.getVulnerabilityCategories()
@@ -142,6 +152,13 @@ export default {
     },
 
     watch: {
+        // URL is the source of truth for which vulnerability is open: /vulnerabilities/<id>
+        // opens its detail pane, /vulnerabilities (no id) closes it. Drives back/forward.
+        '$route.params.vulnerabilityId': function(newId) {
+            if (this.routeSyncing)
+                return
+            this.syncPaneWithRoute(newId)
+        },
         currentLanguage: function(val, oldVal) {
             this.setCurrentDetails();
         },
@@ -460,7 +477,7 @@ export default {
     methods: {
         // Get available languages
         getLanguages: function() {
-            DataService.getLanguages()
+            return DataService.getLanguages()
             .then((data) => {
                 this.languages = data.data.datas;
                 if (this.languages.length > 0) {
@@ -547,13 +564,24 @@ export default {
                     )
                 )
                 if (created) {
-                    this.currentVulnerability = this.$_.cloneDeep(created)
+                    // The list now carries only lightweight rows, so keep the just-typed
+                    // currentVulnerability (which holds the full content) and only adopt the
+                    // new id/category rather than re-cloning the row.
                     this.vulnerabilityId = created._id
                     this.currentCategory = created.category ? {name: created.category} : null
-                    this.setCurrentDetails()
+                    this.currentVulnerability._id = created._id
+                    this.currentVulnerability.status = 0
                     this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
                     this.activePane = 'edit'
                     this.markSaveSuccess()
+                    this.refreshQaAfterSave()
+                    // Reflect the new vuln in the URL. The watcher no-ops (id already current).
+                    if (this.$route.params.vulnerabilityId !== created._id) {
+                        this.routeSyncing = true
+                        this.$router.replace({ name: 'vulnerabilities', params: { vulnerabilityId: created._id } })
+                            .catch(() => {})
+                            .finally(() => { this.routeSyncing = false })
+                    }
                 }
             })
             .catch((err) => {
@@ -576,6 +604,10 @@ export default {
             if (this.errors.title)
                 return;
 
+            // Only a content change can make the stored QA report outdated. A no-op save must
+            // not flip the panel to "Run again", so refresh QA only when there were edits.
+            const hadChanges = this.hasUnsavedChanges
+
             VulnerabilityService.updateVulnerability(this.vulnerabilityId, this.currentVulnerability)
             .then(() => {
                 if (this.draftRecovery)
@@ -583,6 +615,8 @@ export default {
                 this.currentVulnerability.status = 0
                 this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)
                 this.markSaveSuccess()
+                if (hadChanges)
+                    this.refreshQaAfterSave()
                 this.getVulnerabilities()
             })
             .catch((err) => {
@@ -619,13 +653,17 @@ export default {
         },
 
         confirmDeleteVulnerability: function(row) {
+            // Delete by the authoritative open-vuln id: the lazy-load create flow keeps the
+            // typed object (which has no _id) as currentVulnerability, so fall back to
+            // vulnerabilityId rather than trusting row._id.
+            const vulnerabilityId = (row && row._id) || this.vulnerabilityId
             Dialog.create({
                 title: $t('msg.confirmSuppression'),
                 message: $t('msg.vulnerabilityWillBeDeleted'),
                 ok: {label: $t('btn.confirm'), color: 'negative'},
                 cancel: {label: $t('btn.cancel'), color: 'white'}
             })
-            .onOk(() => this.deleteVulnerability(row._id))
+            .onOk(() => this.deleteVulnerability(vulnerabilityId))
         },
 
         _listener: function(e) {
@@ -654,6 +692,25 @@ export default {
                 this.saveSuccessTimer = null
             }
             this.saveSuccess = false
+        },
+
+        // Called only after a content-changing save. Refresh the "outdated" signal that drives
+        // the per-vuln "Run again" button and the QA-all panel — WITHOUT reloading the visible
+        // report. Bumping qaReloadToken makes the open per-vuln panel re-fetch its report in
+        // place (the stored issues are unchanged, so only the outdated flag / button flips; no
+        // spinner, no flash). Other locales' cached reports are dropped so they re-fetch when
+        // next opened, but the currently displayed one is never reset.
+        refreshQaAfterSave: function() {
+            this.qaReloadToken += 1
+            if (this.vulnerabilityId) {
+                const qaRuns = useQaRunsStore()
+                this.languages
+                    .filter((entry) => entry.locale !== this.currentLanguage)
+                    .forEach((entry) => qaRuns.reset(`vuln:${this.vulnerabilityId}:${entry.locale}`))
+            }
+            const vulnQaStore = useVulnQaStore()
+            if (vulnQaStore.panelOpen)
+                vulnQaStore.loadStatus()
         },
 
         getVulnUpdates: function(vulnId) {
@@ -686,10 +743,44 @@ export default {
                 this.getVulnUpdates(this.vulnerabilityId);
         },
 
-        selectVulnerability: async function(row) {
-            if (this.activePane && this.vulnerabilityId === row._id)
-                return
-            await this.openVulnerability(row)
+        // Selection goes through the router; the $route watcher performs the actual open so
+        // the URL and browser history stay in sync with the visible pane.
+        selectVulnerability: function(row) {
+            if (this.$route.params.vulnerabilityId === row._id)
+                return Promise.resolve()
+            return this.$router.push({ name: 'vulnerabilities', params: { vulnerabilityId: row._id } }).catch(() => {})
+        },
+
+        // Reconcile the open pane with the URL. Present id -> fetch + open that vuln; absent id
+        // -> close an open vuln pane (leaves the transient create/merge panes alone).
+        syncPaneWithRoute: async function(routeId) {
+            const id = routeId || this.$route.params.vulnerabilityId || null
+            if (id) {
+                if (id !== this.vulnerabilityId)
+                    await this.openVulnerabilityById(id)
+            } else if (this.activePane === 'edit' || this.activePane === 'updates') {
+                await this.closePane({ skipRoutePush: true })
+            }
+        },
+
+        // Full detail is fetched on demand (the list carries only lightweight rows).
+        openVulnerabilityById: async function(vulnerabilityId) {
+            try {
+                const data = await VulnerabilityService.getVulnerability(vulnerabilityId)
+                const vuln = data.data?.datas
+                if (!vuln)
+                    throw new Error('Vulnerability not found')
+                await this.openVulnerability(vuln)
+            } catch (err) {
+                Notify.create({
+                    message: err.response?.data?.datas || $t('vulnerabilityQa.notFoundInList'),
+                    color: 'warning',
+                    textColor: 'white',
+                    position: 'top-right'
+                })
+                if (this.$route.params.vulnerabilityId === vulnerabilityId)
+                    this.$router.push({ name: 'vulnerabilities' }).catch(() => {})
+            }
         },
 
         openVulnerability: async function(row) {
@@ -710,11 +801,15 @@ export default {
         // `detailScroll` is the active pane's scroll container (only one pane is mounted).
         scrollDetailToTop: function() {
             this.$nextTick(() => {
-                this.$refs.detailScroll?.scrollTo({ top: 0 })
+                if (typeof this.$refs.detailScroll?.scrollTo === 'function')
+                    this.$refs.detailScroll.scrollTo({ top: 0 })
             })
         },
 
         openCreateVulnerability: async function(category) {
+            // Create is a base-URL pane; drop any open vuln's id from the URL first (the route
+            // watcher is suppressed so this method keeps ownership of the cleanup).
+            await this.clearRouteVulnerability()
             if (this.activePane)
                 await this.cleanupCurrentVulnerability()
 
@@ -730,27 +825,45 @@ export default {
         openMergeVulnerabilities: async function() {
             if (this.activePane === 'merge')
                 return
+            await this.clearRouteVulnerability()
             if (this.activePane)
                 await this.cleanupCurrentVulnerability()
             this.activePane = 'merge'
         },
 
-        closePane: async function() {
-            if (!this.activePane)
+        // Drop the open vuln's id from the URL without letting the route watcher also react
+        // (the caller owns the pane transition that follows).
+        clearRouteVulnerability: async function() {
+            if (!this.$route.params.vulnerabilityId)
                 return
+            this.routeSyncing = true
+            await this.$router.push({ name: 'vulnerabilities' }).catch(() => {})
+            this.routeSyncing = false
+        },
+
+        closePane: async function(options = {}) {
+            if (!this.activePane) {
+                if (!options.skipRoutePush)
+                    this.$router.push({ name: 'vulnerabilities' }).catch(() => {})
+                return
+            }
             if (this.activePane === 'merge') {
                 this.activePane = null
                 return
             }
             await this.cleanupCurrentVulnerability()
             this.activePane = null
+            if (!options.skipRoutePush && this.$route.params.vulnerabilityId)
+                this.$router.push({ name: 'vulnerabilities' }).catch(() => {})
         },
 
         cleanupCurrentVulnerability: async function() {
             const aiStore = useAiGenerationStore()
             if (aiStore.isActive)
                 aiStore.cancelSession({ force: true })
-            this.vulnQaOpen = false
+            // The QA panel toggle is sticky across vuln navigation (like the audit QA panel):
+            // it stays open so the next vuln's report shows without re-toggling. The panel is
+            // keyed by vuln+locale, so it remounts and re-fetches for the newly opened vuln.
             // The unsaved-vulnerability QA run is tied to this pane session; drop it so the
             // next pane starts clean instead of showing a previous draft's results.
             useQaRunsStore().reset('draft')

@@ -458,7 +458,9 @@
                     label="QA"
                     no-caps
                     class="vuln-toolbar-button"
+                    :class="{'bg-grey-3': vulnQaOpen}"
                     :color="vulnQaOpen ? 'primary' : 'grey-8'"
+                    data-testid="vulnerability-qa-toggle"
                     @click="toggleVulnerabilityQaView()"
                     >
                         <q-badge v-if="vulnQaRunning" floating rounded color="orange" class="qa-run-badge" />
@@ -660,6 +662,7 @@
                         :locale="currentLanguage"
                         :vulnerability="currentVulnerability"
                         :title="currentVulnerability.details[currentDetailsIndex].title"
+                        :reload-token="qaReloadToken"
                         @close="closeVulnQa"
                         />
                     </div>
@@ -713,7 +716,9 @@
                     label="QA"
                     no-caps
                     class="vuln-toolbar-button"
+                    :class="{'bg-grey-3': vulnQaOpen}"
                     :color="vulnQaOpen ? 'primary' : 'grey-8'"
+                    data-testid="vulnerability-qa-toggle"
                     @click="toggleVulnerabilityQaView()"
                     >
                         <q-badge v-if="vulnQaRunning" floating rounded color="orange" class="qa-run-badge" />
@@ -925,6 +930,7 @@
                         :locale="currentLanguage"
                         :vulnerability-id="vulnerabilityId"
                         :title="currentVulnerability.details[currentDetailsIndex].title"
+                        :reload-token="qaReloadToken"
                         @close="closeVulnQa"
                         />
                     </div>

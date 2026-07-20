@@ -1,7 +1,6 @@
 <template>
   <div class="qa-results-panel column full-height" :class="{ 'qa-results-panel--running': running }">
     <q-toolbar class="bg-grey-3" @mousedown.prevent>
-      <q-icon name="fas fa-list-check" size="sm" class="q-mr-sm" />
       <q-toolbar-title class="text-subtitle1">{{ title }}</q-toolbar-title>
       <q-btn
       v-if="showGroupToggle"

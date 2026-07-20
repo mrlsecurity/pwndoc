@@ -37,6 +37,7 @@ vi.mock('boot/axios', () => ({
 vi.mock('@/services/vulnerability', () => ({
   default: {
     getVulnerabilities: vi.fn(),
+    getVulnerability: vi.fn(),
     createVulnerabilities: vi.fn(),
     updateVulnerability: vi.fn(),
     deleteVulnerability: vi.fn(),
@@ -215,6 +216,13 @@ function setupDefaultMocks() {
   DataService.getVulnerabilityCategories.mockResolvedValue({ data: { datas: mockCategories } })
   DataService.getCustomFields.mockResolvedValue({ data: { datas: [] } })
   VulnerabilityService.getVulnerabilities.mockResolvedValue({ data: { datas: mockVulnerabilities } })
+  VulnerabilityService.getVulnerability.mockImplementation((id) => {
+    const found = mockVulnerabilities.find((vuln) => vuln._id === id)
+    // Mirror the backend, which 404s on an unknown id rather than returning a null body.
+    return found
+      ? Promise.resolve({ data: { datas: found } })
+      : Promise.reject({ response: { status: 404, data: { datas: 'Vulnerability not found' } } })
+  })
   VulnerabilityService.getVulnUpdates.mockResolvedValue({ data: { datas: [] } })
   DraftRecoveryService.listDrafts.mockResolvedValue([])
   DraftRecoveryService.state.current = null
@@ -225,13 +233,17 @@ describe('Vulnerabilities Page', () => {
   let router, pinia, i18n
 
   beforeEach(() => {
+    // createWebHistory reads window.location, which persists across tests in jsdom; reset it
+    // so a leftover /vulnerabilities/<id> URL doesn't deep-link into the next test's mount.
+    window.history.replaceState({}, '', '/')
+
     pinia = createPinia()
     setActivePinia(pinia)
 
     router = createRouter({
       history: createWebHistory(),
       routes: [
-        { path: '/vulnerabilities', name: 'vulnerabilities', component: VulnerabilitiesPage },
+        { path: '/vulnerabilities/:vulnerabilityId?', name: 'vulnerabilities', component: VulnerabilitiesPage },
         { path: '/audits', name: 'audits', component: { template: '<div>Audits</div>' } },
         { path: '/data/custom', component: { template: '<div>Data</div>' } }
       ]
@@ -404,6 +416,26 @@ describe('Vulnerabilities Page', () => {
   })
 
   describe('Computed Properties', () => {
+    it('greys out the vulnerability QA button while its panel is open', async () => {
+      const wrapper = createWrapper({
+        stubs: {
+          'q-bar': { template: '<div><slot /></div>' }
+        }
+      })
+      await flushPromises()
+
+      wrapper.vm.activePane = 'create'
+      await wrapper.vm.$nextTick()
+
+      const qaToggle = () => wrapper.get('[data-testid="vulnerability-qa-toggle"]')
+      expect(qaToggle().classes()).not.toContain('bg-grey-3')
+
+      wrapper.vm.vulnQaOpen = true
+      await wrapper.vm.$nextTick()
+
+      expect(qaToggle().classes()).toContain('bg-grey-3')
+    })
+
     it('updates the QA review toggle label for the panel state', async () => {
       const wrapper = createWrapper()
       await flushPromises()
@@ -565,6 +597,139 @@ describe('Vulnerabilities Page', () => {
       await wrapper.vm.$nextTick()
 
       expect(scrollTo).toHaveBeenCalledWith(expectedIndex, 'center-force')
+    })
+  })
+
+  describe('Router-driven navigation', () => {
+    it('pushes the vuln id to the URL on select instead of opening directly', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+      const pushSpy = vi.spyOn(router, 'push')
+
+      await wrapper.vm.selectVulnerability(mockVulnerabilities[0])
+
+      expect(pushSpy).toHaveBeenCalledWith({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+    })
+
+    it('fetches full detail and opens the edit pane when the route id changes', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+      await flushPromises()
+
+      expect(VulnerabilityService.getVulnerability).toHaveBeenCalledWith('vuln1')
+      expect(wrapper.vm.vulnerabilityId).toBe('vuln1')
+      expect(wrapper.vm.activePane).toBe('edit')
+    })
+
+    it('opens the updates pane for a vulnerability with pending updates', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
+      await flushPromises()
+
+      expect(wrapper.vm.activePane).toBe('updates')
+    })
+
+    it('closes the pane when the route id is cleared', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+      await flushPromises()
+      expect(wrapper.vm.activePane).toBe('edit')
+
+      await router.push({ name: 'vulnerabilities' })
+      await flushPromises()
+      expect(wrapper.vm.activePane).toBeNull()
+      expect(wrapper.vm.vulnerabilityId).toBe('')
+    })
+
+    it('opens a deep-linked vulnerability on mount', async () => {
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln2' } })
+      await router.isReady()
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      expect(VulnerabilityService.getVulnerability).toHaveBeenCalledWith('vuln2')
+      expect(wrapper.vm.vulnerabilityId).toBe('vuln2')
+    })
+
+    it('resets the URL to the base list when opening the create pane', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+      await flushPromises()
+
+      await wrapper.vm.openCreateVulnerability()
+      await flushPromises()
+
+      expect(wrapper.vm.activePane).toBe('create')
+      expect(wrapper.vm.$route.params.vulnerabilityId).toBeUndefined()
+    })
+  })
+
+  describe('QA refresh after save', () => {
+    it('refreshes QA outdated state when the save changed content', async () => {
+      VulnerabilityService.updateVulnerability.mockResolvedValue({})
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      const vulnQaStore = useVulnQaStore()
+      vulnQaStore.panelOpen = true
+      const loadStatusSpy = vi.spyOn(vulnQaStore, 'loadStatus').mockResolvedValue()
+
+      wrapper.vm.vulnerabilityId = 'vuln1'
+      wrapper.vm.currentVulnerability = { details: [{ locale: 'en', title: 'Edited', customFields: [] }] }
+      wrapper.vm.currentVulnerabilityOrig = { details: [{ locale: 'en', title: 'Original', customFields: [] }] }
+
+      const tokenBefore = wrapper.vm.qaReloadToken
+      wrapper.vm.updateVulnerability()
+      await flushPromises()
+
+      expect(wrapper.vm.qaReloadToken).toBe(tokenBefore + 1)
+      expect(loadStatusSpy).toHaveBeenCalled()
+    })
+
+    it('does not refresh QA when saving without changes (no spurious outdated)', async () => {
+      VulnerabilityService.updateVulnerability.mockResolvedValue({})
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      const vulnQaStore = useVulnQaStore()
+      vulnQaStore.panelOpen = true
+      const loadStatusSpy = vi.spyOn(vulnQaStore, 'loadStatus').mockResolvedValue()
+
+      wrapper.vm.vulnerabilityId = 'vuln1'
+      const unchanged = { details: [{ locale: 'en', title: 'Same', customFields: [] }] }
+      wrapper.vm.currentVulnerability = unchanged
+      wrapper.vm.currentVulnerabilityOrig = wrapper.vm.$_.cloneDeep(unchanged)
+
+      const tokenBefore = wrapper.vm.qaReloadToken
+      wrapper.vm.updateVulnerability()
+      await flushPromises()
+
+      expect(wrapper.vm.qaReloadToken).toBe(tokenBefore)
+      expect(loadStatusSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Sticky QA panel', () => {
+    it('keeps the QA panel open across pane cleanup (navigation)', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.vulnQaOpen = true
+      await wrapper.vm.cleanupCurrentVulnerability()
+
+      expect(wrapper.vm.vulnQaOpen).toBe(true)
     })
   })
 
@@ -857,6 +1022,35 @@ describe('Vulnerabilities Page', () => {
       expect(Notify.create).not.toHaveBeenCalled()
     })
 
+    it('keeps the typed rich content and adopts the new id after create', async () => {
+      VulnerabilityService.createVulnerabilities.mockResolvedValue({})
+      VulnerabilityService.getVulnerabilities.mockResolvedValue({
+        data: {
+          datas: [
+            ...mockVulnerabilities,
+            { _id: 'new-vuln', category: null, status: 0, details: [{ locale: 'en', title: 'Fresh', vulnType: 'Web' }] }
+          ]
+        }
+      })
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      wrapper.vm.activePane = 'create'
+      wrapper.vm.currentVulnerability.details = [
+        { locale: 'en', title: 'Fresh', description: '<p>typed body</p>', customFields: [] }
+      ]
+      wrapper.vm.createVulnerability()
+      await flushPromises()
+
+      expect(wrapper.vm.vulnerabilityId).toBe('new-vuln')
+      // The lightweight list row lacks the body, so the typed content must be preserved.
+      expect(wrapper.vm.currentVulnerability.details[0].description).toBe('<p>typed body</p>')
+      // The created id is stamped onto the kept object so delete-by-currentVulnerability works.
+      expect(wrapper.vm.currentVulnerability._id).toBe('new-vuln')
+      expect(wrapper.vm.activePane).toBe('edit')
+    })
+
     it('should show error notification on create failure', async () => {
       VulnerabilityService.createVulnerabilities.mockRejectedValue({
         response: { data: { datas: 'Creation failed' } }
@@ -997,6 +1191,21 @@ describe('Vulnerabilities Page', () => {
         title: 'msg.confirmSuppression',
         message: 'msg.vulnerabilityWillBeDeleted'
       }))
+    })
+
+    it('falls back to the open vulnerabilityId when the row has no _id (create flow)', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      const deleteSpy = vi.spyOn(wrapper.vm, 'deleteVulnerability').mockImplementation(() => {})
+      // Invoke the confirm callback so the delete target id is exercised.
+      Dialog.create.mockReturnValueOnce({ onOk: (cb) => { cb(); return { onCancel: vi.fn() } } })
+
+      wrapper.vm.vulnerabilityId = 'open-id'
+      // currentVulnerability from the create flow has no _id.
+      wrapper.vm.confirmDeleteVulnerability(wrapper.vm.currentVulnerability)
+
+      expect(deleteSpy).toHaveBeenCalledWith('open-id')
     })
   })
 

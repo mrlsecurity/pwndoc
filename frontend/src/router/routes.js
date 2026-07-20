@@ -28,7 +28,7 @@ export default [
       {path: 'dump', component: () => import('pages/data/dump')},
       {path: 'custom', component: () => import('pages/data/custom')}
     ]},
-    {path: 'vulnerabilities', component: () => import('pages/vulnerabilities'), meta: {breadcrumb: 'Vulnerabilities'}},
+    {path: 'vulnerabilities/:vulnerabilityId?', name: 'vulnerabilities', component: () => import('pages/vulnerabilities'), meta: {breadcrumb: 'Vulnerabilities'}},
     {path: 'profile', component: () => import('pages/profile')},
     {path: 'settings', component: () => import('pages/settings')},
     {path: '403', name: '403', component: () => import('pages/403')},
