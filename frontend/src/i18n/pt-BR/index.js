@@ -39,6 +39,8 @@ export default {
       accountEnabled: 'Conta Habilitada',
       accountDisabled: 'Conta Desabilitada',
       disable: 'Desabilitar',
+      qa: 'QA',
+      comments: 'Comentários',
   },
   tooltip: {
     usersConnected: 'Usuários na Auditoria:',

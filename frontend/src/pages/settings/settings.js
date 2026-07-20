@@ -138,9 +138,11 @@ export default {
     mounted: function() {
         if (userStore.isAllowed('settings:read')) {
             this.getSettings()
-            this.getBackupStatus()
-            setInterval(() => {this.getBackupStatus()}, 10000); // 10 seconds
-            this.getBackups()
+            if (userStore.isAllowed('backups:read')) {
+                this.getBackupStatus()
+                setInterval(() => {this.getBackupStatus()}, 10000); // 10 seconds
+                this.getBackups()
+            }
             this.canEdit = userStore.isAllowed('settings:update');
             document.addEventListener('keydown', this._listener, false)
         }

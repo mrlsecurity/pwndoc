@@ -14,8 +14,10 @@
                 :outline="commentMode"
                 :class="{'bg-grey-3': commentMode}"
                 icon="o_mode_comment"
+                :label="$t('btn.comments')"
+                no-caps
                 :ripple="false"
-                @click="toggleCommentView()" 
+                @click="toggleCommentView()"
                 class="q-mr-sm">
                     <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
                         {{(commentMode) ? $t('tooltip.hideComments') : $t('tooltip.showComments')}}
@@ -27,7 +29,9 @@
                 :flat="!qaDrawerOpen"
                 :outline="qaDrawerOpen"
                 :class="{'bg-grey-3': qaDrawerOpen}"
-                icon="fas fa-list-check"
+                icon="o_gpp_good"
+                :label="$t('btn.qa')"
+                no-caps
                 :ripple="false"
                 @click="toggleQaView()"
                 class="q-mr-sm">

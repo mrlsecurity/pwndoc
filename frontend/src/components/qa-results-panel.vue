@@ -52,7 +52,7 @@
           </template>
         </div>
 
-        <q-banner v-if="topBanner" dense rounded class="bg-blue-grey-1 text-grey-9 q-mb-md">
+        <q-banner v-if="topBanner" dense rounded class="bg-blue-grey-1 text-grey-9 q-mb-md qa-top-banner">
           {{ topBanner }}
         </q-banner>
 
@@ -1004,5 +1004,10 @@ export default {
 
 .body--dark .qa-run-inprogress {
   color: #90caf9;
+}
+
+.body--dark .qa-top-banner {
+  background: #2a2a2a !important;
+  color: #e0e0e0 !important;
 }
 </style>

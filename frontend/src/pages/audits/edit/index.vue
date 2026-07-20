@@ -370,7 +370,7 @@
 	<q-card
 		v-if="qaSidebarVisible"
 		data-testid="audit-qa-sidebar-host"
-		class="col-3 bg-grey-11 sidebar-comments audit-qa-sidebar-host"
+		class="col-3 sidebar-comments audit-qa-sidebar-host"
 		:class="qaSidebarPositionClass"
 	>
 		<audit-qa-sidebar
@@ -1296,6 +1296,11 @@ export default {
 
 .audit-qa-sidebar-host {
 	width: 25%;
+	background: #fff !important;
+}
+
+body.body--dark .audit-qa-sidebar-host {
+	background: var(--q-dark-page, #121212) !important;
 }
 
 .audit-qa-sidebar-host--standard {

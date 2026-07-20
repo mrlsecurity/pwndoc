@@ -455,7 +455,7 @@
                     v-if="aiQaEnabled"
                     outline
                     icon="o_gpp_good"
-                    label="QA"
+                    :label="$t('btn.qa')"
                     no-caps
                     class="vuln-toolbar-button"
                     :class="{'bg-grey-3': vulnQaOpen}"
@@ -713,7 +713,7 @@
                     v-if="aiQaEnabled && vulnerabilityId"
                     outline
                     icon="o_gpp_good"
-                    label="QA"
+                    :label="$t('btn.qa')"
                     no-caps
                     class="vuln-toolbar-button"
                     :class="{'bg-grey-3': vulnQaOpen}"

@@ -40,7 +40,9 @@ export default {
         accountsEnabled: 'Enabled accounts',
         accountsDisabled: 'Disabled accounts',
         accountEnabled: 'Account enabled',
-        accountDisabled: 'Account disabled'
+        accountDisabled: 'Account disabled',
+        qa: 'QA',
+        comments: 'Comments'
     },
     tooltip: {
         usersConnected: 'Users on the Audit:',

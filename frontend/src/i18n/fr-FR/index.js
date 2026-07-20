@@ -38,6 +38,8 @@ export default {
         updates: 'Modifiées',
         accountEnabled: 'Compte activé',
         accountDisabled: 'Compte désactivé',
+        qa: 'QA',
+        comments: 'Commentaires',
     },
     tooltip: {
         usersConnected: 'Utilisateurs sur l\'Audit:',

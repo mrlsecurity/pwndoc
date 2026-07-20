@@ -32,6 +32,8 @@ export default {
         updates: 'Aktualisierungen',
         accountEnabled: 'Konto aktiviert',
         accountDisabled: 'Konto deaktiviert',
+        qa: 'QA',
+        comments: 'Kommentare',
     },
     tooltip: {
         usersConnected: 'Benutzer im Audit:',

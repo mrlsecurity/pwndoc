@@ -34,6 +34,8 @@ export default {
         accountEnabled: '账号启用',
         accountDisabled: '账号禁用',
         disable: '禁用',
+        qa: 'QA',
+        comments: '评论',
     },
     tooltip: {
         usersConnected: '正在做审计的用户',
