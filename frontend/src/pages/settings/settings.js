@@ -239,6 +239,8 @@ export default {
             }
             if (this.$refs.aiProviderSettings)
                 this.$refs.aiProviderSettings.applyPendingKeyUpdates()
+            else
+                this.preserveHiddenAiSecrets()
             this.applyLanguageToolApiKeyUpdate()
 
             SettingsService.updateSettings(this.settings)
@@ -389,6 +391,19 @@ export default {
             }
 
             this.settings.report.private.languageToolApiKey = value.trim()
+        },
+
+        // When the AI provider component is not rendered (AI integration disabled), the
+        // sanitized secret fields arrive from the backend as empty strings with a
+        // *Configured flag. Echo back MASKED_SECRET for each configured secret so
+        // mergeSettingsSecrets preserves the stored key instead of wiping it on save.
+        preserveHiddenAiSecrets() {
+            const aiPrivate = this.settings.ai?.private
+            if (!aiPrivate) return
+            AI_SECRET_FIELDS.forEach((field) => {
+                if (aiPrivate[`${field}Configured`])
+                    aiPrivate[field] = MASKED_SECRET
+            })
         },
 
         stripSavedSecretsFromSettings() {

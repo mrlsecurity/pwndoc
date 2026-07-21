@@ -408,6 +408,35 @@ describe('Settings Page', () => {
       expect(SettingsService.updateSettings).toHaveBeenCalledWith(wrapper.vm.settings)
     })
 
+    it('should preserve configured AI secrets when AI integration is disabled', async () => {
+      // Backend sends secrets sanitized to '' with a *Configured flag set.
+      SettingsService.getSettings.mockResolvedValue({
+        data: { datas: JSON.parse(JSON.stringify({
+          ...mockSettings,
+          ai: {
+            private: { openaiApiKey: '', openaiApiKeyConfigured: true },
+            public: { enabled: false, defaultProvider: 'openai' }
+          }
+        })) }
+      })
+      SettingsService.updateSettings.mockResolvedValue({ data: { datas: 'ok' } })
+
+      const wrapper = createWrapper()
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+
+      // Provider component is not mounted while AI is disabled.
+      expect(wrapper.vm.$refs.aiProviderSettings).toBeFalsy()
+
+      wrapper.vm.updateSettings()
+      await wrapper.vm.$nextTick()
+
+      // The masked sentinel is sent so the backend preserves the stored key
+      // instead of wiping it with the sanitized empty string.
+      const sent = SettingsService.updateSettings.mock.calls[0][0]
+      expect(sent.ai.private.openaiApiKey).toBe('••••••••••••••••')
+    })
+
     it('should clamp minReviewers to min=1 if below', async () => {
       SettingsService.updateSettings.mockResolvedValue({ data: { datas: 'ok' } })
 
