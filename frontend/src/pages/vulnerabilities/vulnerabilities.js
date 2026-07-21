@@ -22,7 +22,7 @@ import DraftRecoveryService from '@/services/draft-recovery'
 import VulnerabilityQaPanel from '@/components/vulnerability-qa-panel.vue'
 import VulnerabilityQaAllPanel from '@/components/vulnerability-qa-all-panel.vue'
 import AiChatDrawer from '@/components/ai-chat-drawer.vue'
-import { hasAnyQaCheckEnabled } from '@/services/qa-checks'
+import { hasAnyRunnableQaCheck } from '@/services/qa-checks'
 
 import { $t } from 'boot/i18n'
 
@@ -369,15 +369,11 @@ export default {
         },
 
         aiQaEnabled: function() {
-            return this.$settings?.ai?.public?.enabled !== false &&
-                userStore.isAllowed('vulnerabilities:ai-qa') &&
-                hasAnyQaCheckEnabled(this.$settings?.ai?.public?.qaChecks)
+            return userStore.isAllowed('vulnerabilities:ai-qa') && hasAnyRunnableQaCheck(this.$settings)
         },
 
         aiQaAllEnabled: function() {
-            return this.$settings?.ai?.public?.enabled !== false &&
-                userStore.isAllowed('vulnerabilities:ai-qa-all') &&
-                hasAnyQaCheckEnabled(this.$settings?.ai?.public?.qaChecks)
+            return userStore.isAllowed('vulnerabilities:ai-qa-all') && hasAnyRunnableQaCheck(this.$settings)
         },
 
         vulnerabilityQaCount: function() {

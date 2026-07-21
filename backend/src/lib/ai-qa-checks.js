@@ -98,6 +98,10 @@ const normalizeQaScope = (value) => {
     return QA_SCOPES.includes(scope) ? scope : null;
 };
 
+// `settings` is null when the settings read itself failed — treat that as disabled rather
+// than letting optional chaining default a missing document to "enabled".
+const isAiEnabled = (settings) => Boolean(settings) && settings?.ai?.public?.enabled !== false;
+
 const isAiQaIssue = (issue = {}) => issue.source === 'ai';
 
 const mergeQaIssues = (existingIssues = [], newIssues = [], scope = 'all') => {
@@ -202,6 +206,7 @@ module.exports = {
     buildEnabledQaChecksPrompt,
     filterAiIssuesByEnabledChecks,
     normalizeQaScope,
+    isAiEnabled,
     isAiQaIssue,
     mergeQaIssues,
     emptyQaCounts,

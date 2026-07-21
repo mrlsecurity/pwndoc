@@ -55,7 +55,8 @@ const {
     emptyQaCounts,
     finalizeMergedQaResult,
     getQaChecksFromSettings,
-    hasEnabledQaChecks
+    hasEnabledQaChecks,
+    isAiEnabled
 } = require('../lib/ai-qa-checks');
 const {
     AI_PROVIDERS,
@@ -97,6 +98,27 @@ const resolveProvider = (req, settings) => {
         AI_DEFAULT_PROVIDER;
 
     return AI_PROVIDERS.includes(provider) ? provider : null;
+};
+
+// Programmatic-only QA never needs a provider and must stay available when AI integration
+// is disabled; every other scope needs both AI enabled and a resolvable provider. Writes the
+// error response itself and returns null so callers can just `if (!resolved) return;`.
+const resolveScopedProvider = (req, res, settings, scope) => {
+    if (scope === 'programmatic')
+        return { provider: null };
+
+    if (!isAiEnabled(settings)) {
+        Response.Forbidden(res, 'AI integration is disabled in organization settings');
+        return null;
+    }
+
+    const provider = resolveProvider(req, settings);
+    if (!provider) {
+        Response.BadParameters(res, 'Unsupported provider');
+        return null;
+    }
+
+    return { provider };
 };
 
 const isAllowedEntityType = (entityType) => {
@@ -238,9 +260,23 @@ const handleAiQa = async function(req, res) {
             settings = null;
         }
 
-        if (!settings || settings?.ai?.public?.enabled === false) {
-            Response.Forbidden(res, 'AI integration is disabled in organization settings');
-            return;
+        // Resolve scope/provider before touching the audit at all: an invalid scope or a
+        // disabled-AI request should reject without paying for the audit fetch below.
+        const loadOnly = Boolean(req.body.loadOnly);
+        let scope = null;
+        let provider = null;
+
+        if (!loadOnly) {
+            scope = normalizeQaScope(req.body.scope);
+            if (!scope) {
+                Response.BadParameters(res, 'Missing or invalid scope');
+                return;
+            }
+
+            const resolved = resolveScopedProvider(req, res, settings, scope);
+            if (!resolved)
+                return;
+            provider = resolved.provider;
         }
 
         const audit = await Audit.getAudit(
@@ -251,25 +287,13 @@ const handleAiQa = async function(req, res) {
 
         const auditObject = typeof audit.toObject === 'function' ? audit.toObject() : audit;
 
-        if (req.body.loadOnly) {
+        if (loadOnly) {
             const report = getCachedQaReport(auditObject) || getOutdatedQaReport(auditObject);
             Response.Ok(res, {
                 auditId: auditId,
                 hasReport: Boolean(report),
                 ...(report || emptyAuditQaResponse())
             });
-            return;
-        }
-
-        const scope = normalizeQaScope(req.body.scope);
-        if (!scope) {
-            Response.BadParameters(res, 'Missing or invalid scope');
-            return;
-        }
-
-        const provider = resolveProvider(req, settings);
-        if (!provider) {
-            Response.BadParameters(res, 'Unsupported provider');
             return;
         }
 
@@ -341,11 +365,6 @@ const handleVulnerabilityQa = async function(req, res) {
             settings = null;
         }
 
-        if (!settings || settings?.ai?.public?.enabled === false) {
-            Response.Forbidden(res, 'AI integration is disabled in organization settings');
-            return;
-        }
-
         const vulnerabilityId = String(req.body.vulnerabilityId || '').trim();
         const draftVulnerability = normalizeDraftVulnerability(req.body.vulnerability);
 
@@ -402,11 +421,10 @@ const handleVulnerabilityQa = async function(req, res) {
             return;
         }
 
-        const provider = resolveProvider(req, settings);
-        if (!provider) {
-            Response.BadParameters(res, 'Unsupported provider');
+        const resolved = resolveScopedProvider(req, res, settings, scope);
+        if (!resolved)
             return;
-        }
+        const provider = resolved.provider;
 
         if (vulnerabilityId) {
             if (isVulnerabilityQaJobActive(locale)) {
@@ -511,10 +529,6 @@ const handleVulnerabilityQaRun = (io) => async function(req, res) {
         }
 
         const settings = await Settings.getAll();
-        if (!settings || settings?.ai?.public?.enabled === false) {
-            Response.Forbidden(res, 'AI integration is disabled in organization settings');
-            return;
-        }
 
         const scope = normalizeQaScope(req.body.scope);
         if (!scope) {
@@ -522,11 +536,10 @@ const handleVulnerabilityQaRun = (io) => async function(req, res) {
             return;
         }
 
-        const provider = resolveProvider(req, settings);
-        if (!provider) {
-            Response.BadParameters(res, 'Unsupported provider');
+        const resolved = resolveScopedProvider(req, res, settings, scope);
+        if (!resolved)
             return;
-        }
+        const provider = resolved.provider;
 
         if (!hasEnabledQaChecks(getQaChecksFromSettings(settings))) {
             Response.BadParameters(res, 'No QA checks are enabled in organization settings');
@@ -555,12 +568,6 @@ const handleVulnerabilityQaStatus = async function(req, res) {
         const locale = String(req.query.locale || '').trim();
         if (!locale) {
             Response.BadParameters(res, 'Missing required parameter: locale');
-            return;
-        }
-
-        const settings = await Settings.getAll();
-        if (!settings || settings?.ai?.public?.enabled === false) {
-            Response.Forbidden(res, 'AI integration is disabled in organization settings');
             return;
         }
 
@@ -616,12 +623,6 @@ const handleVulnerabilityQaDismiss = async function(req, res) {
             return;
         }
 
-        const settings = await Settings.getAll();
-        if (!settings || settings?.ai?.public?.enabled === false) {
-            Response.Forbidden(res, 'AI integration is disabled in organization settings');
-            return;
-        }
-
         const dismissed = req.body.dismissed !== false;
         const username = req.decodedToken?.username || '';
         const vulnerabilityId = String(req.body.vulnerabilityId || '').trim();
@@ -663,12 +664,6 @@ const handleVulnerabilityQaResolve = async function(req, res) {
         const vulnerabilityId = String(req.body.vulnerabilityId || '').trim();
         if (!locale || !vulnerabilityId) {
             Response.BadParameters(res, 'Missing required parameters: locale, vulnerabilityId');
-            return;
-        }
-
-        const settings = await Settings.getAll();
-        if (!settings || settings?.ai?.public?.enabled === false) {
-            Response.Forbidden(res, 'AI integration is disabled in organization settings');
             return;
         }
 

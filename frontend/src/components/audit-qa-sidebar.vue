@@ -17,6 +17,8 @@
     :grouped-issues="groupedIssues"
     :outdated="outdated"
     :ai-unavailable-messages="aiUnavailableMessages"
+    :show-ai-action="aiSettingEnabled"
+    :show-all-action="aiSettingEnabled"
     show-navigation
     @close="closeDrawer"
     @run="runQaScope"
@@ -32,6 +34,7 @@ import { useAuditQaStore } from '@/stores/audit-qa'
 import QaResultsPanel from '@/components/qa-results-panel.vue'
 import { buildAuditQaGroups, splitAiUnavailableIssues } from '@/services/qa-display'
 import { parseIssueLocation, buildIssueRoute } from '@/services/audit-qa-navigation'
+import { isAiSettingEnabled } from '@/services/qa-checks'
 
 export default {
   name: 'AuditQaSidebar',
@@ -79,6 +82,10 @@ export default {
 
     filteredIssues() {
       return useAuditQaStore().filteredIssues
+    },
+
+    aiSettingEnabled() {
+      return isAiSettingEnabled(this.$settings)
     },
 
     aiUnavailableMessages() {

@@ -36,3 +36,16 @@ export function hasAnyAiQaCheckEnabled(qaChecks = {}) {
 export function hasAnyQaCheckEnabled(qaChecks = {}) {
     return hasAnyProgrammaticQaCheckEnabled(qaChecks) || hasAnyAiQaCheckEnabled(qaChecks)
 }
+
+export function isAiSettingEnabled(settings = {}) {
+    return settings?.ai?.public?.enabled !== false
+}
+
+// Whether there's any QA check the user could actually run right now: built-in checks are
+// always available, AI checks only count while AI integration is enabled.
+export function hasAnyRunnableQaCheck(settings = {}) {
+    const qaChecks = settings?.ai?.public?.qaChecks
+
+    return hasAnyProgrammaticQaCheckEnabled(qaChecks) ||
+        (isAiSettingEnabled(settings) && hasAnyAiQaCheckEnabled(qaChecks))
+}

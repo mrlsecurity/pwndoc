@@ -200,6 +200,59 @@ module.exports = function(request, app) {
             expect(response.status).toBe(422);
         });
 
+        it('should still run programmatic-only QA checks when AI integration is disabled', async () => {
+            await Settings.findOneAndUpdate({}, {
+                $set: {
+                    'ai.public.enabled': false,
+                    'ai.public.qaChecks': {
+                        completeness: true,
+                        references: false,
+                        imageCaptions: false,
+                        duplicates: false,
+                        aiDuplicates: false,
+                        aiUnlinkedTranslations: false,
+                        redaction: false,
+                        customer: false,
+                        instructions: false
+                    }
+                }
+            }, { upsert: true });
+
+            const draftVulnerability = {
+                category: 'Web',
+                details: [{
+                    locale: 'en',
+                    title: 'AI Disabled Draft Template',
+                    description: '',
+                    observation: '',
+                    remediation: ''
+                }]
+            };
+
+            const loadResponse = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', loadOnly: true, vulnerability: draftVulnerability });
+            expect(loadResponse.status).toBe(200);
+
+            const programmaticResponse = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', scope: 'programmatic', vulnerability: draftVulnerability });
+            expect(programmaticResponse.status).toBe(200);
+            expect(programmaticResponse.body.datas.mode).toBe('single');
+            expect(Array.isArray(programmaticResponse.body.datas.issues)).toBe(true);
+            expect(programmaticResponse.body.datas.issues.length).toBeGreaterThan(0);
+
+            const aiResponse = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', scope: 'ai', vulnerability: draftVulnerability });
+            expect(aiResponse.status).toBe(403);
+
+            const allResponse = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', scope: 'all', vulnerability: draftVulnerability });
+            expect(allResponse.status).toBe(403);
+        });
+
         const setProgrammaticOnlyChecks = () => Settings.findOneAndUpdate({}, {
             $set: {
                 'ai.public.enabled': true,
@@ -279,6 +332,29 @@ module.exports = function(request, app) {
             expect(rerunStatus.job.state).toBe('done');
             expect(rerunStatus.job.reused).toBe(rerunStatus.job.total);
             expect(rerunStatus.job.processed).toBe(0);
+        });
+
+        it('should still allow a programmatic-only catalog job and status polling when AI integration is disabled', async () => {
+            await setProgrammaticOnlyChecks();
+            await Settings.findOneAndUpdate({}, { $set: { 'ai.public.enabled': false } });
+
+            const statusBefore = await request(app).get('/api/ai/vulnerabilities/qa/status?locale=en')
+                .set('Cookie', [`token=JWT ${adminToken}`]);
+            expect(statusBefore.status).toBe(200);
+
+            const aiRunResponse = await request(app).post('/api/ai/vulnerabilities/qa/run')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', scope: 'all' });
+            expect(aiRunResponse.status).toBe(403);
+
+            const runResponse = await request(app).post('/api/ai/vulnerabilities/qa/run')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', scope: 'programmatic' });
+            expect(runResponse.status).toBe(200);
+
+            const status = await waitForQaJob('en');
+            expect(status.job.state).toBe('done');
+            expect(status.report.hasReport).toBe(true);
         });
 
         it('should deny the QA job endpoints without the ai-qa-all permission', async () => {
