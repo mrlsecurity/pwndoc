@@ -258,6 +258,7 @@ describe('Vulnerabilities Page', () => {
     })
 
     vi.clearAllMocks()
+    mockUserStore.isAllowed.mockImplementation(() => true)
     setupDefaultMocks()
   })
 
@@ -601,6 +602,24 @@ describe('Vulnerabilities Page', () => {
   })
 
   describe('Router-driven navigation', () => {
+    it('shows only one separator before close for a read-only user', async () => {
+      mockUserStore.isAllowed.mockImplementation((permission) => permission === 'vulnerabilities:read')
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+      await router.isReady()
+
+      const wrapper = createWrapper({
+        stubs: {
+          'q-bar': { template: '<div><slot /></div>' },
+          'q-separator': { template: '<div data-testid="toolbar-separator" />' }
+        }
+      })
+      await flushPromises()
+
+      const header = wrapper.get('[data-testid="vulnerability-edit-pane"] > div')
+      expect(header.findAll('[data-testid="toolbar-separator"]')).toHaveLength(1)
+      expect(header.find('[data-testid="edit-vulnerability-close"]').exists()).toBe(true)
+    })
+
     it('pushes the vuln id to the URL on select instead of opening directly', async () => {
       const wrapper = createWrapper()
       await flushPromises()

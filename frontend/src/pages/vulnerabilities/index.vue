@@ -726,7 +726,12 @@
                             {{ $t('tooltip.vulnerabilityQa') }}
                         </q-tooltip>
                     </q-btn>
-                    <q-separator vertical inset class="q-mx-md" />
+                    <q-separator
+                    v-if="aiQaEnabled && vulnerabilityId && (userStore.isAllowed('vulnerabilities:delete') || userStore.isAllowed('vulnerabilities:update'))"
+                    vertical
+                    inset
+                    class="q-mx-md"
+                    />
                     <q-btn
                     v-if="userStore.isAllowed('vulnerabilities:delete')"
                     color="negative"
