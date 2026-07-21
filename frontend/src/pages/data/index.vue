@@ -108,8 +108,10 @@ export default {
         },
 
         showQualityAssurance() {
-            return this.$settings?.ai?.public?.enabled !== false &&
-                userStore.isAllowed('ai:qa-instructions:read')
+            // Not gated on ai.public.enabled: the built-in QA checks run even when AI
+            // integration is disabled, so admins still need to reach this page to
+            // configure them. The AI-only checks show a "disabled" banner in-page.
+            return userStore.isAllowed('ai:qa-instructions:read')
         },
 
         isDesktop() {

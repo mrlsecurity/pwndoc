@@ -5,9 +5,9 @@ import { useUserStore } from '@/stores/user';
 import { $t } from '@/boot/i18n';
 import AiFieldHelper from '@/services/ai-field-helper';
 import {
-    QA_PROGRAMMATIC_CHECK_KEYS,
-    QA_AI_CHECK_KEYS
-} from '@/services/qa-checks';
+    defaultMarkdownInstructions,
+    serializeMarkdownInstructions
+} from '@/pages/data/ai-integration-shared';
 
 const OUTPUT_TYPE_LABEL_KEYS = {
     html: 'aiIntegration.prompts.outputTypeHtml',
@@ -60,76 +60,6 @@ const TREE_PARENT_KEYS = TREE_PARENT_CONFIGS.map((config) => config.key);
 
 const userStore = useUserStore();
 
-const defaultMarkdownInstructions = () => ({
-    delivery: 'inline',
-    content: '',
-    bedrockPromptCache: {
-        cacheReference: '',
-        region: ''
-    }
-});
-
-const defaultQaChecks = () => ({
-    completeness: true,
-    references: true,
-    imageCaptions: true,
-    duplicates: true,
-    aiDuplicates: true,
-    aiUnlinkedTranslations: true,
-    redaction: true,
-    customer: true,
-    instructions: true
-});
-
-const QA_CHECK_I18N_KEYS = {
-    completeness: 'checkCompleteness',
-    references: 'checkReferences',
-    imageCaptions: 'checkImageCaptions',
-    duplicates: 'checkDuplicates',
-    aiDuplicates: 'checkAiDuplicates',
-    aiUnlinkedTranslations: 'checkAiUnlinkedTranslations',
-    redaction: 'checkRedaction',
-    customer: 'checkCustomer',
-    instructions: 'checkInstructions'
-};
-
-const QA_CHECK_ICONS = {
-    completeness: 'fact_check',
-    references: 'link',
-    imageCaptions: 'image',
-    duplicates: 'content_copy',
-    aiDuplicates: 'auto_awesome',
-    aiUnlinkedTranslations: 'language',
-    redaction: 'edit_note',
-    customer: 'business',
-    instructions: 'checklist'
-};
-
-// Mirrors what the backend actually scopes each check to (backend/src/lib/ai-qa.js and
-// ai-vuln-qa.js): only the duplicate-detection checks are vulnerability-database-only,
-// everything else runs against both audit reports and vulnerability templates.
-const QA_CHECK_SCOPES = {
-    completeness: ['audit', 'vulnerability'],
-    references: ['audit', 'vulnerability'],
-    imageCaptions: ['audit', 'vulnerability'],
-    duplicates: ['vulnerability'],
-    aiDuplicates: ['vulnerability'],
-    aiUnlinkedTranslations: ['vulnerability'],
-    redaction: ['audit', 'vulnerability'],
-    customer: ['audit', 'vulnerability'],
-    instructions: ['audit', 'vulnerability']
-};
-
-const buildQaCheckOptions = (keys) => {
-    return keys.map((key) => ({
-        key: key,
-        label: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Label`),
-        description: $t(`aiIntegration.qa.${QA_CHECK_I18N_KEYS[key]}Description`),
-        icon: QA_CHECK_ICONS[key],
-        scopes: QA_CHECK_SCOPES[key] || []
-    }));
-};
-
 const toMappingKey = (mapping) => `${mapping.entityType}:${mapping.fieldKey}`;
 
 // Leaf node of the navigation tree a field prompt belongs to.
@@ -156,27 +86,6 @@ const serializeGlobalPrompts = (prompts = []) => {
     }));
 };
 
-const serializeMarkdownInstructions = (guidelines = {}) => ({
-    delivery: String(guidelines.delivery || 'inline'),
-    content: String(guidelines.content || ''),
-    bedrockPromptCache: {
-        cacheReference: String(guidelines.bedrockPromptCache?.cacheReference || ''),
-        region: String(guidelines.bedrockPromptCache?.region || '')
-    }
-});
-
-const serializeQaChecks = (checks = {}) => ({
-    completeness: checks.completeness !== false,
-    references: checks.references !== false,
-    imageCaptions: checks.imageCaptions !== false,
-    duplicates: checks.duplicates !== false,
-    aiDuplicates: checks.aiDuplicates !== false,
-    aiUnlinkedTranslations: checks.aiUnlinkedTranslations !== false,
-    redaction: checks.redaction !== false,
-    customer: checks.customer !== false,
-    instructions: checks.instructions !== false
-});
-
 const createGlobalPromptId = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
         return crypto.randomUUID();
@@ -188,16 +97,8 @@ export default {
         draggable
     },
 
-    props: {
-        section: {
-            type: String,
-            default: 'writing',
-            validator: (value) => ['writing', 'qa'].includes(value)
-        }
-    },
-
     beforeRouteLeave(to, from, next) {
-        if (this.editorDirty || this.hasGuidelineChanges || this.hasQaChanges) {
+        if (this.editorDirty || this.hasGuidelineChanges) {
             Dialog.create({
                 title: $t('msg.thereAreUnsavedChanges'),
                 message: $t('msg.doYouWantToLeave'),
@@ -218,27 +119,18 @@ export default {
             savingPrompts: false,
             savingEditor: false,
             savingGuidelines: false,
-            savingQaSettings: false,
             canEditPrompts: userStore.isAllowed('ai:prompts:update'),
             canEditGuidelines: userStore.isAllowed('ai:redaction-guidelines:update'),
-            canEditQa: userStore.isAllowed('ai:qa-instructions:update'),
             canReadPrompts: userStore.isAllowed('ai:prompts:read'),
             canReadGuidelines: userStore.isAllowed('ai:redaction-guidelines:read'),
-            canReadQa: userStore.isAllowed('ai:qa-instructions:read'),
             aiEnabled: true,
             promptMappings: [],
             globalPrompts: [],
             redactionGuidelines: defaultMarkdownInstructions(),
-            qaInstructions: defaultMarkdownInstructions(),
-            qaChecks: defaultQaChecks(),
             writingTab: 'prompts',
-            qaInstructionsExpanded: false,
             promptToggleSaveKey: null,
             promptToggleSaveState: null,
             promptToggleSaveTimer: null,
-            qaToggleSaveKey: null,
-            qaToggleSaveState: null,
-            qaToggleSaveTimer: null,
             treeFilter: '',
             tableFilter: '',
             selectedNode: 'generic',
@@ -249,9 +141,7 @@ export default {
                 rowsPerPage: 0
             },
             orig: {
-                redactionGuidelines: serializeMarkdownInstructions(),
-                qaInstructions: serializeMarkdownInstructions(),
-                qaChecks: serializeQaChecks()
+                redactionGuidelines: serializeMarkdownInstructions()
             }
         };
     },
@@ -263,8 +153,6 @@ export default {
     beforeUnmount: function() {
         if (this.promptToggleSaveTimer)
             clearTimeout(this.promptToggleSaveTimer);
-        if (this.qaToggleSaveTimer)
-            clearTimeout(this.qaToggleSaveTimer);
     },
 
     watch: {
@@ -281,21 +169,11 @@ export default {
 
     computed: {
         pageTitle: function() {
-            return this.section === 'qa' ? this.$t('aiIntegration.pageTitleQa') : this.$t('aiIntegration.pageTitleWriting');
+            return this.$t('aiIntegration.pageTitleWriting');
         },
 
         canViewPage: function() {
-            if (this.section === 'qa')
-                return this.canReadQa;
             return this.canReadPrompts || this.canReadGuidelines;
-        },
-
-        programmaticQaCheckOptions: function() {
-            return buildQaCheckOptions(QA_PROGRAMMATIC_CHECK_KEYS);
-        },
-
-        aiQaCheckOptions: function() {
-            return buildQaCheckOptions(QA_AI_CHECK_KEYS);
         },
 
         // Tree leaves with total field count.
@@ -522,30 +400,6 @@ export default {
             return JSON.stringify(
                 serializeMarkdownInstructions(this.redactionGuidelines)
             ) !== JSON.stringify(this.orig.redactionGuidelines);
-        },
-
-        hasQaInstructionChanges: function() {
-            return JSON.stringify(
-                serializeMarkdownInstructions(this.qaInstructions)
-            ) !== JSON.stringify(this.orig.qaInstructions);
-        },
-
-        hasQaCheckChanges: function() {
-            return JSON.stringify(
-                serializeQaChecks(this.qaChecks)
-            ) !== JSON.stringify(this.orig.qaChecks);
-        },
-
-        hasQaChanges: function() {
-            return this.hasQaInstructionChanges || this.hasQaCheckChanges;
-        },
-
-        qaDirtyCount: function() {
-            const checkKeys = [...QA_PROGRAMMATIC_CHECK_KEYS, ...QA_AI_CHECK_KEYS];
-            let count = checkKeys.filter((key) => this.qaChecks[key] !== this.orig.qaChecks[key]).length;
-            if (this.hasQaInstructionChanges)
-                count++;
-            return count;
         }
     },
 
@@ -570,8 +424,8 @@ export default {
                 this.selectedGenericIds = this.selectedGenericIds.filter((id) => validIds.has(id));
             }
 
-            // Prompt saves return the full admin payload; skip the other sections so an
-            // in-progress guidelines/QA edit in another tab is not silently overwritten.
+            // Prompt saves return the full admin payload; skip the guidelines section so an
+            // in-progress guidelines edit is not silently overwritten.
             if (promptsOnly)
                 return;
 
@@ -586,24 +440,6 @@ export default {
                     }
                 };
                 this.orig.redactionGuidelines = serializeMarkdownInstructions(this.redactionGuidelines);
-            }
-
-            if (payload.qaInstructions) {
-                const qaInstructions = payload.qaInstructions;
-                this.qaInstructions = {
-                    delivery: qaInstructions.delivery || 'inline',
-                    content: String(qaInstructions.content || ''),
-                    bedrockPromptCache: {
-                        cacheReference: String(qaInstructions.bedrockPromptCache?.cacheReference || ''),
-                        region: String(qaInstructions.bedrockPromptCache?.region || '')
-                    }
-                };
-                this.orig.qaInstructions = serializeMarkdownInstructions(this.qaInstructions);
-            }
-
-            if (payload.qaChecks) {
-                this.qaChecks = serializeQaChecks(payload.qaChecks);
-                this.orig.qaChecks = serializeQaChecks(this.qaChecks);
             }
         },
 
@@ -623,7 +459,7 @@ export default {
             })
             .finally(() => {
                 this.loading = false;
-                if (this.section === 'writing' && !this.canReadPrompts && this.canReadGuidelines)
+                if (!this.canReadPrompts && this.canReadGuidelines)
                     this.writingTab = 'guidelines';
             });
         },
@@ -657,10 +493,6 @@ export default {
         outputTypeLabel: function(outputType) {
             const key = OUTPUT_TYPE_LABEL_KEYS[outputType];
             return key ? this.$t(key) : outputType;
-        },
-
-        scopeLabel: function(scope) {
-            return scope === 'audit' ? this.$t('aiIntegration.qa.scopeAudit') : this.$t('aiIntegration.qa.scopeVulnerability');
         },
 
         /* ===== Immediate persistence helpers ===== */
@@ -1025,7 +857,7 @@ export default {
             );
         },
 
-        /* ===== Guidelines / QA (unchanged behavior) ===== */
+        /* ===== Redaction guidelines ===== */
 
         saveRedactionGuidelines: function() {
             if (!this.canEditGuidelines || this.savingGuidelines)
@@ -1054,95 +886,6 @@ export default {
             })
             .finally(() => {
                 this.savingGuidelines = false;
-            });
-        },
-
-        refreshPublicSettings: async function() {
-            if (this.$settings?.refresh)
-                await this.$settings.refresh();
-        },
-
-        clearQaToggleSaveStatus: function() {
-            if (this.qaToggleSaveTimer)
-                clearTimeout(this.qaToggleSaveTimer);
-            this.qaToggleSaveTimer = null;
-            this.qaToggleSaveKey = null;
-            this.qaToggleSaveState = null;
-        },
-
-        toggleQaCheck: function(key, enabled) {
-            if (!this.canEditQa || this.savingQaSettings)
-                return;
-
-            const previous = this.qaChecks[key];
-            this.qaChecks[key] = enabled;
-            this.savingQaSettings = true;
-            this.clearQaToggleSaveStatus();
-            this.qaToggleSaveKey = key;
-            this.qaToggleSaveState = 'saving';
-
-            return DataService.updateAiIntegration({
-                qaChecks: serializeQaChecks(this.qaChecks)
-            })
-            .then(async (data) => {
-                const returnedChecks = data.data.datas?.qaChecks;
-                this.qaChecks = returnedChecks ? serializeQaChecks(returnedChecks) : serializeQaChecks(this.qaChecks);
-                this.orig.qaChecks = serializeQaChecks(this.qaChecks);
-                await this.refreshPublicSettings();
-                this.qaToggleSaveState = 'saved';
-                this.qaToggleSaveTimer = setTimeout(() => {
-                    this.clearQaToggleSaveStatus();
-                }, 2000);
-            })
-            .catch((err) => {
-                this.qaChecks[key] = previous;
-                this.clearQaToggleSaveStatus();
-                Notify.create({
-                    message: err.response?.data?.datas || this.$t('aiIntegration.qa.saveFailed'),
-                    color: 'negative',
-                    textColor: 'white',
-                    position: 'top-right'
-                });
-            })
-            .finally(() => {
-                this.savingQaSettings = false;
-            });
-        },
-
-        saveQaSettings: function() {
-            if (!this.canEditQa || this.savingQaSettings || !this.hasQaChanges)
-                return;
-
-            this.savingQaSettings = true;
-            const payload = {};
-
-            if (this.hasQaCheckChanges)
-                payload.qaChecks = serializeQaChecks(this.qaChecks);
-
-            if (this.hasQaInstructionChanges)
-                payload.qaInstructions = serializeMarkdownInstructions(this.qaInstructions);
-
-            DataService.updateAiIntegration(payload)
-            .then(async (data) => {
-                this.applyPayload(data.data.datas || {});
-                await this.refreshPublicSettings();
-                Notify.create({
-                    message: this.$t('aiIntegration.qa.saveSuccess'),
-                    color: 'positive',
-                    textColor: 'white',
-                    position: 'top-right'
-                });
-            })
-            .catch((err) => {
-                Notify.create({
-                    message: err.response?.data?.datas || this.$t('aiIntegration.qa.saveFailed'),
-                    color: 'negative',
-                    textColor: 'white',
-                    position: 'top-right'
-                });
-            })
-            .finally(() => {
-                this.savingQaSettings = false;
             });
         }
     }

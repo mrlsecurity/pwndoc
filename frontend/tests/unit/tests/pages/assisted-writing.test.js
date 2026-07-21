@@ -4,7 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 
-// Must mock the user store before importing the page - ai-integration.js calls
+// Must mock the user store before importing the page - assisted-writing.js calls
 // useUserStore() at module scope (`const userStore = useUserStore();`).
 const { mockUserStore } = vi.hoisted(() => ({
   mockUserStore: {
@@ -35,11 +35,11 @@ vi.mock('@/services/data', () => ({
   }
 }))
 
-import AiIntegrationPage from '@/pages/data/ai-integration/index.vue'
+import AssistedWritingPage from '@/pages/data/assisted-writing/index.vue'
 import DataService from '@/services/data'
 import { Notify, Dialog } from 'quasar'
 
-describe('AI Integration Page', () => {
+describe('Assisted Writing Page', () => {
   let router, pinia, i18n
 
   const mockPromptMappings = () => ([
@@ -136,7 +136,7 @@ describe('AI Integration Page', () => {
     router = createRouter({
       history: createWebHistory(),
       routes: [
-        { path: '/data/ai-integration', name: 'ai-integration', component: AiIntegrationPage }
+        { path: '/data/assisted-writing', name: 'assisted-writing', component: AssistedWritingPage }
       ]
     })
 
@@ -156,8 +156,8 @@ describe('AI Integration Page', () => {
   })
 
   const createWrapper = (options = {}) => {
-    return mount(AiIntegrationPage, {
-      props: { section: 'writing', ...(options.props || {}) },
+    return mount(AssistedWritingPage, {
+      props: { ...(options.props || {}) },
       global: {
         plugins: [pinia, router, i18n],
         stubs: {
@@ -220,13 +220,11 @@ describe('AI Integration Page', () => {
       expect(wrapper.vm.selectedNode).toBe('generic')
     })
 
-    it('should render QA in the same open page layout as assisted writing', async () => {
-      const wrapper = createWrapper({ props: { section: 'qa' } })
+    it('should render the assisted writing title', async () => {
+      const wrapper = createWrapper()
       await wrapper_flushPromises()
 
-      expect(wrapper.find('.qa-settings-card').exists()).toBe(false)
-      expect(wrapper.text()).toContain('aiIntegration.pageTitleQa')
-      expect(wrapper.text()).toContain('aiIntegration.qa.description')
+      expect(wrapper.text()).toContain('aiIntegration.pageTitleWriting')
     })
   })
 
@@ -731,112 +729,6 @@ describe('AI Integration Page', () => {
     })
   })
 
-  describe('QA checks', () => {
-    it('should label check scopes for audit-vs-vulnerability', () => {
-      const wrapper = createWrapper()
-      expect(wrapper.vm.scopeLabel('audit')).toBe('aiIntegration.qa.scopeAudit')
-      expect(wrapper.vm.scopeLabel('vulnerability')).toBe('aiIntegration.qa.scopeVulnerability')
-    })
-
-    it('should mark only duplicate-detection checks as vulnerability-only', async () => {
-      const wrapper = createWrapper()
-      await wrapper_flushPromises()
-
-      const byKey = Object.fromEntries(
-        [...wrapper.vm.programmaticQaCheckOptions, ...wrapper.vm.aiQaCheckOptions].map((check) => [check.key, check.scopes])
-      )
-
-      expect(byKey.duplicates).toEqual(['vulnerability'])
-      expect(byKey.aiDuplicates).toEqual(['vulnerability'])
-      expect(byKey.aiUnlinkedTranslations).toEqual(['vulnerability'])
-      expect(byKey.completeness).toEqual(['audit', 'vulnerability'])
-      expect(byKey.redaction).toEqual(['audit', 'vulnerability'])
-      expect(byKey.customer).toEqual(['audit', 'vulnerability'])
-      expect(byKey.instructions).toEqual(['audit', 'vulnerability'])
-    })
-
-    it('should save a toggled check immediately without overwriting instruction edits', async () => {
-      const response = mockPayload()
-      response.qaChecks.completeness = false
-      DataService.updateAiIntegration.mockResolvedValueOnce({ data: { datas: response } })
-      const refresh = vi.fn().mockResolvedValue()
-      const wrapper = createWrapper({ props: { section: 'qa' }, mocks: { $settings: { refresh } } })
-      await wrapper_flushPromises()
-
-      wrapper.vm.qaInstructions.content = 'Unsaved instruction edit.'
-      vi.useFakeTimers()
-      const save = wrapper.vm.toggleQaCheck('completeness', false)
-
-      expect(wrapper.vm.qaToggleSaveKey).toBe('completeness')
-      expect(wrapper.vm.qaToggleSaveState).toBe('saving')
-      await save
-
-      expect(DataService.updateAiIntegration).toHaveBeenCalledWith({
-        qaChecks: expect.objectContaining({ completeness: false })
-      })
-      expect(wrapper.vm.qaChecks.completeness).toBe(false)
-      expect(wrapper.vm.orig.qaChecks.completeness).toBe(false)
-      expect(wrapper.vm.qaInstructions.content).toBe('Unsaved instruction edit.')
-      expect(wrapper.vm.qaToggleSaveState).toBe('saved')
-      expect(refresh).toHaveBeenCalled()
-
-      vi.advanceTimersByTime(1999)
-      expect(wrapper.vm.qaToggleSaveKey).toBe('completeness')
-      vi.advanceTimersByTime(1)
-      expect(wrapper.vm.qaToggleSaveKey).toBe(null)
-      expect(wrapper.vm.qaToggleSaveState).toBe(null)
-      vi.useRealTimers()
-    })
-
-    it('should roll back a toggled check when automatic saving fails', async () => {
-      DataService.updateAiIntegration.mockRejectedValueOnce({ response: { data: { datas: 'Save failed' } } })
-      const wrapper = createWrapper({ props: { section: 'qa' } })
-      await wrapper_flushPromises()
-
-      wrapper.vm.toggleQaCheck('completeness', false)
-      await wrapper_flushPromises()
-
-      expect(wrapper.vm.qaChecks.completeness).toBe(true)
-      expect(wrapper.vm.qaToggleSaveKey).toBe(null)
-      expect(wrapper.vm.qaToggleSaveState).toBe(null)
-      expect(Notify.create).toHaveBeenCalledWith(expect.objectContaining({ message: 'Save failed' }))
-    })
-
-    it('should render toggle save feedback without the old save footer', async () => {
-      let resolveSave
-      DataService.updateAiIntegration.mockReturnValueOnce(new Promise((resolve) => {
-        resolveSave = resolve
-      }))
-      const wrapper = createWrapper({
-        props: { section: 'qa' },
-        stubs: {
-          'q-card': { template: '<div><slot /></div>' },
-          'q-card-section': { template: '<div><slot /></div>' }
-        }
-      })
-      await wrapper_flushPromises()
-
-      wrapper.vm.toggleQaCheck('completeness', false)
-      await wrapper.vm.$nextTick()
-
-      const savingStatus = wrapper.find('.qa-toggle-save-status')
-      expect(savingStatus.classes()).toContain('text-positive')
-      expect(savingStatus.text()).toBe('')
-      expect(savingStatus.find('q-spinner-stub').exists()).toBe(true)
-      expect(wrapper.html().indexOf('qa-toggle-save-status')).toBeLessThan(wrapper.html().indexOf('q-toggle-stub'))
-      expect(wrapper.find('.ai-integration-save-bar').exists()).toBe(false)
-
-      const response = mockPayload()
-      response.qaChecks.completeness = false
-      resolveSave({ data: { datas: response } })
-      await wrapper_flushPromises()
-
-      const savedStatus = wrapper.find('.qa-toggle-save-status')
-      expect(savedStatus.text()).toBe('aiIntegration.qa.saved')
-      expect(savedStatus.find('q-icon-stub').attributes('name')).toBe('check_circle')
-    })
-  })
-
   describe('beforeRouteLeave', () => {
     it('should call next() immediately when there are no unsaved changes', async () => {
       const wrapper = createWrapper()
@@ -881,20 +773,6 @@ describe('AI Integration Page', () => {
       await wrapper_flushPromises()
 
       wrapper.vm.redactionGuidelines.content = 'New redaction guidance.'
-      await wrapper.vm.$nextTick()
-
-      const next = vi.fn()
-      wrapper.vm.$options.beforeRouteLeave.call(wrapper.vm, { name: 'to' }, { name: 'from' }, next)
-
-      expect(Dialog.create).toHaveBeenCalledTimes(1)
-      expect(next).not.toHaveBeenCalled()
-    })
-
-    it('should open a confirm dialog when there are unsaved QA changes', async () => {
-      const wrapper = createWrapper()
-      await wrapper_flushPromises()
-
-      wrapper.vm.qaChecks.completeness = false
       await wrapper.vm.$nextTick()
 
       const next = vi.fn()

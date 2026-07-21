@@ -1229,6 +1229,10 @@ export default {
         qa: {
             description: 'Configure which automated checks run when reviewing audit reports and vulnerability templates.',
             readOnly: 'Read-only: you do not have permission to update QA settings.',
+            aiChecksDisabledChip: 'Disabled',
+            aiChecksDisabledBefore: 'AI integration is disabled. Enable it in',
+            aiChecksDisabledLink: 'Settings',
+            aiChecksDisabledAfter: 'to run AI-powered checks.',
             instructionsTitle: 'QA instructions',
             instructionsDescription: 'Organization-wide QA checklist provided to the AI reviewer. Use plain text or Markdown to define additional required sections, fields, and report rules beyond the minimum completeness check.',
             instructionsLabel: 'QA instructions',
