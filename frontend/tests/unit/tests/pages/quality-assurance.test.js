@@ -44,7 +44,7 @@ describe('Quality Assurance Page', () => {
 
   const mockPayload = () => ({
     aiEnabled: true,
-    qaInstructions: { delivery: 'inline', content: '', bedrockPromptCache: { cacheReference: '', region: '' } },
+    qaInstructions: { content: '' },
     qaChecks: {
       completeness: true,
       references: true,

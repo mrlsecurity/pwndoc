@@ -9,12 +9,7 @@ module.exports = function(request, app) {
       })
 
       const defaultAiDeliverySettings = () => ({
-        "delivery": "inline",
-        "content": "",
-        "bedrockPromptCache": {
-          "cacheReference": "",
-          "region": ""
-        }
+        "content": ""
       })
 
       const defaultAiPublicSettings = {

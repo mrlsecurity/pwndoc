@@ -439,20 +439,9 @@
                             :input-style="{ fontFamily: 'monospace', minHeight: '360px' }"
                             :label="$t('aiIntegration.guidelines.label')"
                             v-model="redactionGuidelines.content"
-                            :readonly="!canEditGuidelines || redactionGuidelines.delivery !== 'inline'"
+                            :readonly="!canEditGuidelines"
                             :hint="$t('aiIntegration.guidelines.hint')"
                             />
-                            <q-banner
-                            v-if="redactionGuidelines.delivery === 'bedrock_prompt_cache'"
-                            dense
-                            class="bg-blue-1 text-blue-10"
-                            >
-                                {{ $t('aiIntegration.guidelines.bedrockDelivery') }}
-                                {{ $t('aiIntegration.guidelines.cacheReference') }}: <code>{{ redactionGuidelines.bedrockPromptCache.cacheReference || $t('aiIntegration.guidelines.notSet') }}</code>
-                                <span v-if="redactionGuidelines.bedrockPromptCache.region">
-                                    ({{ redactionGuidelines.bedrockPromptCache.region }})
-                                </span>
-                            </q-banner>
                         </div>
 
                         <q-card-actions align="right">
@@ -461,7 +450,7 @@
                             unelevated
                             no-caps
                             :label="$t('aiIntegration.guidelines.save')"
-                            :disable="!canEditGuidelines || !hasGuidelineChanges || redactionGuidelines.delivery !== 'inline'"
+                            :disable="!canEditGuidelines || !hasGuidelineChanges"
                             :loading="savingGuidelines"
                             @click="saveRedactionGuidelines()"
                             />

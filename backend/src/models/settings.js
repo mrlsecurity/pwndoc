@@ -70,20 +70,10 @@ const SettingSchema = new Schema({
             enabled: {type: Boolean, default: false},
             defaultProvider: {type: String, enum: AI_PROVIDERS, default: AI_DEFAULT_PROVIDER},
             redactionGuidelines: {
-                delivery: {type: String, enum: ['inline', 'bedrock_prompt_cache'], default: 'inline'},
-                content: {type: String, default: ''},
-                bedrockPromptCache: {
-                    cacheReference: {type: String, default: ''},
-                    region: {type: String, default: ''}
-                }
+                content: {type: String, default: ''}
             },
             qaInstructions: {
-                delivery: {type: String, enum: ['inline', 'bedrock_prompt_cache'], default: 'inline'},
-                content: {type: String, default: ''},
-                bedrockPromptCache: {
-                    cacheReference: {type: String, default: ''},
-                    region: {type: String, default: ''}
-                }
+                content: {type: String, default: ''}
             },
             qaChecks: {
                 completeness: {type: Boolean, default: true},

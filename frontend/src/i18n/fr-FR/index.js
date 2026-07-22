@@ -634,9 +634,6 @@ export default {
             readOnly: 'Read-only: you do not have permission to update writing guidelines.',
             label: 'Writing guidelines',
             hint: 'Examples: tone, terminology, data redaction rules, forbidden disclosures, report structure conventions.',
-            bedrockDelivery: 'Delivery is configured as AWS Bedrock prompt cache.',
-            cacheReference: 'Cache reference',
-            notSet: 'not set',
             save: 'Save guidelines',
             saveSuccess: 'Writing guidelines updated successfully',
             saveFailed: 'Failed to update writing guidelines'

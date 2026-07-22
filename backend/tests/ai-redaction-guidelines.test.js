@@ -8,9 +8,8 @@ const {
 
 module.exports = function() {
     describe('AI redaction guidelines', () => {
-        it('should normalize inline delivery by default', () => {
+        it('should normalize guideline content', () => {
             const normalized = normalizeRedactionGuidelines({ content: 'Never include client names.' });
-            expect(normalized.delivery).toBe('inline');
             expect(normalized.content).toBe('Never include client names.');
         });
 
@@ -19,7 +18,6 @@ module.exports = function() {
                 ai: {
                     public: {
                         redactionGuidelines: {
-                            delivery: 'inline',
                             content: 'Use neutral wording.'
                         }
                     }
@@ -34,7 +32,6 @@ module.exports = function() {
                 ai: {
                     public: {
                         redactionGuidelines: {
-                            delivery: 'inline',
                             content: 'Redact credentials.'
                         }
                     }
@@ -46,17 +43,20 @@ module.exports = function() {
             expect(systemPrompt).toContain('Redact credentials.');
         });
 
-        it('should validate bedrock cache delivery payloads', () => {
+        it('should validate inline guideline payloads', () => {
             const validation = validateRedactionGuidelinesPayload({
-                delivery: 'bedrock_prompt_cache',
-                content: '',
-                bedrockPromptCache: {
-                    cacheReference: 'cache-123',
-                    region: 'us-east-1'
-                }
+                content: 'Use neutral wording.'
             });
 
             expect(validation.valid).toBe(true);
+        });
+
+        it('should reject non-string guideline content', () => {
+            const validation = validateRedactionGuidelinesPayload({
+                content: 42
+            });
+
+            expect(validation.valid).toBe(false);
         });
     });
 };

@@ -7,9 +7,8 @@ const {
 
 module.exports = function() {
     describe('AI QA instructions', () => {
-        it('should normalize inline delivery by default', () => {
+        it('should normalize instruction content', () => {
             const normalized = normalizeQaInstructions({ content: 'Verify executive summary tone.' });
-            expect(normalized.delivery).toBe('inline');
             expect(normalized.content).toBe('Verify executive summary tone.');
         });
 
@@ -18,7 +17,6 @@ module.exports = function() {
                 ai: {
                     public: {
                         qaInstructions: {
-                            delivery: 'inline',
                             content: 'Check customer naming consistency.'
                         }
                     }
@@ -28,17 +26,20 @@ module.exports = function() {
             expect(getQaInstructionsText(resolved)).toBe('Check customer naming consistency.');
         });
 
-        it('should validate bedrock cache delivery payloads', () => {
+        it('should validate inline instruction payloads', () => {
             const validation = validateQaInstructionsPayload({
-                delivery: 'bedrock_prompt_cache',
-                content: '',
-                bedrockPromptCache: {
-                    cacheReference: 'qa-cache-123',
-                    region: 'us-east-1'
-                }
+                content: 'Check customer naming consistency.'
             });
 
             expect(validation.valid).toBe(true);
+        });
+
+        it('should reject non-string instruction content', () => {
+            const validation = validateQaInstructionsPayload({
+                content: 42
+            });
+
+            expect(validation.valid).toBe(false);
         });
     });
 };

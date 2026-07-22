@@ -214,20 +214,9 @@
                             :input-style="{ fontFamily: 'monospace', minHeight: '360px' }"
                             :label="$t('aiIntegration.qa.instructionsLabel')"
                             v-model="qaInstructions.content"
-                            :readonly="!canEditQa || qaInstructions.delivery !== 'inline'"
+                            :readonly="!canEditQa"
                             :hint="$t('aiIntegration.qa.instructionsHint')"
                             />
-                            <q-banner
-                            v-if="qaInstructions.delivery === 'bedrock_prompt_cache'"
-                            dense
-                            class="bg-blue-1 text-blue-10"
-                            >
-                                {{ $t('aiIntegration.guidelines.bedrockDelivery') }}
-                                {{ $t('aiIntegration.guidelines.cacheReference') }}: <code>{{ qaInstructions.bedrockPromptCache.cacheReference || $t('aiIntegration.guidelines.notSet') }}</code>
-                                <span v-if="qaInstructions.bedrockPromptCache.region">
-                                    ({{ qaInstructions.bedrockPromptCache.region }})
-                                </span>
-                            </q-banner>
                                         </div>
                                         <div class="row justify-end q-mt-md">
                                             <q-btn
@@ -235,7 +224,7 @@
                                             unelevated
                                             no-caps
                                             :label="$t('aiIntegration.qa.saveInstructions')"
-                                            :disable="!canEditQa || !hasQaInstructionChanges || qaInstructions.delivery !== 'inline'"
+                                            :disable="!canEditQa || !hasQaInstructionChanges"
                                             :loading="savingQaSettings"
                                             @click="saveQaSettings()"
                                             />

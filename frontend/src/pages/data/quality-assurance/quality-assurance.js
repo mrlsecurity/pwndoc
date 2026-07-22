@@ -175,12 +175,7 @@ export default {
             if (payload.qaInstructions) {
                 const qaInstructions = payload.qaInstructions;
                 this.qaInstructions = {
-                    delivery: qaInstructions.delivery || 'inline',
-                    content: String(qaInstructions.content || ''),
-                    bedrockPromptCache: {
-                        cacheReference: String(qaInstructions.bedrockPromptCache?.cacheReference || ''),
-                        region: String(qaInstructions.bedrockPromptCache?.region || '')
-                    }
+                    content: String(qaInstructions.content || '')
                 };
                 this.orig.qaInstructions = serializeMarkdownInstructions(this.qaInstructions);
             }

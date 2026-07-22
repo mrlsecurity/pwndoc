@@ -114,8 +114,8 @@ describe('Assisted Writing Page', () => {
     aiEnabled: true,
     promptMappings: mockPromptMappings(),
     globalPrompts: mockGlobalPrompts(),
-    redactionGuidelines: { delivery: 'inline', content: '', bedrockPromptCache: { cacheReference: '', region: '' } },
-    qaInstructions: { delivery: 'inline', content: '', bedrockPromptCache: { cacheReference: '', region: '' } },
+    redactionGuidelines: { content: '' },
+    qaInstructions: { content: '' },
     qaChecks: {
       completeness: true,
       references: true,

@@ -5,19 +5,9 @@
 // the two in sync.
 
 export const defaultMarkdownInstructions = () => ({
-    delivery: 'inline',
-    content: '',
-    bedrockPromptCache: {
-        cacheReference: '',
-        region: ''
-    }
+    content: ''
 });
 
 export const serializeMarkdownInstructions = (guidelines = {}) => ({
-    delivery: String(guidelines.delivery || 'inline'),
-    content: String(guidelines.content || ''),
-    bedrockPromptCache: {
-        cacheReference: String(guidelines.bedrockPromptCache?.cacheReference || ''),
-        region: String(guidelines.bedrockPromptCache?.region || '')
-    }
+    content: String(guidelines.content || '')
 });

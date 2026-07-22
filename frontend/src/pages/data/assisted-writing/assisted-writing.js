@@ -432,12 +432,7 @@ export default {
             if (payload.redactionGuidelines) {
                 const guidelines = payload.redactionGuidelines;
                 this.redactionGuidelines = {
-                    delivery: guidelines.delivery || 'inline',
-                    content: String(guidelines.content || ''),
-                    bedrockPromptCache: {
-                        cacheReference: String(guidelines.bedrockPromptCache?.cacheReference || ''),
-                        region: String(guidelines.bedrockPromptCache?.region || '')
-                    }
+                    content: String(guidelines.content || '')
                 };
                 this.orig.redactionGuidelines = serializeMarkdownInstructions(this.redactionGuidelines);
             }
