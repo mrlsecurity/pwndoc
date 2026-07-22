@@ -112,9 +112,9 @@ export default {
       this.closeStore()
     },
 
-    runQaScope(scope) {
+    runQaScope(scope, provider) {
       if (this.auditId)
-        this.runQa(this.auditId, scope)
+        this.runQa(this.auditId, scope, provider)
     },
 
     // `location` is the raw location string of any issue in the clicked group/finding-row —

@@ -14,7 +14,8 @@ function buildSettings() {
   return {
     ai: {
       public: {
-        defaultProvider: 'openai'
+        defaultProvider: 'openai',
+        allowedProviders: []
       },
       private: {
         openaiApiKey: '',
@@ -53,7 +54,12 @@ const messages = {
   'en-US': {
     aiIntegration: {
       provider: {
-        defaultProviderLabel: 'Default Provider',
+        defaultBadge: 'Default',
+        setDefaultLabel: 'Set as default provider',
+        setDefaultHint: 'Used when a request does not specify a provider.',
+        configuredHint: 'This provider is configured',
+        allowUsersLabel: 'Allow users to select this provider',
+        allowUsersHint: 'When enabled, users can pick this provider.',
         openaiBaseUrl: 'OpenAI Base URL',
         openaiModel: 'OpenAI Model',
         openaiApiKey: 'OpenAI API Key',
@@ -136,5 +142,77 @@ describe('AiProviderSettings masked secret sentinel', () => {
     const wrapper = createWrapper(settings)
 
     expect(wrapper.vm.openaiApiKeyInput).toBe('••••••••••••••••')
+  })
+})
+
+describe('AiProviderSettings configured badge', () => {
+  it('reports a provider as configured once its API key is stored', () => {
+    const settings = buildSettings()
+    settings.ai.private.anthropicApiKeyConfigured = true
+    const wrapper = createWrapper(settings)
+
+    expect(wrapper.vm.isProviderConfigured('anthropic')).toBe(true)
+    expect(wrapper.vm.isProviderConfigured('openai')).toBe(false)
+  })
+
+  it('reports bedrock configured via IAM credentials without an API key', () => {
+    const settings = buildSettings()
+    settings.ai.private.bedrockAccessKeyIdConfigured = true
+    settings.ai.private.bedrockSecretAccessKeyConfigured = true
+    const wrapper = createWrapper(settings)
+
+    expect(wrapper.vm.isProviderConfigured('bedrock')).toBe(true)
+  })
+})
+
+describe('AiProviderSettings default provider', () => {
+  it('reports which provider is the current default', () => {
+    const wrapper = createWrapper()
+
+    expect(wrapper.vm.isDefaultProvider('openai')).toBe(true)
+    expect(wrapper.vm.isDefaultProvider('anthropic')).toBe(false)
+  })
+
+  it('switches the default and drops the new default from allowedProviders', () => {
+    const settings = buildSettings()
+    settings.ai.public.allowedProviders = ['anthropic']
+    const wrapper = createWrapper(settings)
+
+    wrapper.vm.setDefaultProvider('anthropic')
+
+    expect(settings.ai.public.defaultProvider).toBe('anthropic')
+    // The new default is implicitly allowed, so it is removed from the explicit list.
+    expect(settings.ai.public.allowedProviders).not.toContain('anthropic')
+    // It is still reported as allowed (implicitly, as the default).
+    expect(wrapper.vm.isProviderAllowed('anthropic')).toBe(true)
+  })
+})
+
+describe('AiProviderSettings allow-list', () => {
+  it('always reports the default provider as allowed and locks its toggle', () => {
+    const wrapper = createWrapper()
+
+    expect(wrapper.vm.isProviderAllowed('openai')).toBe(true)
+    expect(wrapper.vm.allowToggleDisabled('openai')).toBe(true)
+  })
+
+  it('disables the allow toggle for a provider that is not configured', () => {
+    const wrapper = createWrapper()
+
+    expect(wrapper.vm.allowToggleDisabled('anthropic')).toBe(true)
+  })
+
+  it('adds and removes a configured provider from allowedProviders', () => {
+    const settings = buildSettings()
+    settings.ai.private.anthropicApiKeyConfigured = true
+    const wrapper = createWrapper(settings)
+
+    wrapper.vm.setProviderAllowed('anthropic', true)
+    expect(settings.ai.public.allowedProviders).toContain('anthropic')
+    expect(wrapper.vm.isProviderAllowed('anthropic')).toBe(true)
+
+    wrapper.vm.setProviderAllowed('anthropic', false)
+    expect(settings.ai.public.allowedProviders).not.toContain('anthropic')
+    expect(wrapper.vm.isProviderAllowed('anthropic')).toBe(false)
   })
 })

@@ -1592,11 +1592,9 @@ body.body--dark .vuln-creator-label {
 .vuln-modal-ai {
     border-left: 1px solid #e0e0e0;
     min-height: 0;
-    /* Scale with the viewport like .vuln-sidebar so the AI chat / QA panel
-       stays comfortable on large displays, but allow it to shrink (down to
-       420px) instead of being clipped when the sidebar + form floors leave
-       less room than the preferred width. */
-    flex: 0 1 clamp(420px, 32vw, 560px);
+    /* Match the audit QA sidebar width (25% of the viewport) so the QA/AI panel
+       is the same size across audits and the vulnerability library. */
+    flex: 0 0 25vw;
     min-width: 420px;
     max-height: 100%;
     overflow: hidden;
@@ -1619,7 +1617,7 @@ body.body--dark .vuln-creator-label {
 /* Docked QA-all column (no create/edit pane open) — same sizing as .vuln-modal-ai so the
    panel doesn't jump when it moves between the dock and the pane slot. */
 .vuln-qa-dock {
-    flex: 0 1 clamp(420px, 32vw, 560px);
+    flex: 0 0 25vw;
     min-width: 420px;
     min-height: 0;
     max-height: 100%;

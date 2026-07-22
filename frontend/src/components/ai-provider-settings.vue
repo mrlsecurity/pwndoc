@@ -1,18 +1,39 @@
 <template>
 <div>
-    <q-select
-    outlined
-    emit-value
-    map-options
-    options-sanitize
-    :label="$t('aiIntegration.provider.defaultProviderLabel')"
-    class="col-md-4 col-12"
-    v-model="settings.ai.public.defaultProvider"
-    :options="providerOptions"
-    :readonly="!canEdit"
-    />
+    <q-tabs
+    v-model="activeTab"
+    dense
+    no-caps
+    inline-label
+    align="left"
+    class="text-grey-8 ai-provider-tabs"
+    active-color="primary"
+    indicator-color="primary"
+    >
+        <q-tab v-for="option in providerOptions" :key="option.value" :name="option.value">
+            <div class="row items-center no-wrap q-gutter-xs">
+                <img v-if="option.logo" :src="option.logo" class="ai-provider-tab-logo" :class="{ 'ai-provider-tab-logo--mono': option.mono }" alt="" />
+                <span>{{ option.label }}</span>
+                <q-icon
+                v-if="isProviderConfigured(option.value)"
+                name="check_circle"
+                color="positive"
+                size="xs"
+                >
+                    <q-tooltip>{{ $t('aiIntegration.provider.configuredHint') }}</q-tooltip>
+                </q-icon>
+                <q-badge
+                v-if="settings.ai.public.defaultProvider === option.value"
+                color="primary"
+                :label="$t('aiIntegration.provider.defaultBadge')"
+                />
+            </div>
+        </q-tab>
+    </q-tabs>
+    <q-separator />
 
-    <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'openai'" class="q-gutter-md q-px-none">
+    <q-tab-panels v-model="activeTab" animated class="ai-provider-panels">
+    <q-tab-panel name="openai" class="q-gutter-md q-px-none">
         <q-input
         outlined
         :label="$t('aiIntegration.provider.openaiBaseUrl')"
@@ -54,9 +75,9 @@
                 {{ testResults.openai.message }}
             </div>
         </div>
-    </q-card-section>
+    </q-tab-panel>
 
-    <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'anthropic'" class="q-gutter-md q-px-none">
+    <q-tab-panel name="anthropic" class="q-gutter-md q-px-none">
         <q-input outlined :label="$t('aiIntegration.provider.anthropicBaseUrl')" v-model="settings.ai.private.anthropicBaseUrl" :readonly="!canEdit" />
         <q-input outlined :label="$t('aiIntegration.provider.anthropicModel')" v-model="settings.ai.private.anthropicModel" :readonly="!canEdit" />
         <q-input outlined :label="$t('aiIntegration.provider.anthropicVersion')" v-model="settings.ai.private.anthropicVersion" :readonly="!canEdit" />
@@ -89,9 +110,9 @@
                 {{ testResults.anthropic.message }}
             </div>
         </div>
-    </q-card-section>
+    </q-tab-panel>
 
-    <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'deepseek'" class="q-gutter-md q-px-none">
+    <q-tab-panel name="deepseek" class="q-gutter-md q-px-none">
         <q-input outlined :label="$t('aiIntegration.provider.deepseekBaseUrl')" v-model="settings.ai.private.deepseekBaseUrl" :readonly="!canEdit" />
         <q-input outlined :label="$t('aiIntegration.provider.deepseekModel')" v-model="settings.ai.private.deepseekModel" :readonly="!canEdit" />
         <q-input
@@ -123,9 +144,9 @@
                 {{ testResults.deepseek.message }}
             </div>
         </div>
-    </q-card-section>
+    </q-tab-panel>
 
-    <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'ollama'" class="q-gutter-md q-px-none">
+    <q-tab-panel name="ollama" class="q-gutter-md q-px-none">
         <q-input outlined :label="$t('aiIntegration.provider.ollamaBaseUrl')" v-model="settings.ai.private.ollamaBaseUrl" :readonly="!canEdit" />
         <q-input outlined :label="$t('aiIntegration.provider.ollamaModel')" v-model="settings.ai.private.ollamaModel" :readonly="!canEdit" />
         <q-input
@@ -157,9 +178,9 @@
                 {{ testResults.ollama.message }}
             </div>
         </div>
-    </q-card-section>
+    </q-tab-panel>
 
-    <q-card-section v-if="canEdit && settings.ai.public.defaultProvider === 'bedrock'" class="q-gutter-md q-px-none">
+    <q-tab-panel name="bedrock" class="q-gutter-md q-px-none">
         <q-input outlined :label="$t('aiIntegration.provider.awsRegion')" v-model="settings.ai.private.bedrockRegion" :readonly="!canEdit" />
         <q-input outlined :label="$t('aiIntegration.provider.bedrockModelId')" v-model="settings.ai.private.bedrockModel" :readonly="!canEdit" />
         <div v-if="!hasBedrockApiKey && !hasBedrockIamCredentials" class="text-caption text-grey-7">
@@ -239,11 +260,33 @@
                 {{ testResults.bedrock.message }}
             </div>
         </div>
-    </q-card-section>
+    </q-tab-panel>
+    </q-tab-panels>
+
+    <!-- Default + allow-list toggles for the active provider (shared across all tabs). -->
+    <div class="q-gutter-md q-mt-md">
+        <q-checkbox
+        :model-value="isDefaultProvider(activeTab)"
+        :label="$t('aiIntegration.provider.setDefaultLabel')"
+        :disable="!canEdit || isDefaultProvider(activeTab)"
+        @update:model-value="setDefaultProvider(activeTab)"
+        >
+            <q-tooltip>{{ $t('aiIntegration.provider.setDefaultHint') }}</q-tooltip>
+        </q-checkbox>
+        <q-checkbox
+        :model-value="isProviderAllowed(activeTab)"
+        :label="$t('aiIntegration.provider.allowUsersLabel')"
+        :disable="!canEdit || allowToggleDisabled(activeTab)"
+        @update:model-value="setProviderAllowed(activeTab, $event)"
+        >
+            <q-tooltip>{{ $t('aiIntegration.provider.allowUsersHint') }}</q-tooltip>
+        </q-checkbox>
+    </div>
 </div>
 </template>
 <script>
 import AiService from '@/services/ai'
+import { AI_PROVIDER_OPTIONS } from '@/services/ai-providers'
 
 // Must stay byte-for-byte identical to MASKED_SECRET in
 // backend/src/lib/settings-secrets.js - see that file for why. Covered by a literal-value
@@ -266,13 +309,8 @@ export default {
 
     data() {
         return {
-            providerOptions: [
-                {label: 'OpenAI', value: 'openai'},
-                {label: 'Anthropic', value: 'anthropic'},
-                {label: 'DeepSeek', value: 'deepseek'},
-                {label: 'Ollama', value: 'ollama'},
-                {label: 'AWS Bedrock', value: 'bedrock'}
-            ],
+            providerOptions: AI_PROVIDER_OPTIONS,
+            activeTab: this.settings?.ai?.public?.defaultProvider || 'openai',
             openaiApiKeyInput: '',
             showOpenAIApiKey: false,
             anthropicApiKeyInput: '',
@@ -326,6 +364,58 @@ export default {
     methods: {
         hasStoredSecret(field) {
             return Boolean(this.settings?.ai?.private?.[`${field}Configured`])
+        },
+
+        // A provider is "configured" once its credentials are stored. Bedrock accepts either an
+        // API key or IAM credentials; the rest just need their API key.
+        isProviderConfigured(provider) {
+            if (provider === 'bedrock')
+                return this.hasBedrockApiKey || this.hasBedrockIamCredentials
+            return this.hasStoredSecret(`${provider}ApiKey`)
+        },
+
+        isDefaultProvider(provider) {
+            return this.settings?.ai?.public?.defaultProvider === provider
+        },
+
+        // Selecting a new default drops it from allowedProviders: the default is always
+        // implicitly allowed, so keeping it there would be redundant (and would leave the old
+        // default silently allowed after a switch).
+        setDefaultProvider(provider) {
+            if (!this.settings?.ai?.public || this.isDefaultProvider(provider))
+                return
+            this.settings.ai.public.defaultProvider = provider
+            this.settings.ai.public.allowedProviders = this.allowedProviders()
+                .filter((entry) => entry !== provider)
+        },
+
+        allowedProviders() {
+            const list = this.settings?.ai?.public?.allowedProviders
+            return Array.isArray(list) ? list : []
+        },
+
+        // The default provider is always implicitly allowed, so its checkbox is checked and
+        // locked. Non-configured providers can't be allowed until they have credentials.
+        isProviderAllowed(provider) {
+            if (this.settings?.ai?.public?.defaultProvider === provider)
+                return true
+            return this.allowedProviders().includes(provider)
+        },
+
+        allowToggleDisabled(provider) {
+            return this.settings?.ai?.public?.defaultProvider === provider ||
+                !this.isProviderConfigured(provider)
+        },
+
+        setProviderAllowed(provider, allowed) {
+            if (!this.settings?.ai?.public)
+                return
+            const current = new Set(this.allowedProviders())
+            if (allowed)
+                current.add(provider)
+            else
+                current.delete(provider)
+            this.settings.ai.public.allowedProviders = [...current]
         },
 
         maskedValue(stored) {
@@ -454,4 +544,18 @@ export default {
     }
 }
 </script>
+
+<style scoped>
+.ai-provider-tab-logo {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+/* Near-black monochrome marks (OpenAI, Ollama) can't inherit theme color as an <img>, so
+   invert them to near-white in dark mode. Brand-colored logos are left as-is. */
+.body--dark .ai-provider-tab-logo--mono {
+    filter: invert(1);
+}
+</style>
 

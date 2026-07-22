@@ -121,6 +121,12 @@
     <q-separator />
 
     <q-card-section class="ai-chat-composer q-pt-sm col-auto">
+      <ai-provider-selector
+      :model-value="selectedProvider"
+      :disable="loading"
+      class="q-mb-xs"
+      @update:model-value="setSelectedProvider"
+      />
       <q-input
       v-model="conversation.userInput"
       type="textarea"
@@ -220,6 +226,7 @@ import AiFieldHelper from '@/services/ai-field-helper'
 import { normalizeEditorHtml, denormalizeEditorHtml } from '@/services/editor-html-renderer'
 import DraftDiff from '@/components/draft-diff.vue'
 import AiPromptList from '@/components/ai-prompt-list.vue'
+import AiProviderSelector from '@/components/ai-provider-selector.vue'
 import { $t } from '@/boot/i18n'
 
 const PROMPT_USAGE_STORAGE_KEY = 'ai_prompt_usage'
@@ -240,7 +247,8 @@ export default {
 
   components: {
     DraftDiff,
-    AiPromptList
+    AiPromptList,
+    AiProviderSelector
   },
 
   data() {
@@ -260,7 +268,8 @@ export default {
       sessionId: 'sessionId',
       loading: 'loading',
       conversation: 'conversation',
-      selectionAnchor: 'selectionAnchor'
+      selectionAnchor: 'selectionAnchor',
+      selectedProvider: 'selectedProvider'
     }),
 
     isFieldMode() {
@@ -401,7 +410,8 @@ export default {
       closeDrawer: 'closeDrawer',
       applyFieldValue: 'applyFieldValue',
       applyPartialDraft: 'applyPartialDraft',
-      insertDraftAtCursor: 'insertDraftAtCursor'
+      insertDraftAtCursor: 'insertDraftAtCursor',
+      setSelectedProvider: 'setSelectedProvider'
     }),
 
     scrollMessagesToBottom() {
@@ -541,6 +551,11 @@ export default {
         } else {
           payload.userPrompt = prompt
         }
+
+        // Only send an explicit provider when the user picked one; otherwise let the backend
+        // fall back to the org default provider.
+        if (this.selectedProvider)
+          payload.provider = this.selectedProvider
 
         let result = null
         let streamErrorMessage = null

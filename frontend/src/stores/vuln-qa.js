@@ -145,14 +145,17 @@ export const useVulnQaStore = defineStore('vulnQa', {
       }
     },
 
-    async run(scope) {
+    async run(scope, provider = '') {
       if (!this.locale || this.running)
         return
 
       this.severityFilter = 'all'
       this.error = ''
       try {
-        const response = await AiService.startVulnerabilityQaRun({ locale: this.locale, scope })
+        const params = { locale: this.locale, scope }
+        if (provider)
+          params.provider = provider
+        const response = await AiService.startVulnerabilityQaRun(params)
         const datas = response.data.datas || {}
         this.job = datas.job || null
         this.lastFetchedRevision = this.job?.revision ?? -1

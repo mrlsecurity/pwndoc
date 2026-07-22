@@ -172,6 +172,7 @@ export default {
                 if (!this.settings.ai.private) this.settings.ai.private = {}
                 if (typeof this.settings.ai.public.enabled !== 'boolean') this.settings.ai.public.enabled = true
                 if (!this.settings.ai.public.defaultProvider) this.settings.ai.public.defaultProvider = 'openai'
+                if (!Array.isArray(this.settings.ai.public.allowedProviders)) this.settings.ai.public.allowedProviders = []
                 this.languageToolApiKeyInput = this.settings.report?.private?.languageToolApiKeyConfigured ? MASKED_SECRET : ''
                 this.languageToolApiKeyOrig = this.languageToolApiKeyInput
                 this.settingsOrig = this.$_.cloneDeep(this.settings);

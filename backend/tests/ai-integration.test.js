@@ -65,8 +65,16 @@ module.exports = function(request, app) {
                 .set('Cookie', [`token=JWT ${userToken}`]);
 
             expect(response.status).toBe(200);
+            // Provider names (defaultProvider/allowedProviders) are public so the chat/QA
+            // selector can be populated; admin-only config and secrets stay hidden.
             expect(response.body.datas.ai.public).toEqual({
                 enabled: true,
+                defaultProvider: 'openai',
+                allowedProviders: [],
+                providerModels: expect.objectContaining({
+                    openai: expect.any(String),
+                    anthropic: expect.any(String)
+                }),
                 qaChecks: expect.objectContaining({
                     redaction: false,
                     aiDuplicates: true,
@@ -76,6 +84,7 @@ module.exports = function(request, app) {
             });
             expect(response.body.datas.ai.public).not.toHaveProperty('redactionGuidelines');
             expect(response.body.datas.ai.public).not.toHaveProperty('qaInstructions');
+            expect(response.body.datas.ai).not.toHaveProperty('private');
         });
 
         it('should deny AI integration config to users without ai read permissions', async () => {
@@ -774,6 +783,105 @@ module.exports = function(request, app) {
 
             expect(response.status).toBe(422);
             expect(response.headers['content-type']).toMatch(/json/);
+        });
+    });
+
+    // The default provider is always implicitly allowed; allowedProviders extends that set.
+    // A request for a provider outside that set is rejected server-side (403 JSON) before any
+    // streaming starts, regardless of what the UI offered.
+    describe('AI provider allow-list enforcement', () => {
+        afterEach(async () => {
+            await Settings.findOneAndUpdate({}, {
+                $set: {
+                    'ai.public.defaultProvider': 'openai',
+                    'ai.public.allowedProviders': []
+                }
+            }, { upsert: true });
+        });
+
+        it('should reject a provider that is not permitted with a 403 JSON response', async () => {
+            await Settings.findOneAndUpdate({}, {
+                $set: {
+                    'ai.public.defaultProvider': 'openai',
+                    'ai.public.allowedProviders': []
+                }
+            }, { upsert: true });
+
+            const response = await request(app).post('/api/ai/generate')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    entityType: 'finding',
+                    field: 'description',
+                    provider: 'anthropic',
+                    userPrompt: 'Write something',
+                    context: {}
+                });
+
+            expect(response.status).toBe(403);
+            expect(response.headers['content-type']).toMatch(/json/);
+            expect(response.body.datas).toMatch(/not permitted/i);
+        });
+
+        it('should allow a provider that the admin added to allowedProviders', async () => {
+            await Settings.findOneAndUpdate({}, {
+                $set: {
+                    'ai.public.defaultProvider': 'openai',
+                    'ai.public.allowedProviders': ['anthropic']
+                }
+            }, { upsert: true });
+
+            const response = await request(app).post('/api/ai/generate')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    entityType: 'finding',
+                    field: 'description',
+                    provider: 'anthropic',
+                    userPrompt: 'Write something',
+                    context: {}
+                });
+
+            // Permitted: passes provider resolution and reaches the SSE stream, where the
+            // unconfigured provider surfaces as an SSE error event (200), not a 403.
+            expect(response.status).toBe(200);
+            expect(response.headers['content-type']).toMatch(/text\/event-stream/);
+        });
+
+        it('should always allow the default provider even when allowedProviders is empty', async () => {
+            await Settings.findOneAndUpdate({}, {
+                $set: {
+                    'ai.public.defaultProvider': 'anthropic',
+                    'ai.public.allowedProviders': []
+                }
+            }, { upsert: true });
+
+            const response = await request(app).post('/api/ai/generate')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    entityType: 'finding',
+                    field: 'description',
+                    provider: 'anthropic',
+                    userPrompt: 'Write something',
+                    context: {}
+                });
+
+            expect(response.status).toBe(200);
+            expect(response.headers['content-type']).toMatch(/text\/event-stream/);
+        });
+
+        it('should reject an unknown provider id with a 422 JSON response', async () => {
+            const response = await request(app).post('/api/ai/generate')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    entityType: 'finding',
+                    field: 'description',
+                    provider: 'not-a-provider',
+                    userPrompt: 'Write something',
+                    context: {}
+                });
+
+            expect(response.status).toBe(422);
+            expect(response.headers['content-type']).toMatch(/json/);
+            expect(response.body.datas).toMatch(/unsupported provider/i);
         });
     });
     });

@@ -84,7 +84,17 @@ describe('QaResultsPanel outdated banner', () => {
 
     await wrapper.find('[data-testid="qa-outdated-rerun"]').trigger('click')
 
-    expect(wrapper.emitted('run')).toEqual([['programmatic']])
+    // Programmatic runs never carry a provider (the second arg is forced empty).
+    expect(wrapper.emitted('run')).toEqual([['programmatic', '']])
+  })
+
+  it('forwards the selected provider on an AI re-run', async () => {
+    const wrapper = createWrapper({ outdated: true, runScope: 'ai', showAiAction: true })
+    wrapper.vm.selectedProvider = 'anthropic'
+
+    wrapper.vm.emitRun('ai')
+
+    expect(wrapper.emitted('run')).toEqual([['ai', 'anthropic']])
   })
 
   it('can render the outdated banner as an actionless hint', () => {
@@ -399,20 +409,21 @@ describe('QaResultsPanel run actions', () => {
     const wrapper = createWrapper({ runScope: 'ai' })
 
     await wrapper.find('[data-testid="qa-run-again"]').trigger('click')
-    expect(wrapper.emitted('run')).toEqual([['ai']])
+    // The second arg is the selected provider (empty = org default); programmatic forces empty.
+    expect(wrapper.emitted('run')).toEqual([['ai', '']])
 
     // The default scope is on the main button, so it is not repeated in the dropdown.
     expect(wrapper.find('[data-testid="qa-run-scope-ai"]').exists()).toBe(false)
 
     await wrapper.find('[data-testid="qa-run-scope-programmatic"]').trigger('click')
-    expect(wrapper.emitted('run')).toEqual([['ai'], ['programmatic']])
+    expect(wrapper.emitted('run')).toEqual([['ai', ''], ['programmatic', '']])
   })
 
   it('defaults "Run again" to the full run when no scope was recorded', async () => {
     const wrapper = createWrapper()
 
     await wrapper.find('[data-testid="qa-run-again"]').trigger('click')
-    expect(wrapper.emitted('run')).toEqual([['all']])
+    expect(wrapper.emitted('run')).toEqual([['all', '']])
   })
 })
 

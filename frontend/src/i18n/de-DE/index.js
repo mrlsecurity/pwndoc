@@ -737,7 +737,12 @@ export default {
             qualityAssurance: 'Quality Assurance'
         },
         provider: {
-            defaultProviderLabel: 'Default Provider',
+            defaultBadge: 'Default',
+            setDefaultLabel: 'Set as default provider',
+            setDefaultHint: 'Used when a request does not specify a provider. Always available to users.',
+            configuredHint: 'This provider is configured',
+            allowUsersLabel: 'Allow users to select this provider',
+            allowUsersHint: 'When enabled, users can pick this provider for AI generation and QA. The default provider is always available.',
             openaiBaseUrl: 'OpenAI Base URL',
             openaiModel: 'OpenAI Model',
             openaiApiKey: 'OpenAI API Key',
@@ -765,6 +770,7 @@ export default {
         }
     },
     aiChat: {
+        providerLabel: 'Provider',
         selectedText: 'Ausgewählter Text',
         startPrompt: 'Beschreiben Sie, wie Sie den ausgewählten Text ändern möchten.',
         reviewDefaultPrompt: 'Wählen Sie eine Aufforderung oder fragen Sie etwas.',

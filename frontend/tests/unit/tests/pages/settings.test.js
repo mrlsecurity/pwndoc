@@ -97,7 +97,8 @@ const mockSettings = {
     private: {},
     public: {
       enabled: true,
-      defaultProvider: 'openai'
+      defaultProvider: 'openai',
+      allowedProviders: []
     }
   },
   report: {
@@ -158,7 +159,8 @@ const mockSettingsWithLt = {
       private: {},
       public: {
         enabled: true,
-        defaultProvider: 'openai'
+        defaultProvider: 'openai',
+        allowedProviders: []
       }
     },
     report: {

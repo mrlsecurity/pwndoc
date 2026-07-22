@@ -12,6 +12,9 @@ export const useAiGenerationStore = defineStore('aiGeneration', {
     drawerOpen: false,
     loading: false,
     lockKey: null,
+    // Provider chosen in the drawer's selector. Remembered across sessions (not persisted
+    // server-side); empty means "use the org default provider".
+    selectedProvider: '',
     sessionConfig: null,
     sessionId: 0,
     conversation: emptyConversation(),
@@ -119,6 +122,10 @@ export const useAiGenerationStore = defineStore('aiGeneration', {
 
     setLoading(loading) {
       this.loading = Boolean(loading)
+    },
+
+    setSelectedProvider(provider) {
+      this.selectedProvider = provider || ''
     },
 
     setSelectionAnchor(anchor) {

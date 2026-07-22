@@ -19,6 +19,17 @@
 
     <q-linear-progress v-if="running" indeterminate color="primary" class="qa-run-progress" />
 
+    <div
+    v-if="aiActionVisible || allActionVisible"
+    class="qa-header-provider"
+    @mousedown.prevent
+    >
+      <ai-provider-selector
+      v-model="selectedProvider"
+      :disable="loading || running"
+      />
+    </div>
+
     <q-card-section v-if="loading" class="text-center q-py-xl col" @mousedown.prevent>
       <q-spinner color="primary" size="3em" />
       <div class="q-mt-md text-grey-7">{{ loadingLabel }}</div>
@@ -101,7 +112,7 @@
           color="primary"
           :label="$t('auditQa.runProgrammatic')"
           :disable="loading || running"
-          @click="$emit('run', 'programmatic')"
+          @click="emitRun('programmatic')"
           />
           <q-btn
           v-if="aiActionVisible"
@@ -110,7 +121,7 @@
           color="primary"
           :label="$t('auditQa.runAi')"
           :disable="loading || running"
-          @click="$emit('run', 'ai')"
+          @click="emitRun('ai')"
           />
           <q-btn
           v-if="allActionVisible"
@@ -119,7 +130,7 @@
           color="primary"
           :label="$t('auditQa.runAll')"
           :disable="loading || running"
-          @click="$emit('run', 'all')"
+          @click="emitRun('all')"
           />
         </div>
         <div v-else-if="showRerunAction" class="q-mb-md">
@@ -133,7 +144,7 @@
           color="primary"
           :label="runAgainLabel"
           :disable="loading || running"
-          @click="$emit('run', defaultRunScope)"
+          @click="emitRun(defaultRunScope)"
           >
             <q-list>
               <q-item
@@ -142,7 +153,7 @@
               clickable
               v-close-popup
               :data-testid="`qa-run-scope-${choice.scope}`"
-              @click.stop="$emit('run', choice.scope)"
+              @click.stop="emitRun(choice.scope)"
               >
                 <q-item-section>{{ choice.label }}</q-item-section>
               </q-item>
@@ -157,7 +168,7 @@
           color="primary"
           :label="runAgainLabel"
           :disable="loading || running"
-          @click="$emit('run', defaultRunScope)"
+          @click="emitRun(defaultRunScope)"
           />
           <div v-if="runAgainHint" data-testid="qa-run-again-caption" class="text-caption text-grey-7 q-mt-xs">
             {{ runAgainHint }}
@@ -181,7 +192,7 @@
               no-caps
               :label="$t('auditQa.runAgain')"
               :disable="loading || running"
-              @click="$emit('run', defaultRunScope)"
+              @click="emitRun(defaultRunScope)"
               />
               <q-btn
               v-if="showOutdatedDismiss"
@@ -324,6 +335,7 @@ import { $t } from '@/boot/i18n'
 import { hasAnyProgrammaticQaCheckEnabled, hasAnyAiQaCheckEnabled } from '@/services/qa-checks'
 import { buildPreviousRunEntries, countGroupEntries } from '@/services/qa-display'
 import QaResultsGroup from '@/components/qa-results-group.vue'
+import AiProviderSelector from '@/components/ai-provider-selector.vue'
 
 // Above this many total issues, groups start collapsed: expanding on demand keeps the
 // initial render (and every subsequent interaction) cheap on large reports.
@@ -333,7 +345,8 @@ export default {
   name: 'QaResultsPanel',
 
   components: {
-    QaResultsGroup
+    QaResultsGroup,
+    AiProviderSelector
   },
 
   props: {
@@ -537,7 +550,10 @@ export default {
   data() {
     return {
       dismissedOutdated: false,
-      expandedGroups: {}
+      expandedGroups: {},
+      // Provider chosen for the next run; empty means "use the org default". Passed as the
+      // second arg of the `run` emit so parents can forward it to the backend.
+      selectedProvider: ''
     }
   },
 
@@ -730,6 +746,12 @@ export default {
   },
 
   methods: {
+    // Emits `run` with the scope plus the chosen provider (empty = org default). Programmatic
+    // runs need no provider; parents that ignore the second arg keep working unchanged.
+    emitRun(scope) {
+      this.$emit('run', scope, scope === 'programmatic' ? '' : this.selectedProvider)
+    },
+
     scopeLabel(scope) {
       if (scope === 'programmatic')
         return $t('auditQa.scopeProgrammatic')
@@ -815,6 +837,12 @@ export default {
 
 .qa-run-progress {
   flex: 0 0 auto;
+}
+
+/* Provider selector row on the body, just below the header. */
+.qa-header-provider {
+  flex: 0 0 auto;
+  padding: 8px 8px 0;
 }
 
 .qa-run-inprogress {

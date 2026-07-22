@@ -117,12 +117,15 @@ export const useAuditQaStore = defineStore('auditQa', {
 
     // AI scope runs as a background job (report arrives via the audit-qa:done socket event);
     // programmatic-only scope resolves inline - startJob() handles both shapes.
-    runQa(auditId, scope = 'all') {
+    runQa(auditId, scope = 'all', provider = '') {
       this.auditId = auditId
       this.severityFilter = 'all'
+      const params = { scope }
+      if (provider)
+        params.provider = provider
       return useQaRunsStore().startJob(
         `audit:${auditId}`,
-        () => AiService.runAuditQa(auditId, { scope }).then((response) => response.data?.datas || {}),
+        () => AiService.runAuditQa(auditId, params).then((response) => response.data?.datas || {}),
         { errorFallback: $t('auditQa.failed') }
       )
     },

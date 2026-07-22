@@ -99,12 +99,43 @@ const normalizeProvider = (provider) => {
     return provider.toLowerCase().trim();
 };
 
+// The default provider is always implicitly allowed; allowedProviders extends that set. An
+// empty allowedProviders therefore restricts users to the default provider only. Enforced here
+// server-side so a forged request cannot pick a provider the admin didn't permit.
+const getAllowedProviders = (settings) => {
+    const def = normalizeProvider(settings?.ai?.public?.defaultProvider) || AI_DEFAULT_PROVIDER;
+    const configured = Array.isArray(settings?.ai?.public?.allowedProviders)
+        ? settings.ai.public.allowedProviders
+        : [];
+    return new Set([def, ...configured].filter((p) => AI_PROVIDERS.includes(p)));
+};
+
+// Returns { provider } on success, or { error } with a code callers map to an HTTP response:
+// 'unsupported' (unknown provider id) or 'forbidden' (known but not permitted by the allow-list).
 const resolveProvider = (req, settings) => {
     const provider = normalizeProvider(req.body.provider) ||
         normalizeProvider(settings?.ai?.public?.defaultProvider) ||
         AI_DEFAULT_PROVIDER;
 
-    return AI_PROVIDERS.includes(provider) ? provider : null;
+    if (!AI_PROVIDERS.includes(provider))
+        return { error: 'unsupported' };
+    if (!getAllowedProviders(settings).has(provider))
+        return { error: 'forbidden' };
+    return { provider };
+};
+
+// Writes the matching error response and returns false when a provider couldn't be resolved,
+// so callers can `if (!writeProviderError(res, resolved)) return;`. Returns true on success.
+const writeProviderError = (res, resolved) => {
+    if (resolved.error === 'forbidden') {
+        Response.Forbidden(res, 'Provider not permitted in organization settings');
+        return false;
+    }
+    if (resolved.error) {
+        Response.BadParameters(res, 'Unsupported provider');
+        return false;
+    }
+    return true;
 };
 
 // Programmatic-only QA never needs a provider and must stay available when AI integration
@@ -119,13 +150,11 @@ const resolveScopedProvider = (req, res, settings, scope) => {
         return null;
     }
 
-    const provider = resolveProvider(req, settings);
-    if (!provider) {
-        Response.BadParameters(res, 'Unsupported provider');
+    const resolved = resolveProvider(req, settings);
+    if (!writeProviderError(res, resolved))
         return null;
-    }
 
-    return { provider };
+    return { provider: resolved.provider };
 };
 
 const isAllowedEntityType = (entityType) => {
@@ -245,11 +274,10 @@ const handleAiGenerate = async function(req, res) {
         const promptTemplate = normalizePromptValue(promptDoc?.prompt) || fieldConfig.defaultPrompt;
         let promptInstruction = renderPromptTemplate(promptTemplate, req.body.context || {});
 
-        const provider = resolveProvider(req, settings);
-        if (!provider) {
-            Response.BadParameters(res, 'Unsupported provider');
+        const resolved = resolveProvider(req, settings);
+        if (!writeProviderError(res, resolved))
             return;
-        }
+        const provider = resolved.provider;
 
         const context = req.body.context || {};
         const selectedText = String(context.selectedText || '').trim();

@@ -69,6 +69,9 @@ const SettingSchema = new Schema({
         public: {
             enabled: {type: Boolean, default: false},
             defaultProvider: {type: String, enum: AI_PROVIDERS, default: AI_DEFAULT_PROVIDER},
+            // Providers users may pick at generation/QA time. The default provider is always
+            // implicitly allowed; an empty list therefore restricts users to the default only.
+            allowedProviders: {type: [String], enum: AI_PROVIDERS, default: []},
             redactionGuidelines: {
                 content: {type: String, default: ''}
             },
@@ -135,9 +138,25 @@ SettingSchema.statics.getAll = () => {
 SettingSchema.statics.getPublic = () => {
     return new Promise((resolve, reject) => {
         const query = Settings.findOne({});
-        query.select('-_id report.enabled report.public reviews.enabled reviews.public ai.public.enabled ai.public.qaChecks ai.public.globalPrompts');
+        // Model names are not secret (unlike keys/base URLs), so they are surfaced publicly to
+        // label the provider selector. Keys and other private config stay out of the projection.
+        const modelFields = AI_PROVIDERS.map(p => `ai.private.${p}Model`).join(' ');
+        query.select(`-_id report.enabled report.public reviews.enabled reviews.public ai.public.enabled ai.public.defaultProvider ai.public.allowedProviders ai.public.qaChecks ai.public.globalPrompts ${modelFields}`);
         query.exec()
-            .then(settings => resolve(settings))
+            .then(settings => {
+                if (!settings) return resolve(settings);
+                const obj = settings.toObject();
+                // Reshape the selected model fields into a public map, then drop ai.private
+                // entirely so no private subtree ever reaches non-admin clients.
+                const providerModels = {};
+                AI_PROVIDERS.forEach(p => {
+                    const model = obj.ai?.private?.[`${p}Model`];
+                    if (model) providerModels[p] = model;
+                });
+                if (obj.ai?.public) obj.ai.public.providerModels = providerModels;
+                if (obj.ai) delete obj.ai.private;
+                resolve(obj);
+            })
             .catch(err => reject(err));
     });
 };
@@ -175,6 +194,15 @@ SettingSchema.statics.ensureInitialized = async function() {
     if (!AI_PROVIDERS.includes(liveSettings?.ai?.public?.defaultProvider)) {
         needUpdate = true
         _.set(liveSettings, 'ai.public.defaultProvider', AI_DEFAULT_PROVIDER)
+    }
+
+    var allowedProviders = liveSettings?.ai?.public?.allowedProviders
+    if (Array.isArray(allowedProviders)) {
+        var sanitizedAllowed = [...new Set(allowedProviders.filter(p => AI_PROVIDERS.includes(p)))]
+        if (sanitizedAllowed.length !== allowedProviders.length) {
+            needUpdate = true
+            _.set(liveSettings, 'ai.public.allowedProviders', sanitizedAllowed)
+        }
     }
 
     if (typeof liveSettings?.ai?.public?.enabled !== 'boolean') {

@@ -681,6 +681,40 @@ describe('AiChatDrawer send/stop generation', () => {
     await sendPromise
   })
 
+  it('includes the selected provider in the generate payload', async () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
+    store.conversation.userInput = 'do it'
+    store.selectedProvider = 'anthropic'
+
+    AiService.streamGenerateFieldDraft.mockImplementation(async (payload, { onEvent }) => {
+      onEvent({ event: 'done', data: { draft: '<p>ok</p>', reply: '' } })
+    })
+
+    await wrapper.vm.sendMessage()
+
+    const [payload] = AiService.streamGenerateFieldDraft.mock.calls[0]
+    expect(payload.provider).toBe('anthropic')
+  })
+
+  it('omits provider from the payload when none is selected (backend uses the org default)', async () => {
+    const wrapper = createWrapper()
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
+    store.conversation.userInput = 'do it'
+    store.selectedProvider = ''
+
+    AiService.streamGenerateFieldDraft.mockImplementation(async (payload, { onEvent }) => {
+      onEvent({ event: 'done', data: { draft: '<p>ok</p>', reply: '' } })
+    })
+
+    await wrapper.vm.sendMessage()
+
+    const [payload] = AiService.streamGenerateFieldDraft.mock.calls[0]
+    expect(payload.provider).toBeUndefined()
+  })
+
   it('stopGeneration cancels the in-flight request, restores the input, and shows no error notify', async () => {
     const notify = vi.fn()
     const wrapper = createWrapper({ notify, settings: promptSettings() })

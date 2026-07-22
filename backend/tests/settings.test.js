@@ -15,6 +15,7 @@ module.exports = function(request, app) {
       const defaultAiPublicSettings = {
         "enabled": false,
         "defaultProvider": "openai",
+        "allowedProviders": [],
         "redactionGuidelines": defaultAiDeliverySettings(),
         "qaInstructions": defaultAiDeliverySettings(),
         "qaChecks": {
@@ -57,8 +58,17 @@ module.exports = function(request, app) {
         "ai": {
           "public": {
             "enabled": false,
+            "defaultProvider": "openai",
+            "allowedProviders": [],
             "qaChecks": defaultAiPublicSettings.qaChecks,
-            "globalPrompts": []
+            "globalPrompts": [],
+            "providerModels": {
+              "openai": "gpt-5.4-mini",
+              "anthropic": "claude-opus-4-8",
+              "deepseek": "deepseek-v4-flash",
+              "ollama": "llama3.1",
+              "bedrock": "global.anthropic.claude-opus-4-8"
+            }
           },
         },
         "report": {
@@ -190,6 +200,11 @@ module.exports = function(request, app) {
       
           expect(response.status).toBe(200);
           expect(response.body.datas).toEqual(defaultPublicSettings);
+          // Provider names are public (needed to populate the chat/QA selector) but no
+          // provider secrets/config may leak through the public projection.
+          expect(response.body.datas.ai.public.defaultProvider).toBe('openai');
+          expect(response.body.datas.ai.public.allowedProviders).toEqual([]);
+          expect(response.body.datas.ai.private).toBeUndefined();
       })
 
       it('Edit settings', async () => {
