@@ -213,7 +213,6 @@
 
 <script>
 import { Dialog } from 'quasar'
-import axios from 'axios'
 import { mapState, mapActions } from 'pinia'
 import { useAiGenerationStore } from '@/stores/ai-generation'
 import AiService from '@/services/ai'
@@ -226,6 +225,15 @@ import { $t } from '@/boot/i18n'
 const PROMPT_USAGE_STORAGE_KEY = 'ai_prompt_usage'
 const DEFAULT_PROMPT_ID = '__default__'
 const MOST_USED_PROMPT_LIMIT = 5
+
+// fetch() throws a bare TypeError for network-level failures, whose browser message isn't
+// user-friendly; err.isTimeout is set by the service for a proxy 502/504. Everything else
+// already carries a clear message.
+const resolveGenerateErrorMessage = (err) => {
+  if (err instanceof TypeError || err?.isTimeout)
+    return $t('aiChat.timedOut')
+  return err?.message || $t('aiChat.requestFailed')
+}
 
 export default {
   name: 'AiChatDrawer',
@@ -242,7 +250,7 @@ export default {
       promptMenuWidth: null,
       promptUsage: {},
       previewSelection: null,
-      cancelTokenSource: null
+      abortController: null
     }
   },
 
@@ -503,7 +511,7 @@ export default {
       store.conversation.messages.push({ role: 'user', content: prompt })
       store.conversation.userInput = ''
       this.setStoreLoading(true)
-      this.cancelTokenSource = axios.CancelToken.source()
+      this.abortController = new AbortController()
 
       try {
         const context = { ...(this.sessionConfig.requestParams.context || {}) }
@@ -534,13 +542,28 @@ export default {
           payload.userPrompt = prompt
         }
 
-        const response = await AiService.generateFieldDraft(payload, { cancelToken: this.cancelTokenSource.token })
+        let result = null
+        let streamErrorMessage = null
+        await AiService.streamGenerateFieldDraft(payload, {
+          signal: this.abortController.signal,
+          onEvent: (event) => {
+            if (event.event === 'done')
+              result = event.data
+            else if (event.event === 'error')
+              streamErrorMessage = event.data?.message
+          }
+        })
 
         if (store.sessionId !== requestSessionId)
           return
 
-        const draft = response.data?.datas?.draft
-        const reply = String(response.data?.datas?.reply || '').trim()
+        if (streamErrorMessage)
+          throw new Error(streamErrorMessage)
+        if (!result)
+          throw new Error(this.$t('aiChat.requestFailed'))
+
+        const draft = result.draft
+        const reply = String(result.reply || '').trim()
         if (draft === null || draft === undefined || (typeof draft === 'string' && !draft.trim()) || (Array.isArray(draft) && draft.length === 0))
           throw new Error(this.$t('aiChat.emptyDraft'))
 
@@ -563,9 +586,9 @@ export default {
         store.conversation.userInput = prompt
 
         // A user-initiated Stop is not a failure - restore the input silently, no error toast.
-        if (!axios.isCancel(err)) {
+        if (err?.name !== 'AbortError') {
           this.$q.notify({
-            message: err.response?.data?.datas || err.message || this.$t('aiChat.requestFailed'),
+            message: resolveGenerateErrorMessage(err),
             color: 'negative',
             textColor: 'white',
             position: 'top-right'
@@ -574,14 +597,14 @@ export default {
       } finally {
         if (store.sessionId === requestSessionId) {
           this.setStoreLoading(false)
-          this.cancelTokenSource = null
+          this.abortController = null
         }
       }
     },
 
     stopGeneration() {
-      if (this.cancelTokenSource)
-        this.cancelTokenSource.cancel()
+      if (this.abortController)
+        this.abortController.abort()
     },
 
     hasPreviewSelection(index) {

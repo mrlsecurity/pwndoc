@@ -745,6 +745,7 @@ export default {
         updatedDraft: 'Voici une version mise à jour du texte sélectionné.',
         emptyDraft: 'La réponse de l\'IA est vide',
         requestFailed: 'Impossible de générer la réponse de l\'IA',
+        timedOut: 'La requête a expiré. Cela peut arriver sur les requêtes complexes — votre message a été conservé, réessayez.',
         noSelection: 'Sélectionnez du texte dans le champ avant d\'utiliser l\'IA.',
         generating: 'Génération du contenu...',
         leaveWhileGeneratingTitle: 'Génération IA en cours',

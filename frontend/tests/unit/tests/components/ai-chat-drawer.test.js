@@ -6,7 +6,7 @@ import AiService from '@/services/ai'
 
 vi.mock('@/services/ai', () => ({
   default: {
-    generateFieldDraft: vi.fn()
+    streamGenerateFieldDraft: vi.fn()
   }
 }))
 
@@ -607,7 +607,9 @@ describe('AiChatDrawer send/stop generation', () => {
       requestParams: {}
     }
     wrapper.vm.selectPrompt('prompt-3')
-    AiService.generateFieldDraft.mockResolvedValue({ data: { datas: { draft: '<p>ok</p>', reply: '' } } })
+    AiService.streamGenerateFieldDraft.mockImplementation(async (payload, { onEvent }) => {
+      onEvent({ event: 'done', data: { draft: '<p>ok</p>', reply: '' } })
+    })
 
     await wrapper.vm.sendMessage()
 
@@ -628,7 +630,7 @@ describe('AiChatDrawer send/stop generation', () => {
       requestParams: {}
     }
     wrapper.vm.selectPrompt('prompt-4')
-    AiService.generateFieldDraft.mockRejectedValue(new Error('boom'))
+    AiService.streamGenerateFieldDraft.mockRejectedValue(new Error('boom'))
 
     await wrapper.vm.sendMessage()
 
@@ -646,8 +648,8 @@ describe('AiChatDrawer send/stop generation', () => {
 
     const input = wrapper.find('.ai-chat-input textarea')
     const stopButton = wrapper.find('button[aria-label="Stop generating"]')
-    const cancel = vi.fn()
-    wrapper.vm.cancelTokenSource = { cancel }
+    const abort = vi.fn()
+    wrapper.vm.abortController = { abort }
 
     expect(input.attributes('readonly')).toBeDefined()
     expect(input.attributes('disabled')).toBeUndefined()
@@ -655,26 +657,27 @@ describe('AiChatDrawer send/stop generation', () => {
 
     await stopButton.trigger('click')
 
-    expect(cancel).toHaveBeenCalled()
+    expect(abort).toHaveBeenCalled()
   })
 
-  it('passes a cancelToken to AiService.generateFieldDraft while a request is in flight', async () => {
+  it('passes an abort signal to AiService.streamGenerateFieldDraft while a request is in flight', async () => {
     const wrapper = createWrapper()
     const store = useAiGenerationStore()
     store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
     store.conversation.userInput = 'do it'
 
-    let resolveResponse
-    AiService.generateFieldDraft.mockReturnValue(new Promise((resolve) => { resolveResponse = resolve }))
+    let resolveStream
+    AiService.streamGenerateFieldDraft.mockReturnValue(new Promise((resolve) => { resolveStream = resolve }))
 
     const sendPromise = wrapper.vm.sendMessage()
     await wrapper.vm.$nextTick()
 
     expect(store.loading).toBe(true)
-    const [, config] = AiService.generateFieldDraft.mock.calls[0]
-    expect(config.cancelToken).toBeDefined()
+    const [, options] = AiService.streamGenerateFieldDraft.mock.calls[0]
+    expect(options.signal).toBeInstanceOf(AbortSignal)
 
-    resolveResponse({ data: { datas: { draft: '<p>ok</p>', reply: '' } } })
+    options.onEvent({ event: 'done', data: { draft: '<p>ok</p>', reply: '' } })
+    resolveStream()
     await sendPromise
   })
 
@@ -685,9 +688,13 @@ describe('AiChatDrawer send/stop generation', () => {
     store.sessionConfig = { title: 'AI', defaultPrompt: 'Field instruction', outputType: 'html', mode: 'field', requestParams: {} }
     wrapper.vm.selectPrompt('prompt-5')
 
-    AiService.generateFieldDraft.mockImplementation((payload, config) => {
+    AiService.streamGenerateFieldDraft.mockImplementation((payload, { signal }) => {
       return new Promise((_resolve, reject) => {
-        config.cancelToken.promise.then((cancel) => reject(cancel))
+        signal.addEventListener('abort', () => {
+          const err = new Error('aborted')
+          err.name = 'AbortError'
+          reject(err)
+        })
       })
     })
 
@@ -714,7 +721,7 @@ describe('AiChatDrawer send/stop generation', () => {
     store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
     store.conversation.userInput = 'do it'
 
-    AiService.generateFieldDraft.mockRejectedValue(new Error('boom'))
+    AiService.streamGenerateFieldDraft.mockRejectedValue(new Error('boom'))
 
     await wrapper.vm.sendMessage()
 
@@ -723,6 +730,22 @@ describe('AiChatDrawer send/stop generation', () => {
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ color: 'negative' }))
   })
 
+  it('shows the friendly timed-out message instead of a raw network error', async () => {
+    const notify = vi.fn()
+    const wrapper = createWrapper({ notify })
+    const store = useAiGenerationStore()
+    store.sessionConfig = { title: 'AI', outputType: 'html', mode: 'field', requestParams: {} }
+    store.conversation.userInput = 'do it'
+
+    AiService.streamGenerateFieldDraft.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await wrapper.vm.sendMessage()
+
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'aiChat.timedOut',
+      color: 'negative'
+    }))
+  })
 })
 
 describe('AiChatDrawer selection anchor status', () => {

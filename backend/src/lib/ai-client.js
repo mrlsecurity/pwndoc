@@ -341,13 +341,13 @@ const getChatResponseFromParsed = (outputType, parsed = {}, providerLabel = 'AI 
     };
 };
 
-const generateWithProvider = async ({
+// Shared setup for the ask and stream generate paths: resolves the provider and builds
+// the chat session, ready to .ask() or .stream().
+const prepareGenerateChat = async ({
     provider,
     settings,
     outputType,
     context = {},
-    promptInstruction = '',
-    userPrompt = '',
     messages = []
 }) => {
     const providerLabel = PROVIDER_LABELS[provider] || provider;
@@ -402,6 +402,56 @@ const generateWithProvider = async ({
         chat = chat.add(entry.role, entry.content);
     });
 
+    return { chat, providerLabel, providerConfig, selectionMode, redactionGuidelinesText };
+};
+
+const finalizeGenerateContent = (content, { outputType, selectionMode, providerLabel, model, finishReason }) => {
+    const trimmed = String(content || '').trim();
+    if (!trimmed) {
+        throw({
+            fn: 'BadRequest',
+            message: finishReason ?
+                `${providerLabel} returned an empty response (finish reason: ${finishReason}).` :
+                `${providerLabel} returned an empty response.`
+        });
+    }
+
+    const parsed = extractJsonObjectFromText(trimmed);
+    if (!parsed) {
+        throw({
+            fn: 'BadRequest',
+            message: `${providerLabel} response does not contain valid JSON`
+        });
+    }
+
+    if (selectionMode) {
+        const chatResponse = getChatResponseFromParsed(outputType, parsed, providerLabel);
+        return {
+            draft: chatResponse.draft,
+            reply: chatResponse.reply,
+            model: model
+        };
+    }
+
+    return {
+        draft: getDraftFromParsed(outputType, parsed, providerLabel),
+        reply: '',
+        model: model
+    };
+};
+
+const generateWithProvider = async ({
+    provider,
+    settings,
+    outputType,
+    context = {},
+    promptInstruction = '',
+    userPrompt = '',
+    messages = []
+}) => {
+    const { chat, providerLabel, providerConfig, selectionMode, redactionGuidelinesText } =
+        await prepareGenerateChat({ provider, settings, outputType, context, messages });
+
     const userPayload = {
         promptInstruction: promptInstruction,
         context: context,
@@ -418,39 +468,68 @@ const generateWithProvider = async ({
         throw mapLlmError(err, providerLabel, providerConfig.timeoutMs);
     }
 
-    const content = String(response?.content || response || '').trim();
-    if (!content) {
-        const finishReason = response?.finish_reason || response?.finishReason;
-        throw({
-            fn: 'BadRequest',
-            message: finishReason ?
-                `${providerLabel} returned an empty response (finish reason: ${finishReason}).` :
-                `${providerLabel} returned an empty response.`
-        });
-    }
+    const content = String(response?.content || response || '');
+    return finalizeGenerateContent(content, {
+        outputType,
+        selectionMode,
+        providerLabel,
+        model: response?.model || providerConfig.model,
+        finishReason: response?.finish_reason || response?.finishReason
+    });
+};
 
-    const parsed = extractJsonObjectFromText(content);
-    if (!parsed) {
-        throw({
-            fn: 'BadRequest',
-            message: `${providerLabel} response does not contain valid JSON`
-        });
-    }
+// Streaming variant of generateWithProvider: re-emits each LLM chunk via onChunk so the
+// caller can keep the downstream connection alive past a proxy's idle timeout. Same
+// {draft, reply, model} contract; callers uninterested in progress can ignore onChunk.
+const generateWithProviderStream = async ({
+    provider,
+    settings,
+    outputType,
+    context = {},
+    promptInstruction = '',
+    userPrompt = '',
+    messages = [],
+    signal,
+    onChunk
+}) => {
+    const { chat, providerLabel, providerConfig, selectionMode, redactionGuidelinesText } =
+        await prepareGenerateChat({ provider, settings, outputType, context, messages });
 
-    if (selectionMode) {
-        const chatResponse = getChatResponseFromParsed(outputType, parsed, providerLabel);
-        return {
-            draft: chatResponse.draft,
-            reply: chatResponse.reply,
-            model: response?.model || providerConfig.model
-        };
-    }
-
-    return {
-        draft: getDraftFromParsed(outputType, parsed, providerLabel),
-        reply: '',
-        model: response?.model || providerConfig.model
+    const userPayload = {
+        promptInstruction: promptInstruction,
+        context: context,
+        userPrompt: userPrompt || '',
+        redactionGuidelines: redactionGuidelinesText
     };
+
+    let content = '';
+    let finishReason = null;
+    try {
+        const stream = chat.stream(stringifyLlmPayload(userPayload), {
+            requestTimeout: providerConfig.timeoutMs,
+            signal: signal
+        });
+        for await (const chunk of stream) {
+            const delta = String(chunk?.content || '');
+            if (delta) {
+                content += delta;
+                if (typeof onChunk === 'function')
+                    onChunk(delta);
+            }
+            if (chunk?.finish_reason)
+                finishReason = chunk.finish_reason;
+        }
+    } catch (err) {
+        throw mapLlmError(err, providerLabel, providerConfig.timeoutMs);
+    }
+
+    return finalizeGenerateContent(content, {
+        outputType,
+        selectionMode,
+        providerLabel,
+        model: providerConfig.model,
+        finishReason
+    });
 };
 
 const buildQaSystemPrompt = (scopeInstruction = '') => {
@@ -1004,6 +1083,7 @@ const testProviderConnection = async (provider, settings = {}) => {
 
 module.exports = {
     generateWithProvider,
+    generateWithProviderStream,
     runQaWithProvider,
     runVulnerabilityTemplateQaWithProvider,
     runVulnerabilityUnlinkedTranslationQaWithProvider,

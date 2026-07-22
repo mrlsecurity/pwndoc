@@ -848,6 +848,9 @@ export default {
 				this.getAudit();
 				this.getAuditChildren();
 			})
+			this.$socket.on('audit-qa:done', (payload) => {
+				useAuditQaStore().handleSocketDone(payload)
+			})
 			this.$socket.on('disconnect', () => {
 				this.$socket.emit('join', {username: userStore.username, room: this.auditId})
 				this.$socket.emit('menu', this.getMenuSection())

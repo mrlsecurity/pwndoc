@@ -420,7 +420,8 @@ export default {
         },
 
         vulnQaRunning: function() {
-            return useQaRunsStore().isRunning(this.activeVulnQaKey)
+            const qaRuns = useQaRunsStore()
+            return qaRuns.isRunning(this.activeVulnQaKey) || qaRuns.isJobRunning(this.activeVulnQaKey)
         },
 
         canUseAiInPane: function() {
@@ -1275,11 +1276,13 @@ export default {
             this.vulnQaSocketHandlers = {
                 progress: (payload) => vulnQaStore.handleSocketProgress(payload),
                 done: (payload) => vulnQaStore.handleSocketDone(payload),
+                singleDone: (payload) => this.handleSingleVulnQaDone(payload),
                 connect: () => this.$socket.emit('join', { username: userStore.username, room: 'vuln-qa' })
             }
             this.$socket.emit('join', { username: userStore.username, room: 'vuln-qa' })
             this.$socket.on('vuln-qa:progress', this.vulnQaSocketHandlers.progress)
             this.$socket.on('vuln-qa:done', this.vulnQaSocketHandlers.done)
+            this.$socket.on('vuln-qa-single:done', this.vulnQaSocketHandlers.singleDone)
             this.$socket.on('connect', this.vulnQaSocketHandlers.connect)
         },
 
@@ -1291,9 +1294,40 @@ export default {
             this.$socket.emit('leave', { username: userStore.username, room: 'vuln-qa' })
             this.$socket.off('vuln-qa:progress', this.vulnQaSocketHandlers.progress)
             this.$socket.off('vuln-qa:done', this.vulnQaSocketHandlers.done)
+            this.$socket.off('vuln-qa-single:done', this.vulnQaSocketHandlers.singleDone)
             this.$socket.off('connect', this.vulnQaSocketHandlers.connect)
             this.vulnQaSocketHandlers = null
             useVulnQaStore().clearStatusRefresh()
+        },
+
+        // A single-vuln QA run is a server-side background job; on its :done event refetch
+        // the persisted report into qa-runs.js, clear any recheck-row spinner, and refresh
+        // the QA-all view if it's showing this locale.
+        handleSingleVulnQaDone: function(payload) {
+            if (!payload?.vulnerabilityId || !payload?.locale)
+                return
+
+            const qaRuns = useQaRunsStore()
+            const key = `vuln:${payload.vulnerabilityId}:${payload.locale}`
+            qaRuns.setJob(key, payload)
+            qaRuns.load(
+                key,
+                () => AiService.runVulnerabilityQa({
+                    vulnerabilityId: payload.vulnerabilityId,
+                    locale: payload.locale,
+                    loadOnly: true
+                }).then((response) => {
+                    const datas = response.data.datas || {}
+                    qaRuns.setJob(key, datas.job || null)
+                    return datas
+                }),
+                { errorFallback: $t('vulnerabilityQa.failed') }
+            )
+
+            const vulnQaStore = useVulnQaStore()
+            vulnQaStore.finishRecheck(payload.vulnerabilityId)
+            if (vulnQaStore.locale === payload.locale)
+                vulnQaStore.loadStatus()
         },
 
         getVulnTitleLocale: function(vuln, locale) {

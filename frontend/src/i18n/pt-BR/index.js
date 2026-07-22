@@ -837,6 +837,7 @@ draftRecovery: {
         updatedDraft: 'Aqui está uma versão atualizada do texto selecionado.',
         emptyDraft: 'A resposta da IA está vazia',
         requestFailed: 'Não foi possível gerar a resposta da IA',
+        timedOut: 'A solicitação expirou. Isso pode acontecer em consultas complexas — seu prompt foi mantido, tente novamente.',
         noSelection: 'Selecione texto no campo antes de usar a IA.',
         generating: 'Gerando conteúdo...',
         leaveWhileGeneratingTitle: 'Geração por IA em andamento',

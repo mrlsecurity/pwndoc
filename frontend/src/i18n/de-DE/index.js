@@ -800,6 +800,7 @@ export default {
         updatedDraft: 'Hier ist eine aktualisierte Version des ausgewählten Textes.',
         emptyDraft: 'Die KI-Antwort ist leer',
         requestFailed: 'KI-Antwort konnte nicht generiert werden',
+        timedOut: 'Die Anfrage ist abgelaufen. Das kann bei komplexen Anfragen passieren — Ihr Prompt wurde beibehalten, bitte erneut versuchen.',
         noSelection: 'Wählen Sie Text im Feld aus, bevor Sie KI verwenden.',
         generating: 'Inhalt wird generiert...',
         leaveWhileGeneratingTitle: 'KI-Generierung läuft',

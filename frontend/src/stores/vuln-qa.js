@@ -174,39 +174,48 @@ export const useVulnQaStore = defineStore('vulnQa', {
     },
 
     // Recheck one template: the regular single-vulnerability run, which writes the same
-    // unified per-vuln report the assembled QA-all view reads. The status refetch pulls
-    // the patched report. Scope follows the last catalog run so a programmatic-only
-    // review never silently fires AI checks (and their cost) from the recheck button.
+    // unified per-vuln report the assembled QA-all view reads. Scope follows the last catalog
+    // run so the recheck button never silently fires (paid) AI checks. AI scope is a server
+    // background job: startJob() resolves when the job *starts*, so recheckingIds (row spinner)
+    // stays set until the vuln-qa-single:done event calls finishRecheck(); programmatic-only
+    // scope resolves inline.
     async recheck(vulnerabilityId) {
       if (!vulnerabilityId || this.running || this.recheckingIds.includes(vulnerabilityId))
         return
 
-      // Mirror the run into the qa-runs store under this vulnerability's per-vuln key so
-      // its own QA panel reflects the in-flight run and the fresh report without a reload.
       const qaRuns = useQaRunsStore()
       const vulnKey = `vuln:${vulnerabilityId}:${this.locale}`
-      const vulnRun = qaRuns.ensureRun(vulnKey)
-      vulnRun.running = true
-      vulnRun.startedAt = Date.now()
-      vulnRun.error = ''
+      const locale = this.locale
+      const scope = this.job?.scope || 'all'
 
       this.recheckingIds = [...this.recheckingIds, vulnerabilityId]
       try {
-        const response = await AiService.runVulnerabilityQa({
-          locale: this.locale,
-          vulnerabilityId: vulnerabilityId,
-          scope: this.job?.scope || 'all'
-        })
-        qaRuns.setReport(vulnKey, response?.data?.datas || {})
+        await qaRuns.startJob(
+          vulnKey,
+          async () => {
+            const response = await AiService.runVulnerabilityQa({ locale, vulnerabilityId, scope })
+            return response?.data?.datas || {}
+          },
+          { errorFallback: $t('vulnerabilityQa.recheckFailed') }
+        )
+
+        if (qaRuns.isJobRunning(vulnKey))
+          return
+
         await this.loadStatus()
       } catch (err) {
         this.error = err?.response?.data?.datas || err?.message || $t('vulnerabilityQa.recheckFailed')
-        vulnRun.error = this.error
       } finally {
-        vulnRun.running = false
-        vulnRun.startedAt = null
-        this.recheckingIds = this.recheckingIds.filter((id) => id !== vulnerabilityId)
+        if (!qaRuns.isJobRunning(vulnKey))
+          this.recheckingIds = this.recheckingIds.filter((id) => id !== vulnerabilityId)
       }
+    },
+
+    // Bound to the vuln-qa-single:done socket event (see vulnerabilities.js) - clears the
+    // row spinner a recheck() call left running while its background job finished.
+    finishRecheck(vulnerabilityId) {
+      if (this.recheckingIds.includes(vulnerabilityId))
+        this.recheckingIds = this.recheckingIds.filter((id) => id !== vulnerabilityId)
     },
 
     // Resolve or unresolve an entire vulnerability's QA (all its issues hide until the

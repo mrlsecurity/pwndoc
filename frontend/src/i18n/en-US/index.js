@@ -1089,6 +1089,7 @@ export default {
         updatedDraft: 'Here is an updated version of the selected text.',
         emptyDraft: 'AI response is empty',
         requestFailed: 'Unable to generate AI response',
+        timedOut: 'The request timed out. This can happen on long queries — your prompt was kept, try again.',
         noSelection: 'Select text in the field before using AI.',
         generating: 'Generating content...',
         leaveWhileGeneratingTitle: 'AI generation in progress',

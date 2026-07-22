@@ -5,7 +5,7 @@ const Audit = require('mongoose').model('Audit');
 const Vulnerability = require('mongoose').model('Vulnerability');
 const CustomField = require('mongoose').model('CustomField');
 const AiPrompt = require('mongoose').model('AiPrompt');
-const { generateWithProvider, testProviderConnection } = require('../lib/ai-client');
+const { generateWithProvider, generateWithProviderStream, testProviderConnection } = require('../lib/ai-client');
 const { MASKED_SECRET } = require('../lib/settings-secrets');
 const { runAuditQa } = require('../lib/ai-qa');
 const {
@@ -14,12 +14,19 @@ const {
 } = require('../lib/ai-vuln-qa');
 const VulnerabilityQaCatalog = require('mongoose').model('VulnerabilityQaCatalog');
 const {
+    VULN_QA_ROOM,
     startVulnerabilityQaJob,
     getVulnerabilityQaJobStatus,
     isVulnerabilityQaJobActive,
     cancelVulnerabilityQaJob,
     serializeJob
 } = require('../lib/ai-vuln-qa-job');
+const {
+    startSingleJob,
+    getSingleJobStatus,
+    isSingleJobActive,
+    serializeJob: serializeSingleJob
+} = require('../lib/ai-qa-single-job');
 
 const DRAFT_VULNERABILITY_ID = '__draft__';
 
@@ -125,6 +132,69 @@ const isAllowedEntityType = (entityType) => {
     return ALLOWED_ENTITY_TYPES.includes(entityType);
 };
 
+const writeSseEvent = (res, event, data) => {
+    if (res.writableEnded)
+        return;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+};
+
+// Streams the generate response over SSE: each LLM chunk emits a heartbeat so nginx's idle
+// timeout never fires, however long the call runs. The frontend acts only on the terminal
+// `done`/`error` event; the draft/reply contract is unchanged, only the transport differs.
+const streamAiGenerateResponse = async (req, res, {
+    provider,
+    settings,
+    fieldConfig,
+    field,
+    context,
+    promptInstruction,
+    userPrompt,
+    messages
+}) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
+    });
+    if (typeof res.flushHeaders === 'function')
+        res.flushHeaders();
+
+    const abortController = new AbortController();
+    const onClientClose = () => abortController.abort();
+    req.on('close', onClientClose);
+
+    try {
+        const result = await generateWithProviderStream({
+            provider: provider,
+            settings: settings,
+            outputType: fieldConfig.outputType,
+            context: context,
+            promptInstruction: promptInstruction,
+            userPrompt: userPrompt,
+            messages: messages,
+            signal: abortController.signal,
+            onChunk: () => writeSseEvent(res, 'heartbeat', {})
+        });
+
+        writeSseEvent(res, 'done', {
+            entityType: fieldConfig.entityType,
+            field: field,
+            outputType: fieldConfig.outputType,
+            draft: result.draft,
+            reply: result.reply || '',
+            provider: provider,
+            model: result.model
+        });
+    } catch (err) {
+        writeSseEvent(res, 'error', { message: err?.message || String(err) });
+    } finally {
+        req.off('close', onClientClose);
+        if (!res.writableEnded)
+            res.end();
+    }
+};
+
 const handleAiGenerate = async function(req, res) {
     try {
         const entityType = String(req.body.entityType || 'finding').trim().toLowerCase();
@@ -206,29 +276,30 @@ const handleAiGenerate = async function(req, res) {
             return;
         }
 
-        const result = await generateWithProvider({
+        // From here the response streams over SSE; errors past this point go out as an
+        // `error` SSE event, since headers are sent and Response.Internal can't set a body.
+        await streamAiGenerateResponse(req, res, {
             provider: provider,
             settings: settings,
-            outputType: fieldConfig.outputType,
+            fieldConfig: fieldConfig,
+            field: field,
             context: context,
             promptInstruction: promptInstruction,
             userPrompt: userPrompt,
             messages: chatMessages
         });
-
-        Response.Ok(res, {
-            entityType: fieldConfig.entityType,
-            field: field,
-            outputType: fieldConfig.outputType,
-            draft: result.draft,
-            reply: result.reply || '',
-            provider: provider,
-            model: result.model
-        });
     } catch (err) {
+        if (res.headersSent) {
+            if (!res.writableEnded)
+                res.end();
+            return;
+        }
         Response.Internal(res, err);
     }
 };
+
+const auditQaJobKey = (auditId) => `audit:${auditId}`;
+const vulnQaSingleJobKey = (vulnerabilityId, locale) => `vuln:${vulnerabilityId}:${locale}`;
 
 const emptyAuditQaResponse = () => ({
     summary: '',
@@ -245,7 +316,7 @@ const emptyAuditQaResponse = () => ({
     hasReport: false
 });
 
-const handleAiQa = async function(req, res) {
+const handleAiQa = (io) => async function(req, res) {
     try {
         const auditId = String(req.body.auditId || '').trim();
         if (!auditId) {
@@ -286,41 +357,84 @@ const handleAiQa = async function(req, res) {
         );
 
         const auditObject = typeof audit.toObject === 'function' ? audit.toObject() : audit;
+        const jobKey = auditQaJobKey(auditId);
 
         if (loadOnly) {
             const report = getCachedQaReport(auditObject) || getOutdatedQaReport(auditObject);
             Response.Ok(res, {
                 auditId: auditId,
                 hasReport: Boolean(report),
+                job: getSingleJobStatus(jobKey),
                 ...(report || emptyAuditQaResponse())
             });
             return;
         }
 
-        const existingStored = normalizeStoredQaReport(auditObject) || {};
-        const partialResult = await runAuditQa({
-            audit: auditObject,
-            settings: settings,
-            provider: provider,
-            scope: scope
-        });
-        const mergedIssues = mergeQaIssues(existingStored.issues || [], partialResult.issues || [], scope);
-        const mergedResult = finalizeMergedQaResult(existingStored, partialResult, mergedIssues);
-        const fingerprint = computeAuditQaFingerprint(auditObject);
-        const qaReport = buildQaReportCache(fingerprint, mergedResult, {
-            existing: existingStored,
-            scope: scope
-        });
-        await Audit.saveLatestQaReport(auditId, qaReport);
+        // Programmatic-only checks are local (no LLM call), so run them inline - no proxy
+        // timeout risk to justify background-job overhead.
+        if (scope === 'programmatic') {
+            const existingStored = normalizeStoredQaReport(auditObject) || {};
+            const partialResult = await runAuditQa({
+                audit: auditObject,
+                settings: settings,
+                provider: provider,
+                scope: scope
+            });
+            const mergedIssues = mergeQaIssues(existingStored.issues || [], partialResult.issues || [], scope);
+            const mergedResult = finalizeMergedQaResult(existingStored, partialResult, mergedIssues);
+            const fingerprint = computeAuditQaFingerprint(auditObject);
+            const qaReport = buildQaReportCache(fingerprint, mergedResult, {
+                existing: existingStored,
+                scope: scope
+            });
+            await Audit.saveLatestQaReport(auditId, qaReport);
 
-        Response.Ok(res, {
-            auditId: auditId,
-            hasReport: true,
-            ...formatQaReportResponse(qaReport, {
-                cached: false,
-                outdated: false
-            })
+            Response.Ok(res, {
+                auditId: auditId,
+                hasReport: true,
+                ...formatQaReportResponse(qaReport, {
+                    cached: false,
+                    outdated: false
+                })
+            });
+            return;
+        }
+
+        if (isSingleJobActive(jobKey)) {
+            Response.BadParameters(res, 'An AI QA run is already in progress for this audit.');
+            return;
+        }
+
+        // AI call runs as a detached background job so the connection doesn't stay open:
+        // the client gets the job now and loads the persisted report once done (loadOnly
+        // above, or the audit-qa:done socket event). The report is authoritative; the job
+        // record only tracks whether a run is in flight.
+        const { job } = startSingleJob({
+            key: jobKey,
+            io: io,
+            room: auditId,
+            event: 'audit-qa:done',
+            meta: { auditId: auditId, scope: scope },
+            task: async () => {
+                const existingStored = normalizeStoredQaReport(auditObject) || {};
+                const partialResult = await runAuditQa({
+                    audit: auditObject,
+                    settings: settings,
+                    provider: provider,
+                    scope: scope
+                });
+                const mergedIssues = mergeQaIssues(existingStored.issues || [], partialResult.issues || [], scope);
+                const mergedResult = finalizeMergedQaResult(existingStored, partialResult, mergedIssues);
+                const fingerprint = computeAuditQaFingerprint(auditObject);
+                const qaReport = buildQaReportCache(fingerprint, mergedResult, {
+                    existing: existingStored,
+                    scope: scope
+                });
+                await Audit.saveLatestQaReport(auditId, qaReport);
+            }
         });
+
+        Response.Ok(res, { auditId: auditId, job: serializeSingleJob(job) });
     } catch (err) {
         Response.Internal(res, err);
     }
@@ -350,7 +464,7 @@ const respondVulnerabilityQaReport = (report, options = {}) => (
     report ? { hasReport: true, ...report } : emptyVulnerabilityQaResponse(options.mode || 'single')
 );
 
-const handleVulnerabilityQa = async function(req, res) {
+const handleVulnerabilityQa = (io) => async function(req, res) {
     try {
         const locale = String(req.body.locale || '').trim();
         if (!locale) {
@@ -392,6 +506,7 @@ const handleVulnerabilityQa = async function(req, res) {
                 const report = getLatestVulnerabilityQaReport(vulnerability, locale);
                 Response.Ok(res, {
                     ...respondVulnerabilityQaReport(report, { mode: 'single' }),
+                    job: getSingleJobStatus(vulnQaSingleJobKey(vulnerabilityId, locale)),
                     catalog: await buildCatalogSlice(vulnerabilityId)
                 });
                 return;
@@ -440,41 +555,74 @@ const handleVulnerabilityQa = async function(req, res) {
             const vulnerability = typeof vulnerabilityDoc.toObject === 'function' ?
                 vulnerabilityDoc.toObject() : vulnerabilityDoc;
 
-            const partialResult = await runVulnerabilityQa({
-                vulnerability: vulnerability,
-                locale: locale,
-                settings: settings,
-                provider: provider,
-                scope: scope
-            });
-            const fingerprint = computeVulnerabilityQaFingerprint(vulnerability, locale);
-            // Only merge the other scope's previous results when they describe the same
-            // content: a stale-fingerprint entry must not contribute issues or timestamps.
-            const storedEntry = (vulnerability.qaReports || []).find((entry) => entry?.locale === locale);
-            const fingerprintMatches = storedEntry?.fingerprint === fingerprint;
-            const existingReport = fingerprintMatches ?
-                (getLatestVulnerabilityQaReport(vulnerability, locale) || {}) :
-                {};
-            const mergedIssues = mergeQaIssues(existingReport.issues || [], partialResult.issues || [], scope);
-            const mergedResult = finalizeMergedQaResult(existingReport, partialResult, mergedIssues);
-            const qaReport = buildVulnerabilityQaReportCache(fingerprint, mergedResult, {
-                locale: locale,
-                mode: 'single',
-                vulnerabilityId: partialResult.vulnerabilityId,
-                title: partialResult.title
-            }, {
-                existing: existingReport,
-                scope: scope
-            });
-            await Vulnerability.saveQaReportForLocale(vulnerabilityId, locale, qaReport);
+            const buildSingleVulnQaReport = async () => {
+                const partialResult = await runVulnerabilityQa({
+                    vulnerability: vulnerability,
+                    locale: locale,
+                    settings: settings,
+                    provider: provider,
+                    scope: scope
+                });
+                const fingerprint = computeVulnerabilityQaFingerprint(vulnerability, locale);
+                // Only merge the other scope's previous results when they describe the same
+                // content: a stale-fingerprint entry must not contribute issues or timestamps.
+                const storedEntry = (vulnerability.qaReports || []).find((entry) => entry?.locale === locale);
+                const fingerprintMatches = storedEntry?.fingerprint === fingerprint;
+                const existingReport = fingerprintMatches ?
+                    (getLatestVulnerabilityQaReport(vulnerability, locale) || {}) :
+                    {};
+                const mergedIssues = mergeQaIssues(existingReport.issues || [], partialResult.issues || [], scope);
+                const mergedResult = finalizeMergedQaResult(existingReport, partialResult, mergedIssues);
+                return buildVulnerabilityQaReportCache(fingerprint, mergedResult, {
+                    locale: locale,
+                    mode: 'single',
+                    vulnerabilityId: partialResult.vulnerabilityId,
+                    title: partialResult.title
+                }, {
+                    existing: existingReport,
+                    scope: scope
+                });
+            };
 
-            Response.Ok(res, {
-                ...respondVulnerabilityQaReport(
-                    formatVulnerabilityQaReportResponse(qaReport, { cached: false, outdated: false }),
-                    { mode: 'single' }
-                ),
-                catalog: await buildCatalogSlice(vulnerabilityId)
+            // Programmatic-only checks are local (no LLM call), so run them inline - no
+            // proxy timeout risk to justify background-job overhead.
+            if (scope === 'programmatic') {
+                const qaReport = await buildSingleVulnQaReport();
+                await Vulnerability.saveQaReportForLocale(vulnerabilityId, locale, qaReport);
+
+                Response.Ok(res, {
+                    ...respondVulnerabilityQaReport(
+                        formatVulnerabilityQaReportResponse(qaReport, { cached: false, outdated: false }),
+                        { mode: 'single' }
+                    ),
+                    catalog: await buildCatalogSlice(vulnerabilityId)
+                });
+                return;
+            }
+
+            const jobKey = vulnQaSingleJobKey(vulnerabilityId, locale);
+            if (isSingleJobActive(jobKey)) {
+                Response.BadParameters(res, 'An AI QA run is already in progress for this vulnerability.');
+                return;
+            }
+
+            // AI call runs as a detached background job so the connection doesn't stay
+            // open: the client gets the job now and loads the persisted report once done
+            // (loadOnly above, or the vuln-qa-single:done socket event). The report is
+            // authoritative; the job record only tracks whether a run is in flight.
+            const { job } = startSingleJob({
+                key: jobKey,
+                io: io,
+                room: VULN_QA_ROOM,
+                event: 'vuln-qa-single:done',
+                meta: { vulnerabilityId: vulnerabilityId, locale: locale },
+                task: async () => {
+                    const qaReport = await buildSingleVulnQaReport();
+                    await Vulnerability.saveQaReportForLocale(vulnerabilityId, locale, qaReport);
+                }
             });
+
+            Response.Ok(res, { vulnerabilityId: vulnerabilityId, locale: locale, job: serializeSingleJob(job) });
             return;
         }
 
@@ -797,8 +945,8 @@ const requireVulnerabilityQaPermission = function(req, res, next) {
 module.exports = function(app, io) {
     app.get('/api/ai/enabled-fields', acl.hasPermission('validtoken'), requireAiGeneratePermission, handleAiEnabledFields);
     app.post('/api/ai/generate', acl.hasPermission('validtoken'), requireAiGeneratePermission, handleAiGenerate);
-    app.post('/api/ai/qa', acl.hasPermission('audits:ai-qa'), handleAiQa);
-    app.post('/api/ai/vulnerabilities/qa', acl.hasPermission('validtoken'), requireVulnerabilityQaPermission, handleVulnerabilityQa);
+    app.post('/api/ai/qa', acl.hasPermission('audits:ai-qa'), handleAiQa(io));
+    app.post('/api/ai/vulnerabilities/qa', acl.hasPermission('validtoken'), requireVulnerabilityQaPermission, handleVulnerabilityQa(io));
     app.post('/api/ai/vulnerabilities/qa/run', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaRun(io));
     app.get('/api/ai/vulnerabilities/qa/status', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaStatus);
     app.post('/api/ai/vulnerabilities/qa/cancel', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaCancel);

@@ -803,6 +803,7 @@ export default {
         updatedDraft: '这是所选文本的更新版本。',
         emptyDraft: 'AI 回复为空',
         requestFailed: '无法生成 AI 回复',
+        timedOut: '请求超时。复杂查询可能会出现这种情况——您的提示已保留，请重试。',
         noSelection: '使用 AI 前请先在字段中选择文本。',
         generating: '正在生成内容...',
         leaveWhileGeneratingTitle: 'AI 正在生成',

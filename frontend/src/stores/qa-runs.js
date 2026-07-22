@@ -16,7 +16,11 @@ const emptyRun = () => ({
   startedAt: null,
   scope: null,
   report: null,
-  error: ''
+  error: '',
+  // Set when a run is a server-side background job (serialized job payload from the backend);
+  // callers derive in-flight state from `job.state === 'running'`. The `running`/`startedAt`/
+  // `scope` fields above are for the older client-owned lifecycle (`start()`) and stay null.
+  job: null
 })
 
 const resolveError = (err, fallback) => {
@@ -41,7 +45,8 @@ export const useQaRunsStore = defineStore('qaRuns', {
     isRunning: (state) => (key) => Boolean(key && state.runs[key]?.running),
     isLoading: (state) => (key) => Boolean(key && state.runs[key]?.loading),
     startedAt: (state) => (key) => (key && state.runs[key]?.startedAt) || null,
-    runScope: (state) => (key) => (key && state.runs[key]?.scope) || null
+    runScope: (state) => (key) => (key && state.runs[key]?.scope) || null,
+    isJobRunning: (state) => (key) => Boolean(key && state.runs[key]?.job?.state === 'running')
   },
 
   actions: {
@@ -115,6 +120,40 @@ export const useQaRunsStore = defineStore('qaRuns', {
       const run = this.ensureRun(key)
       run.report = data || {}
       run.loaded = true
+    },
+
+    // Start a run whose backend response is either a background job ({ job }; a *:done
+    // socket handler later calls setJob/setReport) or an inline result (no `job` key).
+    // Ignored while a previous run for this key is still in flight.
+    async startJob(key, runner, { errorFallback = '' } = {}) {
+      const run = this.ensureRun(key)
+      if (run.running || run.job?.state === 'running')
+        return
+
+      run.error = ''
+      // Drop finished progress so a new run doesn't show stale state from a previous pass.
+      if (run.report?.progress)
+        run.report = { ...run.report, progress: null }
+
+      try {
+        const datas = await runner()
+        if (datas?.job) {
+          run.job = datas.job
+        } else {
+          run.job = null
+          run.report = datas || {}
+          run.loaded = true
+        }
+      } catch (err) {
+        run.error = resolveError(err, errorFallback)
+      }
+    },
+
+    // Update a run's job status - called from the *:done socket handler once a background
+    // job started by startJob() finishes.
+    setJob(key, job) {
+      const run = this.ensureRun(key)
+      run.job = job
     },
 
     reset(key) {

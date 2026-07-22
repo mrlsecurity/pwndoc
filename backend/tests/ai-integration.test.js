@@ -589,5 +589,192 @@ module.exports = function(request, app) {
 
             getAllSpy.mockRestore();
         });
+
+    // Audit and single-vuln QA run their LLM call as a detached background job
+    // (ai-qa-single-job.js), so a slow provider can't hold the connection to a proxy
+    // timeout. The start response returns the job; the report is read back via loadOnly.
+    describe('AI QA background jobs (single-call)', () => {
+        const waitForSingleJobDone = async (poll) => {
+            for (let attempt = 0; attempt < 100; attempt++) {
+                const response = await poll();
+                expect(response.status).toBe(200);
+                const job = response.body.datas.job;
+                if (job && ['done', 'failed'].includes(job.state))
+                    return response.body.datas;
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            throw new Error('QA job did not finish in time');
+        };
+
+        it('should start audit QA as a background job for AI scope and persist the report once done', async () => {
+            const auditResponse = await request(app).post('/api/audits')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ name: 'AI QA Job Audit', language: 'en', auditType: 'Web' });
+            expect(auditResponse.status).toBe(201);
+            const auditId = auditResponse.body.datas.audit._id;
+
+            const startResponse = await request(app).post('/api/ai/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ auditId, scope: 'all' });
+
+            expect(startResponse.status).toBe(200);
+            expect(startResponse.body.datas.auditId).toBe(auditId);
+            expect(startResponse.body.datas.job).toEqual(expect.objectContaining({
+                auditId,
+                scope: 'all',
+                state: 'running'
+            }));
+            expect(startResponse.body.datas.hasReport).toBeUndefined();
+            // The double-run guard is covered deterministically in ai-qa-single-job.test.js;
+            // over real HTTP the job resolves too fast (synchronous missing-key error) to
+            // still be "running" when a second request lands.
+
+            const finalStatus = await waitForSingleJobDone(() => request(app).post('/api/ai/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ auditId, loadOnly: true }));
+
+            expect(finalStatus.job.state).toBe('done');
+            expect(finalStatus.hasReport).toBe(true);
+            expect(Array.isArray(finalStatus.issues)).toBe(true);
+        });
+
+        it('should resolve audit QA inline (no job) for the programmatic-only scope', async () => {
+            const auditResponse = await request(app).post('/api/audits')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ name: 'Programmatic QA Audit', language: 'en', auditType: 'Web' });
+            expect(auditResponse.status).toBe(201);
+            const auditId = auditResponse.body.datas.audit._id;
+
+            const response = await request(app).post('/api/ai/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ auditId, scope: 'programmatic' });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.hasReport).toBe(true);
+            expect(response.body.datas.job).toBeUndefined();
+        });
+
+        it('should start single-vulnerability QA as a background job for AI scope and persist the report once done', async () => {
+            await request(app).post('/api/vulnerabilities')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send([{
+                    category: 'Web',
+                    details: [{
+                        locale: 'en',
+                        title: 'Single Job Target',
+                        vulnType: 'Web',
+                        description: '<p>content</p>',
+                        observation: '',
+                        remediation: ''
+                    }]
+                }]);
+
+            const listResponse = await request(app).get('/api/vulnerabilities')
+                .set('Cookie', [`token=JWT ${adminToken}`]);
+            const created = listResponse.body.datas.find((entry) => entry.details[0]?.title === 'Single Job Target');
+            expect(created).toBeDefined();
+
+            const startResponse = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', scope: 'all', vulnerabilityId: created._id });
+
+            expect(startResponse.status).toBe(200);
+            expect(startResponse.body.datas.vulnerabilityId).toBe(created._id);
+            expect(startResponse.body.datas.job).toEqual(expect.objectContaining({
+                vulnerabilityId: created._id,
+                locale: 'en',
+                state: 'running'
+            }));
+            expect(startResponse.body.datas.hasReport).toBeUndefined();
+            // See the audit QA test above - the double-run guard is covered deterministically
+            // at the module level in ai-qa-single-job.test.js instead of here.
+
+            const finalStatus = await waitForSingleJobDone(() => request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', loadOnly: true, vulnerabilityId: created._id }));
+
+            expect(finalStatus.job.state).toBe('done');
+            expect(finalStatus.hasReport).toBe(true);
+            expect(finalStatus.mode).toBe('single');
+        });
+
+        it('should resolve single-vulnerability QA inline (no job) for the programmatic-only scope', async () => {
+            await request(app).post('/api/vulnerabilities')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send([{
+                    category: 'Web',
+                    details: [{
+                        locale: 'en',
+                        title: 'Single Programmatic Target',
+                        vulnType: 'Web',
+                        description: '<p>content</p>',
+                        observation: '',
+                        remediation: ''
+                    }]
+                }]);
+
+            const listResponse = await request(app).get('/api/vulnerabilities')
+                .set('Cookie', [`token=JWT ${adminToken}`]);
+            const created = listResponse.body.datas.find((entry) => entry.details[0]?.title === 'Single Programmatic Target');
+            expect(created).toBeDefined();
+
+            const response = await request(app).post('/api/ai/vulnerabilities/qa')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ locale: 'en', scope: 'programmatic', vulnerabilityId: created._id });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datas.hasReport).toBe(true);
+            expect(response.body.datas.job).toBeUndefined();
+        });
+    });
+
+    // /api/ai/generate streams over SSE (a heartbeat per LLM chunk) so nginx's idle timeout
+    // can't fire mid-generation; the draft/reply contract is unchanged, only the transport.
+    describe('AI generate streaming', () => {
+        const parseSseEvents = (text) => String(text || '')
+            .split('\n\n')
+            .filter((block) => block.trim())
+            .map((block) => {
+                let event = 'message';
+                const dataLines = [];
+                block.split('\n').forEach((line) => {
+                    if (line.startsWith('event:'))
+                        event = line.slice(6).trim();
+                    else if (line.startsWith('data:'))
+                        dataLines.push(line.slice(5).trim());
+                });
+                return { event, data: dataLines.length ? JSON.parse(dataLines.join('\n')) : null };
+            });
+
+        it('should respond with an SSE error event when no provider is configured', async () => {
+            const response = await request(app).post('/api/ai/generate')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({
+                    entityType: 'finding',
+                    field: 'description',
+                    userPrompt: 'Write something',
+                    context: {}
+                });
+
+            // Headers commit to the stream before the provider is contacted, so even a
+            // configuration error comes back as a 200 SSE error event, not a 4xx/5xx JSON body.
+            expect(response.status).toBe(200);
+            expect(response.headers['content-type']).toMatch(/text\/event-stream/);
+
+            const events = parseSseEvents(response.text);
+            const errorEvent = events.find((event) => event.event === 'error');
+            expect(errorEvent).toBeDefined();
+            expect(errorEvent.data.message).toMatch(/not configured/i);
+        });
+
+        it('should still reject validation errors as plain JSON before streaming starts', async () => {
+            const response = await request(app).post('/api/ai/generate')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ entityType: 'finding', field: 'not-a-real-field' });
+
+            expect(response.status).toBe(422);
+            expect(response.headers['content-type']).toMatch(/json/);
+        });
+    });
     });
 };

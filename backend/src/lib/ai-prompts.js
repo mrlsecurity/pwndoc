@@ -5,18 +5,18 @@ const AI_PROVIDER_DEFAULTS = {
     openai: {
         baseUrl: 'https://api.openai.com/v1',
         model: 'gpt-5.4-mini',
-        timeoutMs: 30000
+        timeoutMs: 120000
     },
     anthropic: {
         baseUrl: 'https://api.anthropic.com/v1',
         model: 'claude-opus-4-8',
-        timeoutMs: 30000,
+        timeoutMs: 120000,
         version: '2023-06-01'
     },
     deepseek: {
         baseUrl: 'https://api.deepseek.com/v1',
         model: 'deepseek-v4-flash',
-        timeoutMs: 30000
+        timeoutMs: 120000
     },
     ollama: {
         baseUrl: 'http://localhost:11434/v1',
