@@ -531,11 +531,3 @@ export const buildPreviousRunEntries = ({ programmaticRanAt, aiRanAt } = {}) => 
 
   return entries
 }
-
-export const buildPreviousRunLabels = ({ programmaticRanAt, aiRanAt } = {}) => (
-  buildPreviousRunEntries({ programmaticRanAt, aiRanAt }).map((entry) => (
-    entry.date
-      ? $t(entry.kind === 'ai' ? 'auditQa.previousAiRunAt' : 'auditQa.previousProgrammaticRunAt', { date: entry.date })
-      : $t(entry.kind === 'ai' ? 'auditQa.previousAiRun' : 'auditQa.previousProgrammaticRun')
-  ))
-)

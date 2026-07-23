@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   parseIssueLocation,
   buildIssueRoute,
-  issueNavigationKind,
   isGeneralInformationLocation,
   resolveFindingForLocation
 } from '@/services/audit-qa-navigation'
@@ -89,15 +88,6 @@ describe('audit-qa-navigation', () => {
   it('builds the general/network page routes', () => {
     expect(buildIssueRoute('audit-1', parseIssueLocation('general'))).toEqual({ path: '/audits/audit-1/general' })
     expect(buildIssueRoute('audit-1', parseIssueLocation('network'))).toEqual({ path: '/audits/audit-1/network' })
-  })
-
-  it('classifies navigation kinds: finding, section/general/network, or none for report', () => {
-    expect(issueNavigationKind('finding:Test/description')).toBe('finding')
-    expect(issueNavigationKind('section:Executive Summary')).toBe('section')
-    expect(issueNavigationKind('general')).toBe('section')
-    expect(issueNavigationKind('network')).toBe('section')
-    expect(issueNavigationKind('report')).toBe(null)
-    expect(issueNavigationKind('')).toBe(null)
   })
 
   it('groups general information field paths together', () => {

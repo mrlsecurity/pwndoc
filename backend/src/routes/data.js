@@ -272,14 +272,8 @@ module.exports = function(app) {
     // Get AI integration configuration (admin only)
     app.get("/api/data/ai-integration", acl.hasPermission('validtoken'), handleGetAiIntegration);
 
-    // Backward-compatible alias
-    app.get("/api/data/ai-prompts", acl.hasPermission('validtoken'), handleGetAiIntegration);
-
     // Update AI integration configuration (admin only)
     app.put("/api/data/ai-integration", acl.hasPermission('validtoken'), updateAiIntegration);
-
-    // Backward-compatible alias
-    app.put("/api/data/ai-prompts", acl.hasPermission('validtoken'), updateAiIntegration);
 
 /* ===== LANGUAGES ===== */
 

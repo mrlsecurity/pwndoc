@@ -1,15 +1,3 @@
-export const QA_CHECK_KEYS = [
-    'completeness',
-    'references',
-    'imageCaptions',
-    'duplicates',
-    'aiDuplicates',
-    'aiUnlinkedTranslations',
-    'redaction',
-    'customer',
-    'instructions'
-]
-
 export const QA_PROGRAMMATIC_CHECK_KEYS = [
     'completeness',
     'references',
@@ -39,15 +27,6 @@ export function hasAnyQaCheckEnabled(qaChecks = {}) {
 
 export function isAiSettingEnabled(settings = {}) {
     return settings?.ai?.public?.enabled !== false
-}
-
-// Whether there's any QA check the user could actually run right now: built-in checks are
-// always available, AI checks only count while AI integration is enabled.
-export function hasAnyRunnableQaCheck(settings = {}) {
-    const qaChecks = settings?.ai?.public?.qaChecks
-
-    return hasAnyProgrammaticQaCheckEnabled(qaChecks) ||
-        (isAiSettingEnabled(settings) && hasAnyAiQaCheckEnabled(qaChecks))
 }
 
 // Permission-aware gating. Each area has three DISJOINT QA permissions: read (view reports

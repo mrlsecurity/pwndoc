@@ -120,20 +120,3 @@ export const buildIssueRoute = (auditId, parsed, { findings = [], sections = [] 
   return { path: `/audits/${auditId}/general` };
 };
 
-// Which "Go to" button (if any) a location should get: a finding gets "Go to finding"; a
-// section/general/network destination gets "Go to section"; a report-wide (global) issue gets
-// none — there's no single place to jump to for it.
-export const issueNavigationKind = (location = '') => {
-  const parsed = parseIssueLocation(location);
-
-  if (parsed.type === 'finding')
-    return 'finding';
-
-  if (parsed.type === 'section')
-    return 'section';
-
-  if (parsed.type === 'page' && parsed.page !== 'report')
-    return 'section';
-
-  return null;
-};

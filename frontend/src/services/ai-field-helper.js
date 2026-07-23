@@ -236,29 +236,6 @@ export default {
   getDefaultPrompt,
   getInputSelection,
 
-  validateDraft(draft, outputType) {
-    if (outputType === 'array') {
-      const entries = Array.isArray(draft) ?
-        draft :
-        String(draft || '').split('\n')
-
-      const normalized = entries
-        .map((entry) => String(entry || '').trim())
-        .filter(Boolean)
-
-      if (normalized.length === 0)
-        throw new Error($t('aiChat.emptyDraft'))
-
-      return normalized
-    }
-
-    const text = String(draft || '').trim()
-    if (!text)
-      throw new Error($t('aiChat.emptyDraft'))
-
-    return text
-  },
-
   // `current` lets a caller that already cloned the entity (e.g. to also show it
   // as-is in the diff view) reuse that clone instead of re-deriving it here.
   buildAiDiffDraft(diffContext, draft, current = null) {

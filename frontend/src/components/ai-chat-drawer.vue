@@ -45,7 +45,6 @@
         :selected-prompt-id="selectedPromptId"
         :no-results-label="$t('aiChat.noPromptsFound')"
         :default-hint="$t('aiChat.defaultPromptHint')"
-        :use-label="$t('aiChat.usePrompt')"
         @select="selectPrompt"
         />
       </div>
@@ -193,7 +192,6 @@
           :selected-prompt-id="selectedPromptId"
           :no-results-label="$t('aiChat.noPromptsFound')"
           :default-hint="$t('aiChat.defaultPromptHint')"
-          :use-label="$t('aiChat.usePrompt')"
           @select="selectPrompt"
           />
           <div class="q-pa-sm">

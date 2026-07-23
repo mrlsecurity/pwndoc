@@ -192,8 +192,6 @@ const finalizeMergedQaResult = (existingStored = {}, partialResult = {}, mergedI
 
 module.exports = {
     QA_CHECK_KEYS,
-    QA_PROGRAMMATIC_CHECK_KEYS,
-    QA_AI_CHECK_KEYS,
     QA_SCOPES,
     defaultQaChecks,
     normalizeQaChecks,

@@ -544,10 +544,6 @@ export default {
             return this.frontEndAuditState === this.AUDIT_VIEW_STATE.EDIT
         },
 
-        generateDescriptionDraftAI: function() {
-            return this.generateFieldDraftAI('description')
-        },
-
         generateCustomFieldDraftAI: function(customField) {
             return this.generateFieldDraftAI(null, customField)
         },

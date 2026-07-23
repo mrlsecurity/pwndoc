@@ -81,10 +81,6 @@ export default {
       type: String,
       required: true
     },
-    useLabel: {
-      type: String,
-      required: true
-    },
     fillAvailable: Boolean,
     closeOnSelect: Boolean
   },

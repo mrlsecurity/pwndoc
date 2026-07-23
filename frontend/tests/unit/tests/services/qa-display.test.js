@@ -256,17 +256,6 @@ describe('qa-display', () => {
     expect(view.summary).toBeUndefined()
   })
 
-  it('builds separate previous-run labels for programmatic and AI timestamps', () => {
-    const labels = buildPreviousRunLabels({
-      programmaticRanAt: '2026-07-03T20:18:17.000Z',
-      aiRanAt: '2026-07-03T21:00:00.000Z'
-    })
-
-    expect(labels).toHaveLength(2)
-    expect(labels[0]).toBe('auditQa.previousProgrammaticRunAt')
-    expect(labels[1]).toBe('auditQa.previousAiRunAt')
-  })
-
   it('builds compact previous-run entries', () => {
     const entries = buildPreviousRunEntries({
       programmaticRanAt: '2026-07-03T20:18:17.000Z',
