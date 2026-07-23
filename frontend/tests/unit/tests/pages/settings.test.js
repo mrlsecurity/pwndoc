@@ -421,7 +421,14 @@ describe('Settings Page', () => {
           }
         })) }
       })
-      SettingsService.updateSettings.mockResolvedValue({ data: { datas: 'ok' } })
+      // Snapshot the payload at call time: updateSettings is passed a live reference to
+      // this.settings, which the .then() callback later strips back to '' — real axios
+      // serializes the body synchronously, so assert against what was sent, not the mutated ref.
+      let sent
+      SettingsService.updateSettings.mockImplementation((settings) => {
+        sent = JSON.parse(JSON.stringify(settings))
+        return Promise.resolve({ data: { datas: 'ok' } })
+      })
 
       const wrapper = createWrapper()
       await wrapper.vm.$nextTick()
@@ -435,7 +442,6 @@ describe('Settings Page', () => {
 
       // The masked sentinel is sent so the backend preserves the stored key
       // instead of wiping it with the sanitized empty string.
-      const sent = SettingsService.updateSettings.mock.calls[0][0]
       expect(sent.ai.private.openaiApiKey).toBe('••••••••••••••••')
     })
 

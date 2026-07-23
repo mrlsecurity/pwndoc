@@ -19,7 +19,7 @@
     :ai-unavailable-messages="aiUnavailableMessages"
     :show-programmatic-action="showProgrammaticAction"
     :show-ai-action="showAiAction"
-    :show-all-action="showProgrammaticAction && showAiAction"
+    :show-all-action="showAllAction"
     show-navigation
     @close="closeDrawer"
     @run="runQaScope"
@@ -90,14 +90,17 @@ export default {
       return isAiSettingEnabled(this.$settings)
     },
 
-    // Built-in checks require audits:qa; AI checks require audits:ai-qa (disjoint permissions)
-    // plus AI integration enabled.
+    // Built-in checks need audits:qa; AI checks need audits:ai-qa + AI enabled.
     showProgrammaticAction() {
       return useUserStore().isAllowed('audits:qa')
     },
 
     showAiAction() {
       return useUserStore().isAllowed('audits:ai-qa') && this.aiSettingEnabled
+    },
+
+    showAllAction() {
+      return this.showProgrammaticAction && this.showAiAction
     },
 
     aiUnavailableMessages() {

@@ -948,26 +948,21 @@ const handleAiTestConnection = async function(req, res) {
     }
 };
 
-const requireAiAssistPermission = function(req, res, next) {
-    if (acl.isAllowedToken(req.decodedToken, 'audits:ai-assist') ||
-        acl.isAllowedToken(req.decodedToken, 'vulnerabilities:ai-assist'))
+const tokenAllowsAny = (token, permissions) =>
+    permissions.some((permission) => acl.isAllowedToken(token, permission));
+
+// Gate for endpoints that require holding any of an explicit permission list.
+const requireAnyPermission = (...permissions) => function(req, res, next) {
+    if (tokenAllowsAny(req.decodedToken, permissions))
         return next();
 
     Response.Forbidden(res, 'Insufficient privileges');
 };
 
-const tokenAllowsAny = (token, permissions) =>
-    permissions.some((permission) => acl.isAllowedToken(token, permission));
+const requireAiAssistPermission = requireAnyPermission('audits:ai-assist', 'vulnerabilities:ai-assist');
 
-// QA permissions per area are three disjoint scopes: `read` (view reports only), `base` QA
-// (run built-in checks) and `ai` QA (run AI checks). A generate permission implies read, but
-// the ACL does not derive that, so read gates must accept all three explicitly. `base` and
-// `ai` never imply each other.
-const qaReadPerms = (readPerm, base, aiBase) => [readPerm, base, aiBase];
-const qaGeneratePerms = (base, aiBase) => [base, aiBase];
-
-// Whether the token is authorized to RUN the requested QA scope. `programmatic` needs the
-// base perm, `ai` needs the AI perm, `all` runs both kinds of checks so it needs BOTH.
+// Each area has three disjoint QA scopes: read (view), base (built-in checks), ai (AI checks).
+// `all` runs both kinds, so it needs both perms.
 const tokenAllowsQaScope = (token, scope, base, aiBase) => {
     if (scope === 'programmatic')
         return acl.isAllowedToken(token, base);
@@ -978,37 +973,26 @@ const tokenAllowsQaScope = (token, scope, base, aiBase) => {
     return false;
 };
 
-// Scope-aware QA authorization. Reading a cached report (loadOnly) is allowed for any QA
-// permission holder (read/base/ai) — if the panel opened, the user has at least one QA
-// permission, so a read must never 403. Runs are gated on the specific permission the scope
-// requires. Returns Express middleware bound to the read/base/AI permission triple.
+// Scope-aware QA authorization: reading a cached report (loadOnly) needs any QA perm; runs
+// are gated on the perm the scope requires.
 const requireQaPermission = (readPerm, base, aiBase) => function(req, res, next) {
     const token = req.decodedToken;
 
     if (Boolean(req.body?.loadOnly)) {
-        if (tokenAllowsAny(token, qaReadPerms(readPerm, base, aiBase)))
+        if (tokenAllowsAny(token, [readPerm, base, aiBase]))
             return next();
         return Response.Forbidden(res, 'Insufficient privileges');
     }
 
+    // An invalid scope is left for the handler to reject with a 422; gate it on any run perm.
     const scope = normalizeQaScope(req.body?.scope);
-    // An invalid scope is a bad request, but the handler owns that response — authorize
-    // against any generate permission here and let the handler reject the scope with a 422.
     if (!scope) {
-        if (tokenAllowsAny(token, qaGeneratePerms(base, aiBase)))
+        if (tokenAllowsAny(token, [base, aiBase]))
             return next();
         return Response.Forbidden(res, 'Insufficient privileges');
     }
 
     if (tokenAllowsQaScope(token, scope, base, aiBase))
-        return next();
-
-    Response.Forbidden(res, 'Insufficient privileges');
-};
-
-// Gate for endpoints that require holding any of an explicit permission list.
-const requireAnyPermission = (...permissions) => function(req, res, next) {
-    if (tokenAllowsAny(req.decodedToken, permissions))
         return next();
 
     Response.Forbidden(res, 'Insufficient privileges');
@@ -1020,8 +1004,7 @@ const requireVulnerabilityQaPermission = function(req, res, next) {
     const hasDraft = draftVulnerability &&
         typeof draftVulnerability === 'object' &&
         !Array.isArray(draftVulnerability);
-    // Single-vulnerability (saved or draft) runs use the per-vuln perms; the catalog-wide
-    // path (no id/draft) uses the `-all` perms.
+    // A saved/draft vuln uses the per-vuln perms; no id/draft means the catalog-wide perms.
     const isSingle = Boolean(vulnerabilityId || hasDraft);
     const readPerm = isSingle ? 'vulnerabilities:qa-read' : 'vulnerabilities:qa-read-catalog';
     const base = isSingle ? 'vulnerabilities:qa' : 'vulnerabilities:qa-catalog';
@@ -1030,11 +1013,8 @@ const requireVulnerabilityQaPermission = function(req, res, next) {
     return requireQaPermission(readPerm, base, aiBase)(req, res, next);
 };
 
-// Vuln catalog read permissions (view the stored catalog report / job status). Any of the
-// three catalog-level QA permissions grants read.
+// Catalog perms: any grants read (view report/status); generate excludes read-only holders.
 const VULN_QA_READ_CATALOG = ['vulnerabilities:qa-read-catalog', 'vulnerabilities:qa-catalog', 'vulnerabilities:ai-qa-catalog'];
-// Vuln catalog generate permissions (mutate the report or a running job: cancel/dismiss/
-// resolve). Read-only holders are intentionally excluded.
 const VULN_QA_GENERATE_CATALOG = ['vulnerabilities:qa-catalog', 'vulnerabilities:ai-qa-catalog'];
 
 module.exports = function(app, io) {
