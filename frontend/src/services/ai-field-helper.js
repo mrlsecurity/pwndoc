@@ -1,6 +1,5 @@
 import Utils from '@/services/utils'
 import { useAiGenerationStore } from '@/stores/ai-generation'
-import { $t } from '@/boot/i18n'
 
 const FINDING_FIELD_OUTPUT_TYPES = {
   description: 'html',

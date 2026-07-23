@@ -1,6 +1,4 @@
 const QA_CHECK_KEYS = ['completeness', 'references', 'imageCaptions', 'duplicates', 'aiDuplicates', 'aiUnlinkedTranslations', 'redaction', 'customer', 'instructions'];
-const QA_PROGRAMMATIC_CHECK_KEYS = ['completeness', 'references', 'imageCaptions', 'duplicates'];
-const QA_AI_CHECK_KEYS = ['aiDuplicates', 'aiUnlinkedTranslations', 'redaction', 'customer', 'instructions'];
 const QA_SCOPES = ['programmatic', 'ai', 'all'];
 
 const defaultQaChecks = () => ({

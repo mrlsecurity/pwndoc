@@ -9,7 +9,7 @@ vi.mock('@/services/audit-qa-navigation', async (importOriginal) => {
   return actual
 })
 
-import { groupIssuesByLabel, filterIssuesBySeverity, formatQaLocationLabel, buildQaReportViewModel, buildPreviousRunEntries, buildPreviousRunLabels, isAiUnavailableIssue, splitAiUnavailableIssues, buildAuditQaGroups, buildVulnQaGroups } from '@/services/qa-display'
+import { groupIssuesByLabel, filterIssuesBySeverity, formatQaLocationLabel, buildQaReportViewModel, buildPreviousRunEntries, isAiUnavailableIssue, splitAiUnavailableIssues, buildAuditQaGroups, buildVulnQaGroups } from '@/services/qa-display'
 
 describe('qa-display', () => {
   const issues = [
