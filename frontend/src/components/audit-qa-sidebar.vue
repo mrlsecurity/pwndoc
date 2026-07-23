@@ -17,8 +17,9 @@
     :grouped-issues="groupedIssues"
     :outdated="outdated"
     :ai-unavailable-messages="aiUnavailableMessages"
-    :show-ai-action="aiSettingEnabled"
-    :show-all-action="aiSettingEnabled"
+    :show-programmatic-action="showProgrammaticAction"
+    :show-ai-action="showAiAction"
+    :show-all-action="showProgrammaticAction && showAiAction"
     show-navigation
     @close="closeDrawer"
     @run="runQaScope"
@@ -31,6 +32,7 @@
 <script>
 import { mapState, mapActions } from 'pinia'
 import { useAuditQaStore } from '@/stores/audit-qa'
+import { useUserStore } from '@/stores/user'
 import QaResultsPanel from '@/components/qa-results-panel.vue'
 import { buildAuditQaGroups, splitAiUnavailableIssues } from '@/services/qa-display'
 import { parseIssueLocation, buildIssueRoute } from '@/services/audit-qa-navigation'
@@ -86,6 +88,16 @@ export default {
 
     aiSettingEnabled() {
       return isAiSettingEnabled(this.$settings)
+    },
+
+    // Built-in checks require audits:qa; AI checks require audits:ai-qa (disjoint permissions)
+    // plus AI integration enabled.
+    showProgrammaticAction() {
+      return useUserStore().isAllowed('audits:qa')
+    },
+
+    showAiAction() {
+      return useUserStore().isAllowed('audits:ai-qa') && this.aiSettingEnabled
     },
 
     aiUnavailableMessages() {

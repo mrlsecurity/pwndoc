@@ -504,6 +504,7 @@
                         hide-bottom-space
                         @keyup.enter="createVulnerability()"
                         v-model="currentVulnerability.details[currentDetailsIndex].title"
+                        :readonly="vulnReadonly"
                         outlined
                         />
                         <q-select
@@ -516,6 +517,7 @@
                         emit-value
                         map-options
                         options-sanitize
+                        :readonly="vulnReadonly"
                         outlined
                         />
                         <q-select
@@ -539,6 +541,7 @@
                             <basic-editor
                             ref="basiceditor_description"
                             noAffix
+                            :editable="!vulnReadonly"
                             v-model="currentVulnerability.details[currentDetailsIndex].description"
                             :showAiButton="canGenerateAi('description') && isFieldEditable('description')"
                             :aiLoading="isAiFieldLoading('description')"
@@ -554,6 +557,7 @@
                             <basic-editor
                             ref="basiceditor_observation"
                             noAffix
+                            :editable="!vulnReadonly"
                             v-model="currentVulnerability.details[currentDetailsIndex].observation"
                             :showAiButton="canGenerateAi('observation') && isFieldEditable('observation')"
                             :aiLoading="isAiFieldLoading('observation')"
@@ -567,6 +571,7 @@
                     <div class="col-md-12">
                         <cvss3-calculator
                         v-model="currentVulnerability.cvssv3"
+                        :readonly="vulnReadonly"
                         @cvssScoreChange="currentVulnerability.cvssScore = $event"
                         />
                     </div>
@@ -575,6 +580,7 @@
                     <div class="col-md-12">
                         <cvss4-calculator
                         v-model="currentVulnerability.cvssv4"
+                        :readonly="vulnReadonly"
                         @cvssScoreChange="currentVulnerability.cvssScore = $event"
                         />
                     </div>
@@ -585,6 +591,7 @@
                             <basic-editor
                             ref="basiceditor_remediation"
                             noAffix
+                            :editable="!vulnReadonly"
                             v-model="currentVulnerability.details[currentDetailsIndex].remediation"
                             :showAiButton="canGenerateAi('remediation') && isFieldEditable('remediation')"
                             :aiLoading="isAiFieldLoading('remediation')"
@@ -605,6 +612,7 @@
                         map-options
                         emit-value
                         options-sanitize
+                        :readonly="vulnReadonly"
                         outlined
                         />
                         <q-select
@@ -616,6 +624,7 @@
                         map-options
                         emit-value
                         options-sanitize
+                        :readonly="vulnReadonly"
                         outlined
                         />
                     </div>
@@ -626,6 +635,7 @@
                     framed-header
                     :label="$t('references')"
                     v-model="currentVulnerability.details[currentDetailsIndex].references"
+                    :readonly="vulnReadonly"
                     :showAiButton="canGenerateAi('references') && isFieldEditable('references')"
                     :aiLoading="isAiFieldLoading('references')"
                     :aiSessionActive="isAiFieldSessionActive('references')"
@@ -646,6 +656,7 @@
                     custom-element="QCardSection"
                     display="vuln"
                     :locale="currentLanguage"
+                    :readonly="vulnReadonly"
                     :aiEnabled="aiEnabled"
                     :canGenerateAiForField="canGenerateAi"
                     :isAiGeneratingField="isAiFieldLoading"
@@ -780,6 +791,7 @@
                         hide-bottom-space
                         @keyup.enter="updateVulnerability()"
                         v-model="currentVulnerability.details[currentDetailsIndex].title"
+                        :readonly="vulnReadonly"
                         outlined
                         />
                         <q-select
@@ -792,6 +804,7 @@
                         emit-value
                         map-options
                         options-sanitize
+                        :readonly="vulnReadonly"
                         outlined
                         />
                         <q-select
@@ -815,6 +828,7 @@
                             <basic-editor
                             ref="basiceditor_description"
                             noAffix
+                            :editable="!vulnReadonly"
                             v-model="currentVulnerability.details[currentDetailsIndex].description"
                             :showAiButton="canGenerateAi('description') && isFieldEditable('description')"
                             :aiLoading="isAiFieldLoading('description')"
@@ -830,6 +844,7 @@
                             <basic-editor
                             ref="basiceditor_observation"
                             noAffix
+                            :editable="!vulnReadonly"
                             v-model="currentVulnerability.details[currentDetailsIndex].observation"
                             :showAiButton="canGenerateAi('observation') && isFieldEditable('observation')"
                             :aiLoading="isAiFieldLoading('observation')"
@@ -843,6 +858,7 @@
                     <div class="col-md-12">
                         <cvss3-calculator
                         v-model="currentVulnerability.cvssv3"
+                        :readonly="vulnReadonly"
                         @cvssScoreChange="currentVulnerability.cvssScore = $event"
                         />
                     </div>
@@ -851,6 +867,7 @@
                     <div class="col-md-12">
                         <cvss4-calculator
                         v-model="currentVulnerability.cvssv4"
+                        :readonly="vulnReadonly"
                         @cvssScoreChange="currentVulnerability.cvssScore = $event"
                         />
                     </div>
@@ -861,6 +878,7 @@
                             <basic-editor
                             ref="basiceditor_remediation"
                             noAffix
+                            :editable="!vulnReadonly"
                             v-model="currentVulnerability.details[currentDetailsIndex].remediation"
                             :showAiButton="canGenerateAi('remediation') && isFieldEditable('remediation')"
                             :aiLoading="isAiFieldLoading('remediation')"
@@ -881,6 +899,7 @@
                         map-options
                         emit-value
                         options-sanitize
+                        :readonly="vulnReadonly"
                         outlined
                         />
                         <q-select
@@ -892,6 +911,7 @@
                         map-options
                         emit-value
                         options-sanitize
+                        :readonly="vulnReadonly"
                         outlined
                         />
                     </div>
@@ -902,6 +922,7 @@
                     framed-header
                     :label="$t('references')"
                     v-model="currentVulnerability.details[currentDetailsIndex].references"
+                    :readonly="vulnReadonly"
                     :showAiButton="canGenerateAi('references') && isFieldEditable('references')"
                     :aiLoading="isAiFieldLoading('references')"
                     :aiSessionActive="isAiFieldSessionActive('references')"
@@ -919,6 +940,7 @@
                     v-model="currentVulnerability.details[currentDetailsIndex].customFields"
                     custom-element="QCardSection"
                     :locale="currentLanguage"
+                    :readonly="vulnReadonly"
                     :aiEnabled="aiEnabled"
                     :canGenerateAiForField="canGenerateAi"
                     :isAiGeneratingField="isAiFieldLoading"

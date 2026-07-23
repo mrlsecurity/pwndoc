@@ -15,7 +15,7 @@ import Utils from '@/services/utils';
 import { useUserStore } from 'src/stores/user';
 import { useAuditQaStore } from '@/stores/audit-qa';
 import { useAiGenerationStore } from '@/stores/ai-generation';
-import { hasAnyRunnableQaCheck } from '@/services/qa-checks';
+import { canAccessQa } from '@/services/qa-checks';
 import { createDraftRecovery } from '@/composables/useDraftRecovery';
 
 import { $t } from '@/boot/i18n';
@@ -200,7 +200,12 @@ export default {
         },
 
         aiQaEnabled: function() {
-            return userStore.isAllowed('audits:ai-qa') && hasAnyRunnableQaCheck(this.$settings);
+            return canAccessQa(
+                userStore.isAllowed('audits:qa-read'),
+                userStore.isAllowed('audits:qa'),
+                userStore.isAllowed('audits:ai-qa'),
+                this.$settings
+            );
         }
     },
 

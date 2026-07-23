@@ -437,6 +437,42 @@ describe('Vulnerabilities Page', () => {
       expect(qaToggle().classes()).toContain('bg-grey-3')
     })
 
+    it('marks the editor read-only when the user lacks the edit permission (existing template)', async () => {
+      // Editing an existing template requires vulnerabilities:update.
+      mockUserStore.isAllowed.mockImplementation((scope) => scope !== 'vulnerabilities:update')
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.vulnerabilityId = 'vuln-1'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.canEditVuln).toBe(false)
+      expect(wrapper.vm.vulnReadonly).toBe(true)
+
+      mockUserStore.isAllowed.mockImplementation(() => true)
+    })
+
+    it('allows editing an existing template with vulnerabilities:update', async () => {
+      mockUserStore.isAllowed.mockImplementation(() => true)
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.vulnerabilityId = 'vuln-1'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.canEditVuln).toBe(true)
+      expect(wrapper.vm.vulnReadonly).toBe(false)
+    })
+
+    it('marks the editor read-only when creating without vulnerabilities:create', async () => {
+      mockUserStore.isAllowed.mockImplementation((scope) => scope !== 'vulnerabilities:create')
+      const wrapper = createWrapper()
+      await flushPromises()
+      // vulnerabilityId is null by default (create mode).
+      expect(wrapper.vm.canEditVuln).toBe(false)
+      expect(wrapper.vm.vulnReadonly).toBe(true)
+
+      mockUserStore.isAllowed.mockImplementation(() => true)
+    })
+
     it('updates the QA review toggle label for the panel state', async () => {
       const wrapper = createWrapper()
       await flushPromises()

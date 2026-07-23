@@ -5,12 +5,36 @@ module.exports = function(request, app) {
         let adminToken = '';
         let userToken = '';
         let noAiToken = '';
+        // Base QA (built-in checks) but no AI-QA and no AI-assist.
+        let baseQaToken = '';
+        // AI-QA only, no base QA permission (the two are disjoint).
+        let aiQaOnlyToken = '';
+        // QA read only (view reports) with neither generate permission.
+        let qaReadOnlyToken = '';
+        // Only the catalog built-in generate permission (no single-vuln qa).
+        let catalogOnlyToken = '';
+        // Reads the AI-integration config (redaction guidelines) but nothing else AI.
+        let redactionReaderToken = '';
 
         const login = async (username, password) => {
             const response = await request(app).post('/api/users/token').send({ username, password });
             expect(response.status).toBe(200);
             expect(response.body.datas.token).toBeDefined();
             return response.body.datas.token;
+        };
+
+        const createRoleUser = async (role, user) => {
+            let response = await request(app).post('/api/data/roles')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send(role);
+            expect([201, 422]).toContain(response.status);
+
+            response = await request(app).post('/api/users')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ ...user, roles: [role.name] });
+            expect([201, 422]).toContain(response.status);
+
+            return login(user.username, user.password);
         };
 
         beforeAll(async () => {
@@ -38,6 +62,51 @@ module.exports = function(request, app) {
             expect([201, 422]).toContain(response.status);
 
             noAiToken = await login('noaiuser', 'Noai1234');
+
+            baseQaToken = await createRoleUser(
+                {
+                    name: 'base-qa-only',
+                    displayName: 'Base QA Only',
+                    allows: ['audits:read', 'audits:qa', 'vulnerabilities:read', 'vulnerabilities:qa', 'vulnerabilities:qa-catalog']
+                },
+                { username: 'baseqauser', password: 'Baseqa1234', firstname: 'Base', lastname: 'Qa' }
+            );
+
+            aiQaOnlyToken = await createRoleUser(
+                {
+                    name: 'ai-qa-only',
+                    displayName: 'AI QA Only',
+                    allows: ['audits:read', 'audits:ai-qa', 'vulnerabilities:read', 'vulnerabilities:ai-qa', 'vulnerabilities:ai-qa-catalog']
+                },
+                { username: 'aiqauser', password: 'Aiqa1234', firstname: 'Ai', lastname: 'Qa' }
+            );
+
+            qaReadOnlyToken = await createRoleUser(
+                {
+                    name: 'qa-read-only',
+                    displayName: 'QA Read Only',
+                    allows: ['audits:read', 'audits:qa-read', 'vulnerabilities:read', 'vulnerabilities:qa-read', 'vulnerabilities:qa-read-catalog']
+                },
+                { username: 'qareaduser', password: 'Qaread1234', firstname: 'Qa', lastname: 'Read' }
+            );
+
+            catalogOnlyToken = await createRoleUser(
+                {
+                    name: 'qa-catalog-only',
+                    displayName: 'QA Catalog Only',
+                    allows: ['vulnerabilities:read', 'vulnerabilities:qa-catalog']
+                },
+                { username: 'qacatuser', password: 'Qacat1234', firstname: 'Qa', lastname: 'Cat' }
+            );
+
+            redactionReaderToken = await createRoleUser(
+                {
+                    name: 'redaction-reader',
+                    displayName: 'Redaction Reader',
+                    allows: ['audits:read', 'audits:ai-assist', 'ai:redaction-guidelines:read']
+                },
+                { username: 'redactionreader', password: 'Redact1234', firstname: 'Redaction', lastname: 'Reader' }
+            );
 
             await Settings.findOneAndUpdate({}, {
                 $set: {
@@ -94,9 +163,17 @@ module.exports = function(request, app) {
             expect(response.status).toBe(403);
         });
 
-        it('should return redaction guidelines only for standard users', async () => {
+        it('should deny AI integration config to a standard user without any ai:* read permission', async () => {
+            // AI permissions are non-core, so the plain user role has no ai:*:read grant.
             const response = await request(app).get('/api/data/ai-integration')
                 .set('Cookie', [`token=JWT ${userToken}`]);
+
+            expect(response.status).toBe(403);
+        });
+
+        it('should return redaction guidelines to users with the redaction-guidelines read permission', async () => {
+            const response = await request(app).get('/api/data/ai-integration')
+                .set('Cookie', [`token=JWT ${redactionReaderToken}`]);
 
             expect(response.status).toBe(200);
             expect(response.body.datas.redactionGuidelines.content).toBe('Secret redaction policy');
@@ -105,9 +182,9 @@ module.exports = function(request, app) {
             expect(response.body.datas.qaChecks).toBeUndefined();
         });
 
-        it('should return enabled field prompts for users with ai-generate permission', async () => {
+        it('should return enabled field prompts for users with ai-assist permission', async () => {
             const response = await request(app).get('/api/ai/enabled-fields?entityType=finding')
-                .set('Cookie', [`token=JWT ${userToken}`]);
+                .set('Cookie', [`token=JWT ${redactionReaderToken}`]);
 
             expect(response.status).toBe(200);
             expect(Array.isArray(response.body.datas.fields)).toBe(true);
@@ -366,7 +443,7 @@ module.exports = function(request, app) {
             expect(status.report.hasReport).toBe(true);
         });
 
-        it('should deny the QA job endpoints without the ai-qa-all permission', async () => {
+        it('should deny the QA job endpoints without any catalog QA permission', async () => {
             let response = await request(app).post('/api/ai/vulnerabilities/qa/run')
                 .set('Cookie', [`token=JWT ${noAiToken}`])
                 .send({ locale: 'en', scope: 'programmatic' });
@@ -380,6 +457,202 @@ module.exports = function(request, app) {
                 .set('Cookie', [`token=JWT ${noAiToken}`])
                 .send({ locale: 'en' });
             expect(response.status).toBe(403);
+        });
+
+        describe('QA permission scoping (base QA vs AI-QA)', () => {
+            const draftVulnerability = () => ({
+                category: 'Web',
+                details: [{
+                    locale: 'en',
+                    title: 'Perm Matrix Draft',
+                    description: '',
+                    observation: '',
+                    remediation: ''
+                }]
+            });
+
+            it('lets a base-QA-only user run programmatic vulnerability QA but forbids AI scopes', async () => {
+                const loadResponse = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${baseQaToken}`])
+                    .send({ locale: 'en', loadOnly: true, vulnerability: draftVulnerability() });
+                expect(loadResponse.status).toBe(200);
+
+                const programmatic = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${baseQaToken}`])
+                    .send({ locale: 'en', scope: 'programmatic', vulnerability: draftVulnerability() });
+                expect(programmatic.status).toBe(200);
+
+                const ai = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${baseQaToken}`])
+                    .send({ locale: 'en', scope: 'ai', vulnerability: draftVulnerability() });
+                expect(ai.status).toBe(403);
+
+                const all = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${baseQaToken}`])
+                    .send({ locale: 'en', scope: 'all', vulnerability: draftVulnerability() });
+                expect(all.status).toBe(403);
+            });
+
+            it('forbids an AI-QA-only user from running the programmatic scope (disjoint from qa)', async () => {
+                // ai-qa does NOT imply qa: running built-in checks requires the base permission.
+                const programmatic = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${aiQaOnlyToken}`])
+                    .send({ locale: 'en', scope: 'programmatic', vulnerability: draftVulnerability() });
+                expect(programmatic.status).toBe(403);
+
+                // But reading a cached report (loadOnly) is allowed for any QA-permission holder,
+                // so a panel that opened never 403s on its initial load.
+                const loadOnly = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${aiQaOnlyToken}`])
+                    .send({ locale: 'en', loadOnly: true, vulnerability: draftVulnerability() });
+                expect(loadOnly.status).toBe(200);
+
+                // Disable the AI checks (keeping AI integration enabled) so the AI scope passes
+                // the permission + provider gate without making a real provider call.
+                await Settings.findOneAndUpdate({}, {
+                    $set: {
+                        'ai.public.enabled': true,
+                        'ai.public.qaChecks': {
+                            completeness: true,
+                            references: false,
+                            imageCaptions: false,
+                            duplicates: false,
+                            aiDuplicates: false,
+                            aiUnlinkedTranslations: false,
+                            redaction: false,
+                            customer: false,
+                            instructions: false
+                        }
+                    }
+                }, { upsert: true });
+
+                const ai = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${aiQaOnlyToken}`])
+                    .send({ locale: 'en', scope: 'ai', vulnerability: draftVulnerability() });
+                // Passes the permission gate (never 403); no AI check enabled means no LLM call.
+                expect(ai.status).not.toBe(403);
+            });
+
+            it('scopes the audit QA endpoint: base runs built-in only, ai-qa runs AI only', async () => {
+                // Middleware rejects before the handler touches the audit, so a non-existent
+                // auditId still exercises the permission gate.
+                const baseAiScope = await request(app).post('/api/ai/qa')
+                    .set('Cookie', [`token=JWT ${baseQaToken}`])
+                    .send({ auditId: 'deadbeefdeadbeefdeadbeef', scope: 'ai' });
+                expect(baseAiScope.status).toBe(403);
+
+                // ai-qa does not imply qa, so the programmatic scope is forbidden.
+                const aiOnlyProgrammatic = await request(app).post('/api/ai/qa')
+                    .set('Cookie', [`token=JWT ${aiQaOnlyToken}`])
+                    .send({ auditId: 'deadbeefdeadbeefdeadbeef', scope: 'programmatic' });
+                expect(aiOnlyProgrammatic.status).toBe(403);
+
+                // Reading a cached audit report is allowed for either QA permission holder.
+                const baseLoad = await request(app).post('/api/ai/qa')
+                    .set('Cookie', [`token=JWT ${aiQaOnlyToken}`])
+                    .send({ auditId: 'deadbeefdeadbeefdeadbeef', loadOnly: true });
+                expect(baseLoad.status).not.toBe(403);
+            });
+
+            it('scopes the catalog-wide QA job endpoint on the catalog QA permissions', async () => {
+                // qa-catalog can start a programmatic job but not an AI one.
+                const aiJob = await request(app).post('/api/ai/vulnerabilities/qa/run')
+                    .set('Cookie', [`token=JWT ${baseQaToken}`])
+                    .send({ locale: 'en', scope: 'ai' });
+                expect(aiJob.status).toBe(403);
+
+                // ai-qa-catalog does NOT imply qa-catalog, so it cannot start a programmatic-only job.
+                const programmaticJob = await request(app).post('/api/ai/vulnerabilities/qa/run')
+                    .set('Cookie', [`token=JWT ${aiQaOnlyToken}`])
+                    .send({ locale: 'en', scope: 'programmatic' });
+                expect(programmaticJob.status).toBe(403);
+
+                // Managing the stored catalog report (status) needs any catalog QA permission.
+                const status = await request(app).get('/api/ai/vulnerabilities/qa/status?locale=en')
+                    .set('Cookie', [`token=JWT ${baseQaToken}`]);
+                expect(status.status).toBe(200);
+
+                // ai-qa-catalog also grants read access to the stored report.
+                const statusAi = await request(app).get('/api/ai/vulnerabilities/qa/status?locale=en')
+                    .set('Cookie', [`token=JWT ${aiQaOnlyToken}`]);
+                expect(statusAi.status).toBe(200);
+
+                // A user with no catalog QA permission at all is denied.
+                const statusDenied = await request(app).get('/api/ai/vulnerabilities/qa/status?locale=en')
+                    .set('Cookie', [`token=JWT ${noAiToken}`]);
+                expect(statusDenied.status).toBe(403);
+            });
+
+            it('does NOT let the catalog QA permission run single-vulnerability QA', async () => {
+                // Regression: catalog permissions must unlock only the catalog feature. The
+                // ACL treats `X-all` as a superset of `X`, so catalog perms deliberately use a
+                // `-catalog` suffix (not `-all`) to stay independent of the single-vuln perms.
+                const single = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${catalogOnlyToken}`])
+                    .send({ locale: 'en', scope: 'programmatic', vulnerability: draftVulnerability() });
+                expect(single.status).toBe(403);
+
+                // ...but it can start the catalog-wide job.
+                const catalogJob = await request(app).post('/api/ai/vulnerabilities/qa/run')
+                    .set('Cookie', [`token=JWT ${catalogOnlyToken}`])
+                    .send({ locale: 'en', scope: 'programmatic' });
+                expect(catalogJob.status).not.toBe(403);
+            });
+
+            it('lets a QA-read-only user view reports but not run or mutate them', async () => {
+                // Reading a cached single-vuln report is allowed.
+                const loadOnly = await request(app).post('/api/ai/vulnerabilities/qa')
+                    .set('Cookie', [`token=JWT ${qaReadOnlyToken}`])
+                    .send({ locale: 'en', loadOnly: true, vulnerability: draftVulnerability() });
+                expect(loadOnly.status).toBe(200);
+
+                // Reading the catalog status is allowed.
+                const status = await request(app).get('/api/ai/vulnerabilities/qa/status?locale=en')
+                    .set('Cookie', [`token=JWT ${qaReadOnlyToken}`]);
+                expect(status.status).toBe(200);
+
+                // Running any scope is forbidden (read is not a generate permission).
+                for (const scope of ['programmatic', 'ai', 'all']) {
+                    const run = await request(app).post('/api/ai/vulnerabilities/qa')
+                        .set('Cookie', [`token=JWT ${qaReadOnlyToken}`])
+                        .send({ locale: 'en', scope, vulnerability: draftVulnerability() });
+                    expect(run.status).toBe(403);
+                }
+
+                // Starting a catalog job is forbidden.
+                const job = await request(app).post('/api/ai/vulnerabilities/qa/run')
+                    .set('Cookie', [`token=JWT ${qaReadOnlyToken}`])
+                    .send({ locale: 'en', scope: 'programmatic' });
+                expect(job.status).toBe(403);
+
+                // Mutating the report (cancel/dismiss/resolve) is forbidden — read is view-only.
+                const cancel = await request(app).post('/api/ai/vulnerabilities/qa/cancel')
+                    .set('Cookie', [`token=JWT ${qaReadOnlyToken}`])
+                    .send({ locale: 'en' });
+                expect(cancel.status).toBe(403);
+
+                const dismiss = await request(app).post('/api/ai/vulnerabilities/qa/dismiss')
+                    .set('Cookie', [`token=JWT ${qaReadOnlyToken}`])
+                    .send({ locale: 'en', key: 'whatever', dismissed: true });
+                expect(dismiss.status).toBe(403);
+
+                const resolve = await request(app).post('/api/ai/vulnerabilities/qa/resolve')
+                    .set('Cookie', [`token=JWT ${qaReadOnlyToken}`])
+                    .send({ locale: 'en', vulnerabilityId: 'deadbeefdeadbeefdeadbeef', resolved: true });
+                expect(resolve.status).toBe(403);
+            });
+
+            it('lets a QA-read-only user view the audit QA report but not run it', async () => {
+                const loadOnly = await request(app).post('/api/ai/qa')
+                    .set('Cookie', [`token=JWT ${qaReadOnlyToken}`])
+                    .send({ auditId: 'deadbeefdeadbeefdeadbeef', loadOnly: true });
+                expect(loadOnly.status).not.toBe(403);
+
+                const run = await request(app).post('/api/ai/qa')
+                    .set('Cookie', [`token=JWT ${qaReadOnlyToken}`])
+                    .send({ auditId: 'deadbeefdeadbeefdeadbeef', scope: 'programmatic' });
+                expect(run.status).toBe(403);
+            });
         });
 
         it('should dismiss and restore QA issues from the assembled report', async () => {

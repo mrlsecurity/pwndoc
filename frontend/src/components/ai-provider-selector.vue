@@ -10,7 +10,17 @@
   content-class="ai-provider-selector__menu"
   >
     <template #label>
-      <provider-pill :option="activeOption" :model="activeModel" />
+      <span class="ai-provider-selector__pill">
+        <img
+        v-if="activeOption.logo"
+        :src="activeOption.logo"
+        class="ai-provider-selector__logo"
+        :class="{ 'ai-provider-selector__logo--mono': activeOption.mono }"
+        alt=""
+        />
+        <span class="ai-provider-selector__name">{{ activeOption.label }}</span>
+        <span v-if="activeModel" class="ai-provider-selector__model">{{ activeModel }}</span>
+      </span>
     </template>
     <q-list dense>
       <q-item
@@ -34,37 +44,22 @@
 
   <!-- Single allowed provider: just display it (logo + name + model), no dropdown. -->
   <div v-else-if="options.length === 1" class="ai-provider-selector ai-provider-selector--static">
-    <provider-pill :option="activeOption" :model="activeModel" />
+    <span class="ai-provider-selector__pill">
+      <img
+      v-if="activeOption.logo"
+      :src="activeOption.logo"
+      class="ai-provider-selector__logo"
+      :class="{ 'ai-provider-selector__logo--mono': activeOption.mono }"
+      alt=""
+      />
+      <span class="ai-provider-selector__name">{{ activeOption.label }}</span>
+      <span v-if="activeModel" class="ai-provider-selector__model">{{ activeModel }}</span>
+    </span>
   </div>
 </template>
 
 <script>
-import { h } from 'vue'
 import { allowedProviderOptions, providerLogo, providerLabel, providerLogoIsMono } from '@/services/ai-providers'
-
-// The logo + name + model chip, shared by the dropdown label and the single-provider display.
-// Render function (not a template string) so it works with Vue's runtime-only build.
-const ProviderPill = {
-  name: 'ProviderPill',
-  props: {
-    option: { type: Object, required: true },
-    model: { type: String, default: '' }
-  },
-  render() {
-    const children = []
-    if (this.option.logo) {
-      children.push(h('img', {
-        src: this.option.logo,
-        alt: '',
-        class: ['ai-provider-selector__logo', { 'ai-provider-selector__logo--mono': this.option.mono }]
-      }))
-    }
-    children.push(h('span', { class: 'ai-provider-selector__name' }, this.option.label))
-    if (this.model)
-      children.push(h('span', { class: 'ai-provider-selector__model' }, this.model))
-    return h('div', { class: 'ai-provider-selector__pill' }, children)
-  }
-}
 
 // Compact provider picker for the chat drawer and QA panels. Options are the providers the
 // admin permits (allowedProviders ∪ default, from public settings). Shows the provider logo,
@@ -72,8 +67,6 @@ const ProviderPill = {
 // provider is available.
 export default {
   name: 'AiProviderSelector',
-
-  components: { ProviderPill },
 
   props: {
     modelValue: {
@@ -156,6 +149,8 @@ export default {
   width: 16px;
   height: 16px;
   display: block;
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 
 /* Monochrome (near-black) marks can't inherit theme color as an <img>, so invert them to

@@ -19,7 +19,7 @@ import { useAiGenerationStore } from '@/stores/ai-generation';
 import { useAuditQaStore } from '@/stores/audit-qa';
 import { runAfterAiGenerationCheck } from '@/composables/confirmLeaveIfAiGenerating';
 import Utils from '@/services/utils';
-import { hasAnyRunnableQaCheck } from '@/services/qa-checks';
+import { canAccessQa } from '@/services/qa-checks';
 import { createDraftRecovery } from '@/composables/useDraftRecovery';
 
 import { $t } from '@/boot/i18n'
@@ -180,7 +180,7 @@ export default {
         },
 
         aiEnabled: function() {
-            return this.$settings?.ai?.public?.enabled !== false && userStore.isAllowed('audits:ai-generate')
+            return this.$settings?.ai?.public?.enabled !== false && userStore.isAllowed('audits:ai-assist')
         },
 
         saveButtonState: function() {
@@ -228,7 +228,12 @@ export default {
         },
 
         aiQaEnabled: function() {
-            return userStore.isAllowed('audits:ai-qa') && hasAnyRunnableQaCheck(this.$settings)
+            return canAccessQa(
+                userStore.isAllowed('audits:qa-read'),
+                userStore.isAllowed('audits:qa'),
+                userStore.isAllowed('audits:ai-qa'),
+                this.$settings
+            )
         },
 
         findingTabsBarStyle: function() {

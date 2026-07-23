@@ -22,7 +22,7 @@ import DraftRecoveryService from '@/services/draft-recovery'
 import VulnerabilityQaPanel from '@/components/vulnerability-qa-panel.vue'
 import VulnerabilityQaAllPanel from '@/components/vulnerability-qa-all-panel.vue'
 import AiChatDrawer from '@/components/ai-chat-drawer.vue'
-import { hasAnyRunnableQaCheck } from '@/services/qa-checks'
+import { canAccessQa } from '@/services/qa-checks'
 
 import { $t } from 'boot/i18n'
 
@@ -369,11 +369,21 @@ export default {
         },
 
         aiQaEnabled: function() {
-            return userStore.isAllowed('vulnerabilities:ai-qa') && hasAnyRunnableQaCheck(this.$settings)
+            return canAccessQa(
+                userStore.isAllowed('vulnerabilities:qa-read'),
+                userStore.isAllowed('vulnerabilities:qa'),
+                userStore.isAllowed('vulnerabilities:ai-qa'),
+                this.$settings
+            )
         },
 
         aiQaAllEnabled: function() {
-            return userStore.isAllowed('vulnerabilities:ai-qa-all') && hasAnyRunnableQaCheck(this.$settings)
+            return canAccessQa(
+                userStore.isAllowed('vulnerabilities:qa-read-catalog'),
+                userStore.isAllowed('vulnerabilities:qa-catalog'),
+                userStore.isAllowed('vulnerabilities:ai-qa-catalog'),
+                this.$settings
+            )
         },
 
         vulnerabilityQaCount: function() {
@@ -386,8 +396,8 @@ export default {
 
         aiEnabled: function() {
             return this.$settings?.ai?.public?.enabled !== false && (
-                userStore.isAllowed('audits:ai-generate') ||
-                userStore.isAllowed('vulnerabilities:ai-generate')
+                userStore.isAllowed('audits:ai-assist') ||
+                userStore.isAllowed('vulnerabilities:ai-assist')
             )
         },
 
@@ -424,12 +434,22 @@ export default {
             return qaRuns.isRunning(this.activeVulnQaKey) || qaRuns.isJobRunning(this.activeVulnQaKey)
         },
 
-        canUseAiInPane: function() {
-            if (!this.aiEnabled)
-                return false
+        // Whether the current pane's vulnerability content is editable: updating an existing
+        // template needs vulnerabilities:update, creating a new one needs vulnerabilities:create.
+        // A user without the right can still open the editor (read) but sees disabled fields.
+        canEditVuln: function() {
             if (this.vulnerabilityId)
                 return userStore.isAllowed('vulnerabilities:update')
             return userStore.isAllowed('vulnerabilities:create')
+        },
+
+        // The editor is read-only when the user can't edit this vulnerability.
+        vulnReadonly: function() {
+            return !this.canEditVuln
+        },
+
+        canUseAiInPane: function() {
+            return this.aiEnabled && this.canEditVuln
         },
 
         hasUnsavedChanges: function() {

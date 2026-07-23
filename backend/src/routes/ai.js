@@ -948,9 +948,67 @@ const handleAiTestConnection = async function(req, res) {
     }
 };
 
-const requireAiGeneratePermission = function(req, res, next) {
-    if (acl.isAllowedToken(req.decodedToken, 'audits:ai-generate') ||
-        acl.isAllowedToken(req.decodedToken, 'vulnerabilities:ai-generate'))
+const requireAiAssistPermission = function(req, res, next) {
+    if (acl.isAllowedToken(req.decodedToken, 'audits:ai-assist') ||
+        acl.isAllowedToken(req.decodedToken, 'vulnerabilities:ai-assist'))
+        return next();
+
+    Response.Forbidden(res, 'Insufficient privileges');
+};
+
+const tokenAllowsAny = (token, permissions) =>
+    permissions.some((permission) => acl.isAllowedToken(token, permission));
+
+// QA permissions per area are three disjoint scopes: `read` (view reports only), `base` QA
+// (run built-in checks) and `ai` QA (run AI checks). A generate permission implies read, but
+// the ACL does not derive that, so read gates must accept all three explicitly. `base` and
+// `ai` never imply each other.
+const qaReadPerms = (readPerm, base, aiBase) => [readPerm, base, aiBase];
+const qaGeneratePerms = (base, aiBase) => [base, aiBase];
+
+// Whether the token is authorized to RUN the requested QA scope. `programmatic` needs the
+// base perm, `ai` needs the AI perm, `all` runs both kinds of checks so it needs BOTH.
+const tokenAllowsQaScope = (token, scope, base, aiBase) => {
+    if (scope === 'programmatic')
+        return acl.isAllowedToken(token, base);
+    if (scope === 'ai')
+        return acl.isAllowedToken(token, aiBase);
+    if (scope === 'all')
+        return acl.isAllowedToken(token, base) && acl.isAllowedToken(token, aiBase);
+    return false;
+};
+
+// Scope-aware QA authorization. Reading a cached report (loadOnly) is allowed for any QA
+// permission holder (read/base/ai) — if the panel opened, the user has at least one QA
+// permission, so a read must never 403. Runs are gated on the specific permission the scope
+// requires. Returns Express middleware bound to the read/base/AI permission triple.
+const requireQaPermission = (readPerm, base, aiBase) => function(req, res, next) {
+    const token = req.decodedToken;
+
+    if (Boolean(req.body?.loadOnly)) {
+        if (tokenAllowsAny(token, qaReadPerms(readPerm, base, aiBase)))
+            return next();
+        return Response.Forbidden(res, 'Insufficient privileges');
+    }
+
+    const scope = normalizeQaScope(req.body?.scope);
+    // An invalid scope is a bad request, but the handler owns that response — authorize
+    // against any generate permission here and let the handler reject the scope with a 422.
+    if (!scope) {
+        if (tokenAllowsAny(token, qaGeneratePerms(base, aiBase)))
+            return next();
+        return Response.Forbidden(res, 'Insufficient privileges');
+    }
+
+    if (tokenAllowsQaScope(token, scope, base, aiBase))
+        return next();
+
+    Response.Forbidden(res, 'Insufficient privileges');
+};
+
+// Gate for endpoints that require holding any of an explicit permission list.
+const requireAnyPermission = (...permissions) => function(req, res, next) {
+    if (tokenAllowsAny(req.decodedToken, permissions))
         return next();
 
     Response.Forbidden(res, 'Insufficient privileges');
@@ -962,23 +1020,32 @@ const requireVulnerabilityQaPermission = function(req, res, next) {
     const hasDraft = draftVulnerability &&
         typeof draftVulnerability === 'object' &&
         !Array.isArray(draftVulnerability);
-    const permission = (vulnerabilityId || hasDraft) ? 'vulnerabilities:ai-qa' : 'vulnerabilities:ai-qa-all';
+    // Single-vulnerability (saved or draft) runs use the per-vuln perms; the catalog-wide
+    // path (no id/draft) uses the `-all` perms.
+    const isSingle = Boolean(vulnerabilityId || hasDraft);
+    const readPerm = isSingle ? 'vulnerabilities:qa-read' : 'vulnerabilities:qa-read-catalog';
+    const base = isSingle ? 'vulnerabilities:qa' : 'vulnerabilities:qa-catalog';
+    const aiBase = isSingle ? 'vulnerabilities:ai-qa' : 'vulnerabilities:ai-qa-catalog';
 
-    if (acl.isAllowedToken(req.decodedToken, permission))
-        return next();
-
-    Response.Forbidden(res, 'Insufficient privileges');
+    return requireQaPermission(readPerm, base, aiBase)(req, res, next);
 };
 
+// Vuln catalog read permissions (view the stored catalog report / job status). Any of the
+// three catalog-level QA permissions grants read.
+const VULN_QA_READ_CATALOG = ['vulnerabilities:qa-read-catalog', 'vulnerabilities:qa-catalog', 'vulnerabilities:ai-qa-catalog'];
+// Vuln catalog generate permissions (mutate the report or a running job: cancel/dismiss/
+// resolve). Read-only holders are intentionally excluded.
+const VULN_QA_GENERATE_CATALOG = ['vulnerabilities:qa-catalog', 'vulnerabilities:ai-qa-catalog'];
+
 module.exports = function(app, io) {
-    app.get('/api/ai/enabled-fields', acl.hasPermission('validtoken'), requireAiGeneratePermission, handleAiEnabledFields);
-    app.post('/api/ai/generate', acl.hasPermission('validtoken'), requireAiGeneratePermission, handleAiGenerate);
-    app.post('/api/ai/qa', acl.hasPermission('audits:ai-qa'), handleAiQa(io));
+    app.get('/api/ai/enabled-fields', acl.hasPermission('validtoken'), requireAiAssistPermission, handleAiEnabledFields);
+    app.post('/api/ai/generate', acl.hasPermission('validtoken'), requireAiAssistPermission, handleAiGenerate);
+    app.post('/api/ai/qa', acl.hasPermission('validtoken'), requireQaPermission('audits:qa-read', 'audits:qa', 'audits:ai-qa'), handleAiQa(io));
     app.post('/api/ai/vulnerabilities/qa', acl.hasPermission('validtoken'), requireVulnerabilityQaPermission, handleVulnerabilityQa(io));
-    app.post('/api/ai/vulnerabilities/qa/run', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaRun(io));
-    app.get('/api/ai/vulnerabilities/qa/status', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaStatus);
-    app.post('/api/ai/vulnerabilities/qa/cancel', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaCancel);
-    app.post('/api/ai/vulnerabilities/qa/dismiss', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaDismiss);
-    app.post('/api/ai/vulnerabilities/qa/resolve', acl.hasPermission('vulnerabilities:ai-qa-all'), handleVulnerabilityQaResolve);
+    app.post('/api/ai/vulnerabilities/qa/run', acl.hasPermission('validtoken'), requireQaPermission('vulnerabilities:qa-read-catalog', 'vulnerabilities:qa-catalog', 'vulnerabilities:ai-qa-catalog'), handleVulnerabilityQaRun(io));
+    app.get('/api/ai/vulnerabilities/qa/status', acl.hasPermission('validtoken'), requireAnyPermission(...VULN_QA_READ_CATALOG), handleVulnerabilityQaStatus);
+    app.post('/api/ai/vulnerabilities/qa/cancel', acl.hasPermission('validtoken'), requireAnyPermission(...VULN_QA_GENERATE_CATALOG), handleVulnerabilityQaCancel);
+    app.post('/api/ai/vulnerabilities/qa/dismiss', acl.hasPermission('validtoken'), requireAnyPermission(...VULN_QA_GENERATE_CATALOG), handleVulnerabilityQaDismiss);
+    app.post('/api/ai/vulnerabilities/qa/resolve', acl.hasPermission('validtoken'), requireAnyPermission(...VULN_QA_GENERATE_CATALOG), handleVulnerabilityQaResolve);
     app.post('/api/ai/test', acl.hasPermission('settings:update'), handleAiTestConnection);
 };

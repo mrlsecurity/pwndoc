@@ -143,11 +143,12 @@ export default {
         },
 
         clone: function(row) {
+            const validScopes = new Set(this.allPermissionScopes())
             this.currentRole = {
                 name: row.name,
                 displayName: this.roleDisplayName(row),
                 description: row.description || '',
-                allows: row.allows === '*' ? [] : [...(row.allows || [])]
+                allows: row.allows === '*' ? [] : (row.allows || []).filter(scope => validScopes.has(scope))
             }
             this.idUpdate = row.name
             this.roleNameTouched = true
@@ -157,8 +158,10 @@ export default {
 
         applyClone: function() {
             const role = this.roles.find(role => role.name === this.cloneFrom)
-            if (role)
-                this.currentRole.allows = role.allows === '*' ? this.allPermissionScopes() : [...(role.allows || [])]
+            if (role) {
+                const validScopes = new Set(this.allPermissionScopes())
+                this.currentRole.allows = role.allows === '*' ? this.allPermissionScopes() : (role.allows || []).filter(scope => validScopes.has(scope))
+            }
         },
 
         togglePermission: function(scope) {
