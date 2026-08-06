@@ -21,6 +21,7 @@ import { createDraftRecovery } from '@/composables/useDraftRecovery'
 import DraftRecoveryService from '@/services/draft-recovery'
 import VulnerabilityQaPanel from '@/components/vulnerability-qa-panel.vue'
 import VulnerabilityQaAllPanel from '@/components/vulnerability-qa-all-panel.vue'
+import VulnerabilityUpdatesModal from '@/components/vulnerability-updates-modal.vue'
 import AiChatDrawer from '@/components/ai-chat-drawer.vue'
 import { canAccessQa } from '@/services/qa-checks'
 
@@ -80,8 +81,7 @@ export default {
             currentDetailsIndex: 0,
             vulnerabilityId: '',
             vulnUpdates: [],
-            currentUpdate: '',
-            currentUpdateLocale: '',
+            updatesModalOpen: false,
             vulnTypes: [],
             // Merge languages
             mergeLanguageLeft: '',
@@ -100,7 +100,7 @@ export default {
             vulnerabilityDrafts: [],
             aiPromptFieldKeys: [],
             aiFieldPrompts: [],
-            // Content displayed in the detail pane: null | create | edit | updates | merge
+            // Content displayed in the detail pane: null | create | edit | merge
             activePane: null,
             vulnQaOpen: false,
             saveSuccess: false,
@@ -121,7 +121,8 @@ export default {
         DraftRecoveryStatus,
         AiChatDrawer,
         VulnerabilityQaPanel,
-        VulnerabilityQaAllPanel
+        VulnerabilityQaAllPanel,
+        VulnerabilityUpdatesModal
     },
 
     mounted: function() {
@@ -468,7 +469,7 @@ export default {
                 return 'orange'
             if (this.saveButtonState === 'saved')
                 return 'green-1'
-            return this.activePane === 'updates' ? 'orange' : 'primary'
+            return 'primary'
         },
 
         saveButtonTextColor: function() {
@@ -476,14 +477,13 @@ export default {
                 return 'positive'
             if (this.saveButtonState === 'dirty')
                 return 'orange'
-            return this.activePane === 'updates' ? 'orange' : 'primary'
+            return 'primary'
         },
 
         saveButtonLabel: function() {
             if (this.saveButtonState === 'saved')
                 return $t('btn.saved')
-            const action = this.activePane === 'updates' ? $t('btn.update') : $t('btn.save')
-            return `${action} (ctrl+s)`
+            return `${$t('btn.save')} (ctrl+s)`
         },
 
         currentCreatorName: function() {
@@ -690,7 +690,7 @@ export default {
             e.preventDefault()
             if (this.activePane === 'create' && userStore.isAllowed('vulnerabilities:create'))
                 this.createVulnerability()
-            else if (['edit', 'updates'].includes(this.activePane) && userStore.isAllowed('vulnerabilities:update'))
+            else if (this.activePane === 'edit' && userStore.isAllowed('vulnerabilities:update'))
                 this.updateVulnerability()
         },
 
@@ -730,20 +730,58 @@ export default {
                 vulnQaStore.loadStatus()
         },
 
+        // Fetching proposals must never touch currentLanguage: the editor's selected language is
+        // the user's, and each proposal is diffed against its own locale inside the modal.
         getVulnUpdates: function(vulnId) {
-            VulnerabilityService.getVulnUpdates(vulnId)
+            return VulnerabilityService.getVulnUpdates(vulnId)
             .then((data) => {
                 this.vulnUpdates = data.data.datas;
                 this.vulnUpdates.forEach(vuln => {
                     vuln.customFields = Utils.filterCustomFields('vulnerability', this.currentVulnerability.category, this.customFields, vuln.customFields, vuln.locale)
                 })
-                if (this.vulnUpdates.length > 0) {
-                    this.currentUpdate = this.vulnUpdates[0]._id || null;
-                    this.currentLanguage = this.vulnUpdates[0].locale || null;
-                }
             })
             .catch((err) => {
                 console.log(err)
+            })
+        },
+
+        dismissUpdates: function(locale) {
+            this.afterDismiss(VulnerabilityService.dismissVulnUpdates(this.vulnerabilityId, locale))
+        },
+
+        dismissUpdate: function(updateId) {
+            this.afterDismiss(VulnerabilityService.dismissVulnUpdate(updateId))
+        },
+
+        dismissAllUpdates: function() {
+            this.afterDismiss(VulnerabilityService.dismissAllVulnUpdates(this.vulnerabilityId))
+        },
+
+        afterDismiss: function(request) {
+            request
+            .then(() => {
+                Notify.create({
+                    message: $t('msg.updatesDismissedOk'),
+                    color: 'positive',
+                    textColor: 'white',
+                    position: 'top-right'
+                })
+                return this.getVulnUpdates(this.vulnerabilityId)
+            })
+            .then(() => {
+                if (this.vulnUpdates.length === 0) {
+                    this.updatesModalOpen = false
+                    this.currentVulnerability.status = 0
+                }
+                this.getVulnerabilities()
+            })
+            .catch((err) => {
+                Notify.create({
+                    message: err.response.data.datas,
+                    color: 'negative',
+                    textColor: 'white',
+                    position: 'top-right'
+                })
             })
         },
 
@@ -775,7 +813,7 @@ export default {
             if (id) {
                 if (id !== this.vulnerabilityId)
                     await this.openVulnerabilityById(id)
-            } else if (this.activePane === 'edit' || this.activePane === 'updates') {
+            } else if (this.activePane === 'edit') {
                 await this.closePane({ skipRoutePush: true })
             }
         },
@@ -805,10 +843,7 @@ export default {
                 await this.cleanupCurrentVulnerability()
 
             this.clone(row)
-            if (userStore.isAllowed('vulnerabilities:update') && row.status === 2)
-                this.activePane = 'updates'
-            else
-                this.activePane = 'edit'
+            this.activePane = 'edit'
             this.scrollDetailToTop()
             await this.draftRecovery.maybePromptRecovery()
         },
@@ -891,6 +926,8 @@ export default {
             }
             this.draftRecoveryPaused = true
             this.vulnerabilityId = ''
+            this.vulnUpdates = []
+            this.updatesModalOpen = false
             this.currentCategory = null
             this.cleanCurrentVulnerability()
             this.currentVulnerabilityOrig = this.$_.cloneDeep(this.currentVulnerability)

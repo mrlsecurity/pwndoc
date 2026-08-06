@@ -449,7 +449,7 @@
                         <span class="vuln-creator-label">{{$t('createdBy')}}</span>
                         <span class="vuln-creator-name">{{currentCreatorName}}</span>
                     </div>
-                    <draft-recovery-status />
+                    <draft-recovery-status match-toolbar class="vuln-toolbar-button" />
                     <q-space />
                     <q-btn
                     v-if="aiQaEnabled"
@@ -718,8 +718,23 @@
                         <span class="vuln-creator-label">{{$t('createdBy')}}</span>
                         <span class="vuln-creator-name">{{currentCreatorName}}</span>
                     </div>
-                    <draft-recovery-status />
+                    <draft-recovery-status match-toolbar class="vuln-toolbar-button" />
                     <q-space />
+                    <q-btn
+                    v-if="vulnUpdates.length > 0"
+                    outline
+                    color="orange"
+                    no-caps
+                    icon="o_difference"
+                    :label="`${$t('btn.updatesAvailable')} (${vulnUpdates.length})`"
+                    class="vuln-toolbar-button q-mr-sm"
+                    data-testid="vulnerability-updates-button"
+                    @click="updatesModalOpen = true"
+                    >
+                        <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
+                            {{ $t('tooltip.vulnerabilityUpdates') }}
+                        </q-tooltip>
+                    </q-btn>
                     <q-btn
                     v-if="aiQaEnabled && vulnerabilityId"
                     outline
@@ -966,351 +981,26 @@
                         <ai-chat-drawer />
                     </div>
                 </div>
-            </div>
 
-            <!-- Updates (diff) pane -->
-            <div v-else-if="activePane === 'updates'" class="col column no-wrap vuln-pane" data-testid="vulnerability-updates-pane">
-                <q-bar class="vuln-pane-header vuln-modal-bar">
-                    <div class="q-toolbar-title">
-                        {{$t('updateVulnerability')}}
-                    </div>
-                    <draft-recovery-status />
-                    <q-space />
-                    <q-btn
-                    outline
-                    :color="saveButtonColor"
-                    :text-color="saveButtonTextColor"
-                    no-caps
-                    class="vuln-toolbar-button"
-                    data-testid="save-vulnerability-button"
-                    @click="updateVulnerability()"
-                    >
-                        <q-icon v-if="saveButtonState === 'saved'" name="check" class="q-mr-sm" />
-                        <span>{{saveButtonLabel}}</span>
-                        <q-icon v-if="saveButtonState === 'dirty'" name="circle" size="12px" class="q-ml-sm" />
-                    </q-btn>
-                    <q-separator vertical inset class="q-mx-md" />
-                    <q-btn flat icon="close" class="vuln-toolbar-close" data-testid="edit-vulnerability-close" @click="closePane()">
-                        <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('btn.close')}}</q-tooltip>
-                    </q-btn>
-                </q-bar>
-
-                <div class="col scroll" ref="detailScroll">
-                    <div class="row items-stretch">
-                        <q-card class="col-md-6 col-12" flat>
-                            <q-card-section>
-                                <q-tabs
-                                value="current"
-                                dense
-                                align="left"
-                                no-caps
-                                indicator-color="primary"
-                                class="bg-blue-grey-2"
-                                >
-                                    <q-tab name="current" :label="$t('current')" />
-                                </q-tabs>
-                            </q-card-section>
-                            <q-card-section class="q-col-gutter-md row q-pt-none">
-                                <q-input
-                                :label="$t('title')+' *'"
-                                stack-label
-                                class="col-md-8"
-                                v-model="currentVulnerability.details[currentDetailsIndex].title"
-                                readonly
-                                outlined
-                                />
-                                <q-select
-                                class="col-md-2"
-                                :label="$t('type')"
-                                v-model="currentVulnerability.details[currentDetailsIndex].vulnType"
-                                :options="vulnTypesLang"
-                                option-value="name"
-                                option-label="name"
-                                emit-value
-                                map-options
-                                options-sanitize
-                                outlined
-                                />
-                                <q-select
-                                :label="$t('language')"
-                                stack-label
-                                class="col-md-2"
-                                v-model="currentLanguage"
-                                :options="languages"
-                                option-value="locale"
-                                option-label="language"
-                                map-options
-                                emit-value
-                                readonly
-                                options-sanitize
-                                outlined
-                                />
-                            </q-card-section>
-                            <q-card-section>
-                                <q-field borderless :label="$t('description')" stack-label class="basic-editor">
-                                    <template v-slot="control">
-                                        <basic-editor noAffix v-model="currentVulnerability.details[currentDetailsIndex].description" />
-                                    </template>
-                                </q-field>
-                            </q-card-section>
-                            <q-card-section>
-                                <q-field borderless :label="$t('observation')" stack-label class="basic-editor">
-                                    <template v-slot="control">
-                                        <basic-editor noAffix v-model="currentVulnerability.details[currentDetailsIndex].observation" />
-                                    </template>
-                                </q-field>
-                            </q-card-section>
-                            <q-card-section v-if="$settings.report.public.scoringMethods.CVSS3">
-                                <cvss3-calculator
-                                v-model="currentVulnerability.cvssv3"
-                                @cvssScoreChange="currentVulnerability.cvssScore = $event"
-                                />
-                            </q-card-section>
-                            <q-card-section v-if="$settings.report.public.scoringMethods.CVSS4">
-                                <cvss4-calculator
-                                v-model="currentVulnerability.cvssv4"
-                                @cvssScoreChange="currentVulnerability.cvssScore = $event"
-                                />
-                            </q-card-section>
-                            <q-card-section>
-                                <q-field borderless :label="$t('remediation')" stack-label class="basic-editor">
-                                    <template v-slot="control">
-                                        <basic-editor noAffix v-model="currentVulnerability.details[currentDetailsIndex].remediation" />
-                                    </template>
-                                </q-field>
-                            </q-card-section>
-                            <q-card-section class="q-col-gutter-md row">
-                                <q-select
-                                :label="$t('remediationComplexity')"
-                                stack-label
-                                class="col-md-6"
-                                v-model="currentVulnerability.remediationComplexity"
-                                :options="[{label: 'Easy', value: 1},{label: 'Medium', value: 2},{label: 'Complex', value: 3}]"
-                                map-options
-                                emit-value
-                                options-sanitize
-                                outlined
-                                />
-                                <q-select
-                                :label="$t('remediationPriority')"
-                                stack-label
-                                class="col-md-6"
-                                v-model="currentVulnerability.priority"
-                                :options="[{label: 'Low', value: 1},{label: 'Medium', value: 2},{label: 'High', value: 3},{label: 'Urgent', value: 4}]"
-                                map-options
-                                emit-value
-                                options-sanitize
-                                outlined
-                                />
-                            </q-card-section>
-                            <q-card-section>
-                                <textarea-array framed-header :label="$t('references')" v-model="currentVulnerability.details[currentDetailsIndex].references" />
-                            </q-card-section>
-
-                            <q-expansion-item
-                            :label="$t('customFields')"
-                            default-opened
-                            header-class="bg-blue-grey-5 text-white"
-                            expand-icon-class="text-white">
-                                <div v-if="currentVulnerability.details[currentDetailsIndex].customFields">
-                                    <custom-fields
-                                    ref="customfields"
-                                    v-model="currentVulnerability.details[currentDetailsIndex].customFields"
-                                    custom-element="QCardSection"
-                                    :locale="currentLanguage"
-                                    />
-                                </div>
-                            </q-expansion-item>
-                        </q-card>
-                        <q-card class="col-md-6 col-12" flat>
-                            <q-card-section>
-                                <q-tabs
-                                v-model="currentUpdate"
-                                dense
-                                no-caps
-                                align="left"
-                                indicator-color="primary"
-                                class="bg-blue-grey-2"
-                                >
-                                    <q-tab v-for="update of vulnUpdates" :key="update._id" :name="update._id" :label="update.creator.username" @click="currentLanguage = update.locale" />
-                                </q-tabs>
-                            </q-card-section>
-                            <q-tab-panels v-model="currentUpdate">
-                                <q-tab-panel v-for="update of vulnUpdates" :key="update._id" :name="update._id" class="q-pa-none">
-                                    <q-card-section class="row q-col-gutter-md q-pt-none">
-                                        <q-input
-                                        :label="$t('title')+' *'"
-                                        stack-label
-                                        class="col-md-8"
-                                        v-model="update.title"
-                                        readonly
-                                        outlined
-                                        />
-                                        <q-select
-                                        class="col-md-2"
-                                        :bg-color="(currentVulnerability.details[currentDetailsIndex].vulnType != update.vulnType)?'diffbackground':''"
-                                        :label="$t('type')"
-                                        v-model="update.vulnType"
-                                        :options="vulnTypesLang"
-                                        option-value="name"
-                                        option-label="name"
-                                        emit-value
-                                        map-options
-                                        readonly
-                                        options-sanitize
-                                        outlined
-                                        />
-                                        <q-select
-                                        :label="$t('language')"
-                                        stack-label
-                                        class="col-md-2"
-                                        v-model="update.locale"
-                                        :options="languages"
-                                        option-value="locale"
-                                        option-label="language"
-                                        emit-value
-                                        map-options
-                                        readonly
-                                        options-sanitize
-                                        outlined
-                                        />
-                                    </q-card-section>
-                                    <q-card-section>
-                                        <q-field
-                                        borderless
-                                        :label="$t('description')"
-                                        stack-label
-                                        :class="
-                                            (currentVulnerability.details[currentDetailsIndex].description || update.description) &&
-                                            (currentVulnerability.details[currentDetailsIndex].description != update.description)
-                                            ?'bg-diffbackground':''
-                                        "
-                                        class="basic-editor"
-                                        readonly>
-                                            <template v-slot="control">
-                                                <basic-editor noAffix
-                                                v-model="update.description"
-                                                :diff="currentVulnerability.details[currentDetailsIndex].description || ''"
-                                                :editable=false />
-                                            </template>
-                                        </q-field>
-                                    </q-card-section>
-                                    <q-card-section>
-                                        <q-field
-                                        borderless
-                                        :label="$t('observation')"
-                                        stack-label
-                                        :class="
-                                        (currentVulnerability.details[currentDetailsIndex].observation || update.observation) &&
-                                        (currentVulnerability.details[currentDetailsIndex].observation != update.observation)
-                                        ?'bg-diffbackground':''
-                                        "
-                                        class="basic-editor"
-                                        readonly>
-                                            <template v-slot="control">
-                                                <basic-editor noAffix
-                                                v-model="update.observation"
-                                                :diff="currentVulnerability.details[currentDetailsIndex].observation || ''"
-                                                :editable=false />
-                                            </template>
-                                        </q-field>
-                                    </q-card-section>
-                                    <q-card-section v-if="$settings.report.public.scoringMethods.CVSS3">
-                                        <cvss3-calculator
-                                        :class="(currentVulnerability.cvssv3 !== update.cvssv3)?'bg-diffbackground':''"
-                                        v-model="update.cvssv3"
-                                        @cvssScoreChange="update.cvssScore = $event"
-                                        readonly
-                                        />
-                                    </q-card-section>
-                                    <q-card-section v-if="$settings.report.public.scoringMethods.CVSS4">
-                                        <cvss4-calculator
-                                        :class="(currentVulnerability.cvssv4 !== update.cvssv4)?'bg-diffbackground':''"
-                                        v-model="update.cvssv4"
-                                        @cvssScoreChange="update.cvssScore = $event"
-                                        readonly
-                                        />
-                                    </q-card-section>
-                                    <q-card-section>
-                                        <q-field
-                                        borderless
-                                        :label="$t('remediation')"
-                                        stack-label
-                                        :class="
-                                        (currentVulnerability.details[currentDetailsIndex].remediation || update.remediation) &&
-                                        (currentVulnerability.details[currentDetailsIndex].remediation != update.remediation)
-                                        ?'bg-diffbackground':''
-                                        "
-                                        class="basic-editor"
-                                        readonly>
-                                            <template v-slot="control">
-                                                <basic-editor noAffix
-                                                v-model="update.remediation"
-                                                :diff="currentVulnerability.details[currentDetailsIndex].remediation || ''"
-                                                :editable=false />
-                                            </template>
-                                        </q-field>
-                                    </q-card-section>
-                                    <q-card-section class="q-col-gutter-md row">
-                                        <q-select
-                                        :bg-color="(currentVulnerability.remediationComplexity != update.remediationComplexity)?'diffbackground':''"
-                                        :label="$t('remediationComplexity')"
-                                        stack-label
-                                        class="col-md-6"
-                                        v-model="update.remediationComplexity"
-                                        :options="[{label: 'Easy', value: 1},{label: 'Medium', value: 2},{label: 'Complex', value: 3}]"
-                                        map-options
-                                        emit-value
-                                        readonly
-                                        options-sanitize
-                                        outlined
-                                        />
-                                        <q-select
-                                        :bg-color="(currentVulnerability.priority != update.priority)?'diffbackground':''"
-                                        :label="$t('remediationPriority')"
-                                        stack-label
-                                        class="col-md-6"
-                                        v-model="update.priority"
-                                        :options="[{label: 'Low', value: 1},{label: 'Medium', value: 2},{label: 'High', value: 3},{label: 'Urgent', value: 4}]"
-                                        map-options
-                                        emit-value
-                                        readonly
-                                        options-sanitize
-                                        outlined
-                                        />
-                                    </q-card-section>
-                                    <q-card-section>
-                                        <q-input
-                                        :bg-color="!($_.isEqual(currentVulnerability.details[currentDetailsIndex].references, update.references))?'diffbackground':''"
-                                        :label="$t('references')"
-                                        stack-label
-                                        :model-value="(update.references && update.references.length > 0) ? update.references.join('\n') : ''"
-                                        type="textarea"
-                                        readonly
-                                        />
-                                    </q-card-section>
-
-                                    <q-expansion-item
-                                    :label="$t('customFields')"
-                                    default-opened
-                                    header-class="bg-blue-grey-5 text-white"
-                                    expand-icon-class="text-white">
-                                        <div v-if="update.customFields">
-                                            <custom-fields
-                                            ref="customfields"
-                                            v-model="update.customFields"
-                                            custom-element="QCardSection"
-                                            :diff="currentVulnerability.details[currentDetailsIndex].customFields"
-                                            :locale="currentLanguage"
-                                            readonly
-                                            />
-                                        </div>
-                                    </q-expansion-item>
-                                </q-tab-panel>
-                            </q-tab-panels>
-                        </q-card>
-                    </div>
-                </div>
+                <vulnerability-updates-modal
+                v-if="vulnUpdates.length > 0"
+                ref="updatesModal"
+                v-model="updatesModalOpen"
+                :vulnerability="currentVulnerability"
+                :updates="vulnUpdates"
+                :languages="languages"
+                :vuln-types="vulnTypes"
+                :custom-fields="customFields"
+                :readonly="vulnReadonly"
+                :save-button-state="saveButtonState"
+                :save-button-color="saveButtonColor"
+                :save-button-text-color="saveButtonTextColor"
+                :save-button-label="saveButtonLabel"
+                @save="updateVulnerability()"
+                @dismiss="dismissUpdates"
+                @dismiss-one="dismissUpdate"
+                @dismiss-all="dismissAllUpdates"
+                />
             </div>
 
             <!-- Merge pane -->
@@ -1556,6 +1246,13 @@ body.body--dark .vuln-pane-header {
     padding-left: 16px;
     padding-right: 16px;
     font-size: 14px;
+}
+
+/* Keeps every toolbar label on one line so the buttons stay the same height when
+   the QA dock or the draft-recovery button squeezes the bar. */
+.vuln-toolbar-button :deep(.q-btn__content) {
+    flex-wrap: nowrap;
+    white-space: nowrap;
 }
 
 .vuln-toolbar-close {

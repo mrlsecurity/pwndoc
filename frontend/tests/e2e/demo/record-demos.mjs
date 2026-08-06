@@ -461,9 +461,13 @@ async function recordVulnerabilityWorkflow(page, data) {
   await item.waitFor();
   await sleep(500);
   await click(page, item);
-  await page.getByTestId('vulnerability-updates-pane').getByText('Update Vulnerability').waitFor();
+  await page.getByTestId('vulnerability-edit-pane').getByText(/Edit Vulnerability/i).waitFor();
+  await sleep(600);
+  await click(page, page.getByTestId('vulnerability-updates-button'));
+  await page.getByTestId('vulnerability-updates-selector').waitFor();
   await sleep(1200);
-  await click(page, page.getByRole('button', { name: /^Update$/i }));
+  await click(page, page.getByTestId('dismiss-vulnerability-updates-button'));
+  await click(page, page.getByRole('button', { name: /Confirm/i }));
   await sleep(900);
 }
 

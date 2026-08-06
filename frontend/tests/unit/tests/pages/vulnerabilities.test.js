@@ -42,6 +42,7 @@ vi.mock('@/services/vulnerability', () => ({
     updateVulnerability: vi.fn(),
     deleteVulnerability: vi.fn(),
     getVulnUpdates: vi.fn(),
+    dismissVulnUpdates: vi.fn(),
     mergeVulnerability: vi.fn()
   }
 }))
@@ -680,7 +681,10 @@ describe('Vulnerabilities Page', () => {
       expect(wrapper.vm.activePane).toBe('edit')
     })
 
-    it('opens the updates pane for a vulnerability with pending updates', async () => {
+    it('opens the editable pane for a vulnerability with pending updates', async () => {
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({
+        data: { datas: [{ _id: 'up1', locale: 'en', creator: { username: 'alice' }, customFields: [] }] }
+      })
       const wrapper = createWrapper()
       await flushPromises()
       await router.isReady()
@@ -688,7 +692,69 @@ describe('Vulnerabilities Page', () => {
       await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
       await flushPromises()
 
-      expect(wrapper.vm.activePane).toBe('updates')
+      expect(wrapper.vm.activePane).toBe('edit')
+      expect(wrapper.vm.vulnUpdates.length).toBe(1)
+    })
+
+    it('does not switch the editor language when fetching update proposals', async () => {
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({
+        data: { datas: [{ _id: 'up1', locale: 'fr', creator: { username: 'marie' }, customFields: [] }] }
+      })
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
+      await flushPromises()
+
+      expect(wrapper.vm.currentLanguage).toBe('en')
+    })
+
+    it('reaches the updates modal editors when saving with ctrl+s', async () => {
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({
+        data: { datas: [{ _id: 'up1', locale: 'en', creator: { username: 'alice' }, customFields: [] }] }
+      })
+      VulnerabilityService.updateVulnerability.mockResolvedValue({})
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
+      await flushPromises()
+
+      wrapper.vm.updatesModalOpen = true
+      await wrapper.vm.$nextTick()
+
+      // Utils.syncEditors walks $refs recursively, so the modal's editors are only flushed if
+      // the page holds a ref to it.
+      expect(wrapper.vm.$refs.updatesModal).toBeTruthy()
+
+      wrapper.vm.updateVulnerability()
+      await flushPromises()
+
+      expect(Utils.syncEditors).toHaveBeenCalledWith(wrapper.vm.$refs)
+      expect(VulnerabilityService.updateVulnerability).toHaveBeenCalled()
+    })
+
+    it('dismisses the proposals of one language and refreshes the list', async () => {
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({
+        data: { datas: [{ _id: 'up1', locale: 'fr', creator: { username: 'marie' }, customFields: [] }] }
+      })
+      VulnerabilityService.dismissVulnUpdates.mockResolvedValue({})
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
+      await flushPromises()
+
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({ data: { datas: [] } })
+      wrapper.vm.updatesModalOpen = true
+      wrapper.vm.dismissUpdates('fr')
+      await flushPromises()
+
+      expect(VulnerabilityService.dismissVulnUpdates).toHaveBeenCalledWith('vuln3', 'fr')
+      expect(wrapper.vm.vulnUpdates.length).toBe(0)
+      expect(wrapper.vm.updatesModalOpen).toBe(false)
+      expect(wrapper.vm.currentVulnerability.status).toBe(0)
     })
 
     it('closes the pane when the route id is cleared', async () => {
@@ -815,7 +881,7 @@ describe('Vulnerabilities Page', () => {
       })
       await flushPromises()
 
-      for (const pane of ['create', 'edit', 'updates']) {
+      for (const pane of ['create', 'edit']) {
         wrapper.vm.activePane = pane
         await wrapper.vm.$nextTick()
         expect(wrapper.find('[data-testid="draft-recovery-status-stub"]').exists()).toBe(true)
