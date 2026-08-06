@@ -126,7 +126,7 @@ export const useAuditQaStore = defineStore('auditQa', {
       return useQaRunsStore().startJob(
         `audit:${auditId}`,
         () => AiService.runAuditQa(auditId, params).then((response) => response.data?.datas || {}),
-        { errorFallback: $t('auditQa.failed') }
+        { errorFallback: $t('auditQa.failed'), scope }
       )
     },
 

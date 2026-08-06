@@ -125,11 +125,15 @@ export const useQaRunsStore = defineStore('qaRuns', {
     // Start a run whose backend response is either a background job ({ job }; a *:done
     // socket handler later calls setJob/setReport) or an inline result (no `job` key).
     // Ignored while a previous run for this key is still in flight.
-    async startJob(key, runner, { errorFallback = '' } = {}) {
+    async startJob(key, runner, { errorFallback = '', scope = null } = {}) {
       const run = this.ensureRun(key)
       if (run.running || run.job?.state === 'running')
         return
 
+      run.running = true
+      run.startedAt = Date.now()
+      run.scope = scope || null
+      run.job = null
       run.error = ''
       // Drop finished progress so a new run doesn't show stale state from a previous pass.
       if (run.report?.progress)
@@ -146,6 +150,10 @@ export const useQaRunsStore = defineStore('qaRuns', {
         }
       } catch (err) {
         run.error = resolveError(err, errorFallback)
+      } finally {
+        run.running = false
+        run.startedAt = null
+        run.scope = null
       }
     },
 

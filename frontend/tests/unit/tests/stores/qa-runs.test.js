@@ -31,6 +31,21 @@ describe('qa-runs store', () => {
     expect(runner).toHaveBeenCalledTimes(1)
   })
 
+  it('marks an inline job request running with its selected scope', async () => {
+    const store = useQaRunsStore()
+    const request = deferred()
+
+    const promise = store.startJob('audit:1', () => request.promise, { scope: 'programmatic' })
+    expect(store.isRunning('audit:1')).toBe(true)
+    expect(store.runScope('audit:1')).toBe('programmatic')
+    expect(store.startedAt('audit:1')).toBeTruthy()
+
+    request.resolve({ summary: 'built-in result' })
+    await promise
+    expect(store.isRunning('audit:1')).toBe(false)
+    expect(store.getRun('audit:1').report).toEqual({ summary: 'built-in result' })
+  })
+
   it('ignores a second run for a target that is already running (double-run guard)', async () => {
     const store = useQaRunsStore()
     const first = deferred()
