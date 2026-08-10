@@ -164,8 +164,11 @@ SettingSchema.statics.getPublic = () => {
 // Update Settings
 SettingSchema.statics.update = (settings) => {
     return new Promise((resolve, reject) => {
-        const query = Settings.findOneAndUpdate({}, settings, { new: true, runValidators: true });
-        query.exec()
+        Settings.findOne({})
+            .then(current => {
+                current.set(settings);
+                return current.save();
+            })
             .then(settings => resolve(settings))
             .catch(err => reject(err));
     });
