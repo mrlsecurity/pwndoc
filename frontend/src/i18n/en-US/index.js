@@ -721,7 +721,6 @@ export default {
     rules: 'Rules',
     ruleXml: 'Rule XML',
     ruleXmlHint: 'Make sure the rule XML includes a valid rule with an id attribute. The language attribute in the <rules> tag will be automatically set based on the selected language.',
-    language: 'Language',
     view: 'View',
     customRulesUnsupportedBanner: 'Custom rules require a self-hosted pwndoc-languagetools instance. Your configured LanguageTool service does not support custom rules.',
     noRulesFound: 'No rules found.',
