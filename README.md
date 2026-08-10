@@ -41,8 +41,6 @@ The main goal is to have more time to **Pwn** and less time to **Doc** by mutual
 
 #### Audit workflow
 
-#### Audit workflow
-
 ![Audit workflow demo](demos/audit_authoring.gif)
 
 #### Vulnerability workflow
