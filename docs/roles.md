@@ -51,7 +51,7 @@ Common actions:
 |------------|-------------|
 | `vulnerabilities:create` | Create vulnerabilities in the vulnerability database, including imported vulnerability arrays |
 | `vulnerabilities:read` | List, export, and read vulnerabilities, including language-specific vulnerability lists |
-| `vulnerabilities:update` | Edit vulnerabilities, view pending update requests, and merge language details from another vulnerability |
+| `vulnerabilities:update` | Edit vulnerabilities, view and dismiss pending update proposals, and merge language details from another vulnerability |
 | `vulnerabilities:delete` | Delete one vulnerability from the vulnerability database |
 | `vulnerabilities:delete-all` | Delete every vulnerability from the vulnerability database |
 | `vulnerability-updates:create` | Submit a new vulnerability or update request from an audit finding |
@@ -60,8 +60,8 @@ Common actions:
 | `vulnerabilities:qa` | Run built-in (non-AI) QA checks on an individual vulnerability |
 | `vulnerabilities:ai-qa` | Run AI-powered QA checks on an individual vulnerability |
 | `vulnerabilities:qa-read-catalog` | View the saved catalog-wide QA report for the selected language |
-| `vulnerabilities:qa-catalog` | Run built-in (non-AI) QA checks across all vulnerabilities for the selected language, and manage catalog QA findings (dismiss/resolve/recheck) |
-| `vulnerabilities:ai-qa-catalog` | Run AI-powered QA checks across all vulnerabilities for the selected language, and manage catalog QA findings (dismiss/resolve/recheck) |
+| `vulnerabilities:qa-catalog` | Run built-in (non-AI) QA checks across all vulnerabilities for the selected language, and manage that report (resolve, recheck, cancel) |
+| `vulnerabilities:ai-qa-catalog` | Run AI-powered QA checks across all vulnerabilities for the selected language, and manage that report (resolve, recheck, cancel) |
 
 ### Users And Roles
 
@@ -172,12 +172,12 @@ Common actions:
 
 | Permission | Description |
 |------------|-------------|
-| `ai:prompts:read` | View field generation prompts for findings and sections |
-| `ai:prompts:update` | Edit field generation prompts for findings and sections |
-| `ai:redaction-guidelines:read` | View organization-wide redaction guidelines |
-| `ai:redaction-guidelines:update` | Edit organization-wide redaction guidelines |
-| `ai:qa-instructions:read` | View QA instructions and automated QA check toggles |
-| `ai:qa-instructions:update` | Edit QA instructions and automated QA check toggles |
+| `ai:prompts:read` | View the generic and field prompts on the [Assisted Writing](data.md#assisted-writing) page |
+| `ai:prompts:update` | Edit generic and field prompts, including their AI Assist toggles |
+| `ai:redaction-guidelines:read` | View the organization-wide writing guidelines |
+| `ai:redaction-guidelines:update` | Edit the organization-wide writing guidelines |
+| `ai:qa-instructions:read` | View the [Quality Assurance](data.md#quality-assurance) page: QA instructions and check toggles |
+| `ai:qa-instructions:update` | Edit QA instructions and enable or disable individual QA checks |
 
 #### How QA and AI permissions fit together
 
@@ -185,7 +185,7 @@ QA and AI assistance are separate capabilities, so a role can run quality checks
 
 - **View, built-in, and AI QA are three independent permissions.** For each area, `qa-read` only views a saved report, `qa` runs the built-in (programmatic) checks, and `ai-qa` runs the AI-powered checks. Holding one does not grant the others — for example, `vulnerabilities:ai-qa` does **not** let a user run the built-in checks. Grant both `qa` and `ai-qa` for a role that should run everything. Running the combined ("built-in + AI") option requires both permissions.
 - **AI QA still depends on the global AI toggle.** Even with `ai-qa`, the AI checks only run while AI integration is enabled in settings. Built-in checks (`qa`) work regardless.
-- **Single-template and catalog-wide QA are separate.** For vulnerabilities, the `-catalog` permissions govern the "QA all vulnerabilities" feature only; they are independent of the single-template permissions (`vulnerabilities:qa-catalog` does not grant `vulnerabilities:qa`). Managing catalog findings — dismissing, resolving, or rechecking — requires a catalog generate permission (`qa-catalog` or `ai-qa-catalog`); `qa-read-catalog` is view-only.
+- **Single-template and database-wide QA are separate.** For vulnerabilities, the `-catalog` permissions govern the [database-wide QA review](vulnerabilities.md#database-wide-qa) only; they are independent of the single-template permissions (`vulnerabilities:qa-catalog` does not grant `vulnerabilities:qa`). Managing findings in that report — resolving or rechecking — requires a catalog run permission (`qa-catalog` or `ai-qa-catalog`); `qa-read-catalog` is view-only.
 - **The AI writing assistant is `ai-assist`.** `audits:ai-assist` and `vulnerabilities:ai-assist` control the "write with AI" drafting helper on fields, which is separate from QA. On the vulnerability editor, the assistant also requires the relevant edit permission (`vulnerabilities:update` or `vulnerabilities:create`), since generated text is written into editable fields.
 
 ### Settings And Backups

@@ -265,11 +265,65 @@ Click the delete icon on any row and confirm. Rules are reloaded into LanguageTo
 
 Requires `proofing-rules:read` permission to view rules and supported languages, `proofing-rules:create` permission to create rules, `proofing-rules:delete` permission to delete rules, and `proofing-rules:update` permission to reload rules or restart the proofing service.
 
-## AI Integration
+## Assisted Writing
 
-AI Integration lets you configure prompts and providers used by PwnDoc's AI-assisted writing and AI QA review features. AI must be enabled and a provider configured in [Settings](settings.md) before these features are available.
+Assisted Writing configures the prompts behind the AI writing assistant. Providers and models are configured in [Settings → AI Integration](settings.md#ai-integration); this page only holds the instructions sent with each request.
 
-> AI QA review is advisory. Audit and finding content — including text imported from external sources — is sent to the configured AI provider as part of the review request. Untrusted or crafted content in a finding could attempt to influence the AI's output. Always verify AI-sourced QA findings and AI-generated drafts before acting on them.
+The page is visible when AI integration is enabled and your role has `ai:prompts:read` or `ai:redaction-guidelines:read`. Editing requires the matching `:update` permission.
+
+### Prompts
+
+![Assisted Writing prompts page](/_images/data-assisted-writing-prompts.png)
+
+The tree on the left navigates the prompts:
+
+| Node | Contains |
+|------|----------|
+| **Generic Prompts** | Reusable prompts offered on every field (proofread, translate, rewrite, …) |
+| **Findings** | Built-in finding fields, plus one entry per finding custom-field category |
+| **Vulnerabilities** | Vulnerability template custom fields, by category |
+| **Sections** | Custom section fields, by section |
+
+Select a field to edit its prompt on the right. Each prompt has an **AI Assist** toggle — turning it off hides the sparkle button for that field. **Reset to default** restores the shipped prompt text.
+
+Generic prompts have a label (what users see in the assistant) and the prompt text. Drag rows to reorder them: the assistant lists them in this order. Select rows with the checkboxes to delete several at once, or **Add prompt** to create one.
+
+### Writing Guidelines
+
+![Writing guidelines tab](/_images/data-assisted-writing-guidelines.png)
+
+Organization-wide writing rules, appended as context to every AI request. Plain text or Markdown — treat it like a project style guide (tone, terminology, redaction rules, forbidden disclosures, structure conventions).
+
+## Quality Assurance
+
+Controls which automated checks run when reviewing audit reports and vulnerability templates. Requires `ai:qa-instructions:read` to view and `ai:qa-instructions:update` to change.
+
+![Quality Assurance checks page](/_images/data-quality-assurance-checks.png)
+
+Each check shows the scopes it applies to (**Audit reports**, **Vulnerability database**) and a toggle. Toggling a check saves immediately.
+
+**Built-in checks** are programmatic and run whether or not AI integration is enabled:
+
+| Check | What it does |
+|-------|--------------|
+| Report completeness | Minimum requirements: audit name, at least one finding, finding titles. Findings still in redaction are flagged as warnings |
+| Reference links | Validates that HTTP(S) URLs in references are reachable |
+| Image captions | Flags images and figure captions still using the imported filename (e.g. `screenshot.png`) |
+| Duplicate templates | Structural check for same-language templates with identical titles or identical content |
+
+**AI checks** send content to the configured provider and only run while AI integration is enabled:
+
+| Check | What it does |
+|-------|--------------|
+| AI duplicate templates | Identifies templates describing the same vulnerability even when paraphrased |
+| AI unlinked translations | Identifies the same vulnerability stored as separate records per language instead of one multilingual record |
+| Writing guidelines review | Reviews content against the writing guidelines above |
+| Customer alignment | Checks that content matches the expected customer and company |
+| QA instructions | Reviews content against the QA instructions you define |
+
+Expand the **QA instructions** card to write your own checklist (plain text or Markdown): additional required sections and fields, naming conventions, retest wording, and any other rule reviewers should enforce.
+
+> AI review is advisory. Report and template content — including text imported from external sources — is sent to the configured AI provider, so crafted content could attempt to influence the AI's output. Always verify AI-sourced findings and AI-generated drafts before acting on them.
 
 ## Dump
 
