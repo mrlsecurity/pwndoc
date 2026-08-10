@@ -3,7 +3,7 @@ const QA_CATEGORIES = ['completeness', 'redaction', 'customer', 'instructions', 
 
 const stripHtml = (value) => {
     return String(value || '')
-        .replace(/<[^>]*>/g, ' ')
+        .replace(/<[^<>]*>/g, ' ')
         .replace(/&nbsp;/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();

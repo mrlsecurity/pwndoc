@@ -1,10 +1,16 @@
 const {
     chunkWithOverlap,
     compactLlmValue,
-    stringifyLlmPayload
+    stringifyLlmPayload,
+    stripHtml
 } = require('../src/lib/ai-qa-shared');
 
 module.exports = function() {
+    it('strips HTML without backtracking over repeated tag openers', () => {
+        const input = '<'.repeat(100000);
+        expect(stripHtml(input)).toBe(input);
+    });
+
     describe('LLM payload compaction', () => {
         it('should omit empty fields and nested empty sections', () => {
             const compacted = compactLlmValue({
