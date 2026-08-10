@@ -130,3 +130,114 @@
         background: white;
     }
 }
+
+// Assisted-writing visual language. These colors deliberately use Quasar's
+// blue/deep-purple palette instead of the application's neutral primary color.
+:root {
+    --ai-gradient-start: #{$blue-6};
+    --ai-gradient-end: #{$deep-purple-12};
+}
+
+.ai-gradient-icon,
+.ai-gradient-icon .q-icon {
+    background-image: linear-gradient(135deg, var(--ai-gradient-start), var(--ai-gradient-end));
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent;
+}
+
+.ai-primary-btn {
+    background: $deep-purple-12 !important;
+    color: white !important;
+}
+
+.ai-gradient-icon-btn {
+    color: $deep-purple-12 !important;
+
+    .q-icon {
+        background-image: linear-gradient(135deg, var(--ai-gradient-start), var(--ai-gradient-end));
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent !important;
+        -webkit-text-fill-color: transparent;
+    }
+}
+
+.ai-secondary-btn {
+    color: $deep-purple-12 !important;
+}
+
+.ai-soft-surface {
+    background: $indigo-1 !important;
+}
+
+// Highlights the field currently targeted by an active AI assistant session.
+// Reuse Quasar's outlined-field layer so the active state is a single, clean
+// border and doesn't add an extra ring around the control.
+.ai-field-active.q-field--outlined .q-field__control::after {
+    border-color: $indigo-5 !important;
+}
+
+.textarea-array--framed {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.24);
+    border-radius: 4px;
+
+    .q-field__control {
+        border-radius: 0;
+    }
+
+    textarea.q-field__native {
+        padding: 12px 14px;
+    }
+}
+
+.textarea-array__header {
+    min-height: 40px;
+}
+
+.textarea-array--ai-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    border: 2px solid $indigo-5;
+    pointer-events: none;
+}
+
+.body--dark {
+    .ai-gradient-icon-btn {
+        color: $deep-purple-2 !important;
+    }
+
+    .ai-secondary-btn {
+        color: $deep-purple-2 !important;
+    }
+
+    .ai-soft-surface {
+        background: rgba($indigo-4, 0.2) !important;
+    }
+
+    .textarea-array--framed {
+        border-color: rgba(255, 255, 255, 0.28);
+    }
+
+    .textarea-array__header .text-grey-8 {
+        color: $grey-5 !important;
+    }
+}
+// Pulsing dot on a QA toolbar button while that target's QA run is in flight, so a
+// closed panel still signals activity.
+.qa-run-badge {
+    padding: 4px;
+    min-height: auto;
+    animation: qa-run-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes qa-run-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.75); }
+}

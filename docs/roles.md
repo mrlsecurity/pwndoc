@@ -29,6 +29,10 @@ Common actions:
 | `audits:review` | Approve or unapprove audits where the user is a reviewer, but not the creator or a collaborator |
 | `audits:review-all` | Approve or unapprove any audit, except audits where the user is creator or collaborator |
 | `audits:users-connected` | Show connected users in the audits list |
+| `audits:ai-assist` | Use the AI writing assistant to draft finding and section fields |
+| `audits:qa-read` | View a saved audit QA report |
+| `audits:qa` | Run built-in (non-AI) QA checks on audits |
+| `audits:ai-qa` | Run AI-powered QA checks on audits |
 
 ### Audit Comments
 
@@ -47,10 +51,17 @@ Common actions:
 |------------|-------------|
 | `vulnerabilities:create` | Create vulnerabilities in the vulnerability database, including imported vulnerability arrays |
 | `vulnerabilities:read` | List, export, and read vulnerabilities, including language-specific vulnerability lists |
-| `vulnerabilities:update` | Edit vulnerabilities, view pending update requests, and merge language details from another vulnerability |
+| `vulnerabilities:update` | Edit vulnerabilities, view and dismiss pending update proposals, and merge language details from another vulnerability |
 | `vulnerabilities:delete` | Delete one vulnerability from the vulnerability database |
 | `vulnerabilities:delete-all` | Delete every vulnerability from the vulnerability database |
 | `vulnerability-updates:create` | Submit a new vulnerability or update request from an audit finding |
+| `vulnerabilities:ai-assist` | Use the AI writing assistant to draft vulnerability template fields |
+| `vulnerabilities:qa-read` | View a saved QA report for an individual vulnerability |
+| `vulnerabilities:qa` | Run built-in (non-AI) QA checks on an individual vulnerability |
+| `vulnerabilities:ai-qa` | Run AI-powered QA checks on an individual vulnerability |
+| `vulnerabilities:qa-read-catalog` | View the saved catalog-wide QA report for the selected language |
+| `vulnerabilities:qa-catalog` | Run built-in (non-AI) QA checks across all vulnerabilities for the selected language, and manage that report (resolve, recheck, cancel) |
+| `vulnerabilities:ai-qa-catalog` | Run AI-powered QA checks across all vulnerabilities for the selected language, and manage that report (resolve, recheck, cancel) |
 
 ### Users And Roles
 
@@ -157,13 +168,33 @@ Common actions:
 | `proofing-rules:update` | Reload stored rules into LanguageTool or restart the LanguageTool process |
 | `proofing-rules:delete` | Delete custom LanguageTool rules and update LanguageTool |
 
+### AI
+
+| Permission | Description |
+|------------|-------------|
+| `ai:prompts:read` | View the generic and field prompts on the [Assisted Writing](data.md#assisted-writing) page |
+| `ai:prompts:update` | Edit generic and field prompts, including their AI Assist toggles |
+| `ai:redaction-guidelines:read` | View the organization-wide writing guidelines |
+| `ai:redaction-guidelines:update` | Edit the organization-wide writing guidelines |
+| `ai:qa-instructions:read` | View the [Quality Assurance](data.md#quality-assurance) page: QA instructions and check toggles |
+| `ai:qa-instructions:update` | Edit QA instructions and enable or disable individual QA checks |
+
+#### How QA and AI permissions fit together
+
+QA and AI assistance are separate capabilities, so a role can run quality checks without any access to the AI writing assistant, and vice versa.
+
+- **View, built-in, and AI QA are three independent permissions.** For each area, `qa-read` only views a saved report, `qa` runs the built-in (programmatic) checks, and `ai-qa` runs the AI-powered checks. Holding one does not grant the others — for example, `vulnerabilities:ai-qa` does **not** let a user run the built-in checks. Grant both `qa` and `ai-qa` for a role that should run everything. Running the combined ("built-in + AI") option requires both permissions.
+- **AI QA still depends on the global AI toggle.** Even with `ai-qa`, the AI checks only run while AI integration is enabled in settings. Built-in checks (`qa`) work regardless.
+- **Single-template and database-wide QA are separate.** For vulnerabilities, the `-catalog` permissions govern the [database-wide QA review](vulnerabilities.md#database-wide-qa) only; they are independent of the single-template permissions (`vulnerabilities:qa-catalog` does not grant `vulnerabilities:qa`). Managing findings in that report — resolving or rechecking — requires a catalog run permission (`qa-catalog` or `ai-qa-catalog`); `qa-read-catalog` is view-only.
+- **The AI writing assistant is `ai-assist`.** `audits:ai-assist` and `vulnerabilities:ai-assist` control the "write with AI" drafting helper on fields, which is separate from QA. On the vulnerability editor, the assistant also requires the relevant edit permission (`vulnerabilities:update` or `vulnerabilities:create`), since generated text is written into editable fields.
+
 ### Settings And Backups
 
 | Permission | Description |
 |------------|-------------|
 | `settings:read` | View all settings, including private settings, and export them as JSON |
 | `settings:read-public` | View public settings used by the frontend |
-| `settings:update` | Edit settings, restore default settings, and test a LanguageTool connection |
+| `settings:update` | Edit settings, restore default settings, test a LanguageTool connection, test an AI provider connection, and manage AI provider configuration and the global AI enable toggle |
 | `backups:create` | Create partial or full backups and upload backup archives |
 | `backups:read` | List backups, view backup or restore status, and download backup archives |
 | `backups:update` | Restore backup archives, including password-protected and partial restores |
@@ -174,7 +205,7 @@ Common actions:
 
 | Role | Access |
 |------|--------|
-| `user` | Assignable core access. Can create, manage, and comment on assigned audits, upload and read images, read vulnerabilities, view users and roles, manage clients and companies, read templates and custom data, use spellcheck, and view public settings |
+| `user` | Assignable core access. Can create, manage, and comment on assigned audits, run built-in QA checks on audits, upload and read images, read vulnerabilities, view users and roles, manage clients and companies, read templates and custom data, use spellcheck, and view public settings. Does **not** include AI features (writing assistant or AI QA) or vulnerability QA, which must be granted explicitly |
 | `admin` | Full access to all permissions |
 
 ### user
@@ -183,6 +214,7 @@ The `user` role has the following permissions:
 
 - audits:create, audits:read, audits:update, audits:delete
 - audits:comments:create, audits:comments:update, audits:comments:delete
+- audits:qa
 - images:create, images:read
 - vulnerabilities:read, vulnerability-updates:create
 - users:read, roles:read
@@ -192,6 +224,8 @@ The `user` role has the following permissions:
 - languages:read, audit-types:read, vulnerability-types:read, vulnerability-categories:read, sections:read, custom-fields:read
 - spellcheck:read, spellcheck:create
 - settings:read-public
+
+Only the built-in audit QA checks (`audits:qa`) are core, so the `user` role can run audit quality checks out of the box. Everything else QA- or AI-related — viewing saved QA reports (`*:qa-read*`), vulnerability QA (`vulnerabilities:qa*`), the AI writing assistant (`*:ai-assist`), AI QA (`*:ai-qa*`), and the AI configuration permissions (`ai:*`) — is not core and must be granted through a custom role.
 
 ### admin
 

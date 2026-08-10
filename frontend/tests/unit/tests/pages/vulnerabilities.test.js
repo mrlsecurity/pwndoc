@@ -5,11 +5,17 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 
 // Must mock stores/user before component import - axios.js calls useUserStore() at module scope
-const { mockUserStore } = vi.hoisted(() => ({
+const { mockUserStore, mockApi } = vi.hoisted(() => ({
   mockUserStore: {
     id: '1',
     roles: '',
     isAllowed: vi.fn(() => true)
+  },
+  mockApi: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn()
   }
 }))
 vi.mock('src/stores/user', () => ({
@@ -18,16 +24,25 @@ vi.mock('src/stores/user', () => ({
 vi.mock('stores/user', () => ({
   useUserStore: vi.fn(() => mockUserStore)
 }))
-vi.mock('src/boot/axios.js', () => ({ default: {} }))
+vi.mock('src/boot/axios.js', () => ({
+  default: {},
+  api: mockApi
+}))
+vi.mock('boot/axios', () => ({
+  default: {},
+  api: mockApi
+}))
 
 // Mock services used by the page
 vi.mock('@/services/vulnerability', () => ({
   default: {
     getVulnerabilities: vi.fn(),
+    getVulnerability: vi.fn(),
     createVulnerabilities: vi.fn(),
     updateVulnerability: vi.fn(),
     deleteVulnerability: vi.fn(),
     getVulnUpdates: vi.fn(),
+    dismissVulnUpdates: vi.fn(),
     mergeVulnerability: vi.fn()
   }
 }))
@@ -45,6 +60,7 @@ vi.mock('@/services/utils', () => ({
   default: {
     filterCustomFields: vi.fn().mockReturnValue([]),
     htmlEncode: vi.fn(v => v),
+    syncEditors: vi.fn(),
     strongPassword: vi.fn()
   }
 }))
@@ -96,6 +112,7 @@ import DataService from '@/services/data'
 import Utils from '@/services/utils'
 import DraftRecoveryService from '@/services/draft-recovery'
 import { Dialog, Notify } from 'quasar'
+import { useVulnQaStore } from '@/stores/vuln-qa'
 import VulnerabilitiesPage from '@/pages/vulnerabilities/index.vue'
 
 const mockLanguages = [
@@ -119,10 +136,12 @@ const mockVulnerabilities = [
     _id: 'vuln1',
     category: 'Category1',
     status: 0,
-    cvssv3: '',
+    creator: { username: 'admin' },
+    cvssv3: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
     cvssv4: '',
     priority: '',
     remediationComplexity: '',
+    updatedAt: '2024-01-15T00:00:00.000Z',
     details: [
       {
         locale: 'en',
@@ -144,6 +163,7 @@ const mockVulnerabilities = [
     cvssv4: '',
     priority: '',
     remediationComplexity: '',
+    updatedAt: '2024-03-10T00:00:00.000Z',
     details: [
       {
         locale: 'en',
@@ -165,6 +185,7 @@ const mockVulnerabilities = [
     cvssv4: '',
     priority: '',
     remediationComplexity: '',
+    updatedAt: '2024-02-20T00:00:00.000Z',
     details: [
       {
         locale: 'en',
@@ -180,38 +201,50 @@ const mockVulnerabilities = [
   }
 ]
 
+const virtualScrollStub = {
+  name: 'QVirtualScroll',
+  props: {
+    items: Array,
+    virtualScrollItemSize: Number
+  },
+  template: '<div><slot v-for="(item, index) in items" :key="item._id" :item="item" :index="index" /></div>'
+}
+
 function setupDefaultMocks() {
+  mockApi.get.mockResolvedValue({ data: { datas: { fields: [] } } })
   DataService.getLanguages.mockResolvedValue({ data: { datas: mockLanguages } })
   DataService.getVulnerabilityTypes.mockResolvedValue({ data: { datas: mockVulnTypes } })
   DataService.getVulnerabilityCategories.mockResolvedValue({ data: { datas: mockCategories } })
   DataService.getCustomFields.mockResolvedValue({ data: { datas: [] } })
   VulnerabilityService.getVulnerabilities.mockResolvedValue({ data: { datas: mockVulnerabilities } })
+  VulnerabilityService.getVulnerability.mockImplementation((id) => {
+    const found = mockVulnerabilities.find((vuln) => vuln._id === id)
+    // Mirror the backend, which 404s on an unknown id rather than returning a null body.
+    return found
+      ? Promise.resolve({ data: { datas: found } })
+      : Promise.reject({ response: { status: 404, data: { datas: 'Vulnerability not found' } } })
+  })
   VulnerabilityService.getVulnUpdates.mockResolvedValue({ data: { datas: [] } })
   DraftRecoveryService.listDrafts.mockResolvedValue([])
   DraftRecoveryService.state.current = null
   DraftRecoveryService.state.revision = 0
 }
 
-// Helper to set $refs on Vue 3 component instances (can't assign directly through proxy)
-function setRefs(wrapper, refs) {
-  Object.entries(refs).forEach(([name, refValue]) => {
-    if (wrapper.vm.$refs[name]) {
-      Object.assign(wrapper.vm.$refs[name], refValue)
-    }
-  })
-}
-
 describe('Vulnerabilities Page', () => {
   let router, pinia, i18n
 
   beforeEach(() => {
+    // createWebHistory reads window.location, which persists across tests in jsdom; reset it
+    // so a leftover /vulnerabilities/<id> URL doesn't deep-link into the next test's mount.
+    window.history.replaceState({}, '', '/')
+
     pinia = createPinia()
     setActivePinia(pinia)
 
     router = createRouter({
       history: createWebHistory(),
       routes: [
-        { path: '/vulnerabilities', name: 'vulnerabilities', component: VulnerabilitiesPage },
+        { path: '/vulnerabilities/:vulnerabilityId?', name: 'vulnerabilities', component: VulnerabilitiesPage },
         { path: '/audits', name: 'audits', component: { template: '<div>Audits</div>' } },
         { path: '/data/custom', component: { template: '<div>Data</div>' } }
       ]
@@ -226,6 +259,7 @@ describe('Vulnerabilities Page', () => {
     })
 
     vi.clearAllMocks()
+    mockUserStore.isAllowed.mockImplementation(() => true)
     setupDefaultMocks()
   })
 
@@ -234,8 +268,11 @@ describe('Vulnerabilities Page', () => {
       global: {
         plugins: [pinia, router, i18n],
         stubs: {
-          'q-table': true,
           'q-select': true,
+          'q-chip': true,
+          'q-menu': true,
+          'q-checkbox': true,
+          'q-inner-loading': true,
           'q-toggle': true,
           'q-btn': true,
           'q-btn-dropdown': true,
@@ -260,6 +297,7 @@ describe('Vulnerabilities Page', () => {
           'q-radio': true,
           'q-pagination': true,
           'q-scroll-area': true,
+          'q-virtual-scroll': virtualScrollStub,
           'q-tabs': true,
           'q-tab': true,
           'q-tab-panels': true,
@@ -287,7 +325,13 @@ describe('Vulnerabilities Page', () => {
             }
           },
           $_: {
-            cloneDeep: (obj) => JSON.parse(JSON.stringify(obj))
+            cloneDeep: (obj) => JSON.parse(JSON.stringify(obj)),
+            isEqual: (left, right) => JSON.stringify(left) === JSON.stringify(right)
+          },
+          $socket: {
+            emit: () => {},
+            on: () => {},
+            off: () => {}
           },
           ...(options.mocks || {})
         }
@@ -296,24 +340,11 @@ describe('Vulnerabilities Page', () => {
   }
 
   const draftIndicatorStubs = () => ({
-    'q-table': {
-      props: ['rows'],
-      template: `
-        <div>
-          <slot name="top" />
-          <div v-for="row in rows" :key="row._id">
-            <slot name="body" :row="row" />
-          </div>
-        </div>
-      `
-    },
     'q-btn-dropdown': { template: '<div><slot /></div>' },
     'q-list': { template: '<div><slot /></div>' },
     'q-item': { template: '<div><slot /></div>' },
     'q-item-section': { template: '<div><slot /></div>' },
     'q-item-label': { template: '<div><slot /></div>' },
-    'q-tr': { template: '<div><slot /></div>' },
-    'q-td': { template: '<div><slot /></div>' },
     'q-badge': { template: '<span v-bind="$attrs"><slot /></span>' },
     'q-tooltip': { template: '<span><slot /></span>' }
   })
@@ -387,6 +418,75 @@ describe('Vulnerabilities Page', () => {
   })
 
   describe('Computed Properties', () => {
+    it('greys out the vulnerability QA button while its panel is open', async () => {
+      const wrapper = createWrapper({
+        stubs: {
+          'q-bar': { template: '<div><slot /></div>' }
+        }
+      })
+      await flushPromises()
+
+      wrapper.vm.activePane = 'create'
+      await wrapper.vm.$nextTick()
+
+      const qaToggle = () => wrapper.get('[data-testid="vulnerability-qa-toggle"]')
+      expect(qaToggle().classes()).not.toContain('bg-grey-3')
+
+      wrapper.vm.vulnQaOpen = true
+      await wrapper.vm.$nextTick()
+
+      expect(qaToggle().classes()).toContain('bg-grey-3')
+    })
+
+    it('marks the editor read-only when the user lacks the edit permission (existing template)', async () => {
+      // Editing an existing template requires vulnerabilities:update.
+      mockUserStore.isAllowed.mockImplementation((scope) => scope !== 'vulnerabilities:update')
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.vulnerabilityId = 'vuln-1'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.canEditVuln).toBe(false)
+      expect(wrapper.vm.vulnReadonly).toBe(true)
+
+      mockUserStore.isAllowed.mockImplementation(() => true)
+    })
+
+    it('allows editing an existing template with vulnerabilities:update', async () => {
+      mockUserStore.isAllowed.mockImplementation(() => true)
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.vulnerabilityId = 'vuln-1'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.canEditVuln).toBe(true)
+      expect(wrapper.vm.vulnReadonly).toBe(false)
+    })
+
+    it('marks the editor read-only when creating without vulnerabilities:create', async () => {
+      mockUserStore.isAllowed.mockImplementation((scope) => scope !== 'vulnerabilities:create')
+      const wrapper = createWrapper()
+      await flushPromises()
+      // vulnerabilityId is null by default (create mode).
+      expect(wrapper.vm.canEditVuln).toBe(false)
+      expect(wrapper.vm.vulnReadonly).toBe(true)
+
+      mockUserStore.isAllowed.mockImplementation(() => true)
+    })
+
+    it('updates the QA review toggle label for the panel state', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      const qaToggle = () => wrapper.get('[data-testid="vulnerability-qa-all-toggle"]')
+      expect(qaToggle().attributes('label')).toBe('vulnerabilityQa.showReview')
+
+      useVulnQaStore().panelOpen = true
+      await wrapper.vm.$nextTick()
+
+      expect(qaToggle().attributes('label')).toBe('vulnerabilityQa.hideReview')
+    })
+
     it('should filter vulnTypesLang by currentLanguage', async () => {
       const wrapper = createWrapper()
       await flushPromises()
@@ -434,23 +534,358 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.dtLanguage = 'en'
       expect(wrapper.vm.vulnTypeOptions).toEqual(['Undefined', 'Web', 'Network'])
     })
+
+    it('should resolve dtLanguageLabel to the matching language display name', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'fr'
+      expect(wrapper.vm.dtLanguageLabel).toBe('French')
+    })
+
+    it('should fall back to the raw locale code when dtLanguageLabel has no match', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'de'
+      expect(wrapper.vm.dtLanguageLabel).toBe('de')
+    })
+
+    it('should compute status counts for the selected language', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'en'
+      expect(wrapper.vm.statusCounts).toEqual({ all: 3, valid: 1, new: 1, updates: 1 })
+    })
+
+    it('should filter vulnerabilities by the single-select status filter', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      wrapper.vm.statusFilter = 'all'
+      expect(wrapper.vm.filteredVulnerabilities.length).toBe(3)
+
+      wrapper.vm.statusFilter = 'new'
+      expect(wrapper.vm.filteredVulnerabilities.length).toBe(1)
+      expect(wrapper.vm.filteredVulnerabilities[0]._id).toBe('vuln2')
+
+      wrapper.vm.statusFilter = 'updates'
+      expect(wrapper.vm.filteredVulnerabilities.length).toBe(1)
+      expect(wrapper.vm.filteredVulnerabilities[0]._id).toBe('vuln3')
+    })
+
+    it('should paginate the sorted vulnerabilities', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      wrapper.vm.pagination.rowsPerPage = 2
+      wrapper.vm.pagination.page = 1
+      expect(wrapper.vm.paginatedVulnerabilities.length).toBe(2)
+      expect(wrapper.vm.pagesNumber).toBe(2)
+
+      wrapper.vm.pagination.page = 2
+      expect(wrapper.vm.paginatedVulnerabilities.length).toBe(1)
+
+      // rowsPerPage 0 shows everything
+      wrapper.vm.pagination.rowsPerPage = 0
+      expect(wrapper.vm.paginatedVulnerabilities.length).toBe(3)
+      expect(wrapper.vm.pagesNumber).toBe(1)
+    })
+
+    it('uses virtual scrolling when results per page is All', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'en'
+      wrapper.vm.pagination.rowsPerPage = 0
+      await wrapper.vm.$nextTick()
+
+      const virtualList = wrapper.findComponent({ name: 'QVirtualScroll' })
+      expect(virtualList.exists()).toBe(true)
+      expect(virtualList.props('items')).toEqual(wrapper.vm.sortedVulnerabilities)
+      expect(virtualList.props('virtualScrollItemSize')).toBe(64)
+    })
+  })
+
+  describe('QA vulnerability navigation', () => {
+    it('scrolls the virtual list to a vulnerability when all results are selected', async () => {
+      const scrollTo = vi.fn()
+      const wrapper = createWrapper({
+        stubs: {
+          'q-virtual-scroll': {
+            name: 'QVirtualScroll',
+            props: { items: Array },
+            methods: { scrollTo },
+            template: '<div><slot v-for="(item, index) in items" :key="item._id" :item="item" :index="index" /></div>'
+          }
+        }
+      })
+      await flushPromises()
+
+      wrapper.vm.dtLanguage = 'en'
+      wrapper.vm.pagination.rowsPerPage = 0
+      await wrapper.vm.$nextTick()
+      vi.spyOn(wrapper.vm, 'selectVulnerability').mockResolvedValue()
+
+      const expectedIndex = wrapper.vm.sortedVulnerabilities.findIndex(({ _id }) => _id === 'vuln2')
+      await wrapper.vm.navigateToVulnerabilityFromQa('vuln2')
+      await wrapper.vm.$nextTick()
+
+      expect(scrollTo).toHaveBeenCalledWith(expectedIndex, 'center-force')
+    })
+  })
+
+  describe('Router-driven navigation', () => {
+    it('shows only one separator before close for a read-only user', async () => {
+      mockUserStore.isAllowed.mockImplementation((permission) => permission === 'vulnerabilities:read')
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+      await router.isReady()
+
+      const wrapper = createWrapper({
+        stubs: {
+          'q-bar': { template: '<div><slot /></div>' },
+          'q-separator': { template: '<div data-testid="toolbar-separator" />' }
+        }
+      })
+      await flushPromises()
+
+      const header = wrapper.get('[data-testid="vulnerability-edit-pane"] > div')
+      expect(header.findAll('[data-testid="toolbar-separator"]')).toHaveLength(1)
+      expect(header.find('[data-testid="edit-vulnerability-close"]').exists()).toBe(true)
+    })
+
+    it('pushes the vuln id to the URL on select instead of opening directly', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+      const pushSpy = vi.spyOn(router, 'push')
+
+      await wrapper.vm.selectVulnerability(mockVulnerabilities[0])
+
+      expect(pushSpy).toHaveBeenCalledWith({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+    })
+
+    it('fetches full detail and opens the edit pane when the route id changes', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+      await flushPromises()
+
+      expect(VulnerabilityService.getVulnerability).toHaveBeenCalledWith('vuln1')
+      expect(wrapper.vm.vulnerabilityId).toBe('vuln1')
+      expect(wrapper.vm.activePane).toBe('edit')
+    })
+
+    it('opens the editable pane for a vulnerability with pending updates', async () => {
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({
+        data: { datas: [{ _id: 'up1', locale: 'en', creator: { username: 'alice' }, customFields: [] }] }
+      })
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
+      await flushPromises()
+
+      expect(wrapper.vm.activePane).toBe('edit')
+      expect(wrapper.vm.vulnUpdates.length).toBe(1)
+    })
+
+    it('does not switch the editor language when fetching update proposals', async () => {
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({
+        data: { datas: [{ _id: 'up1', locale: 'fr', creator: { username: 'marie' }, customFields: [] }] }
+      })
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
+      await flushPromises()
+
+      expect(wrapper.vm.currentLanguage).toBe('en')
+    })
+
+    it('reaches the updates modal editors when saving with ctrl+s', async () => {
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({
+        data: { datas: [{ _id: 'up1', locale: 'en', creator: { username: 'alice' }, customFields: [] }] }
+      })
+      VulnerabilityService.updateVulnerability.mockResolvedValue({})
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
+      await flushPromises()
+
+      wrapper.vm.updatesModalOpen = true
+      await wrapper.vm.$nextTick()
+
+      // Utils.syncEditors walks $refs recursively, so the modal's editors are only flushed if
+      // the page holds a ref to it.
+      expect(wrapper.vm.$refs.updatesModal).toBeTruthy()
+
+      wrapper.vm.updateVulnerability()
+      await flushPromises()
+
+      expect(Utils.syncEditors).toHaveBeenCalledWith(wrapper.vm.$refs)
+      expect(VulnerabilityService.updateVulnerability).toHaveBeenCalled()
+    })
+
+    it('dismisses the proposals of one language and refreshes the list', async () => {
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({
+        data: { datas: [{ _id: 'up1', locale: 'fr', creator: { username: 'marie' }, customFields: [] }] }
+      })
+      VulnerabilityService.dismissVulnUpdates.mockResolvedValue({})
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln3' } })
+      await flushPromises()
+
+      VulnerabilityService.getVulnUpdates.mockResolvedValue({ data: { datas: [] } })
+      wrapper.vm.updatesModalOpen = true
+      wrapper.vm.dismissUpdates('fr')
+      await flushPromises()
+
+      expect(VulnerabilityService.dismissVulnUpdates).toHaveBeenCalledWith('vuln3', 'fr')
+      expect(wrapper.vm.vulnUpdates.length).toBe(0)
+      expect(wrapper.vm.updatesModalOpen).toBe(false)
+      expect(wrapper.vm.currentVulnerability.status).toBe(0)
+    })
+
+    it('closes the pane when the route id is cleared', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+      await flushPromises()
+      expect(wrapper.vm.activePane).toBe('edit')
+
+      await router.push({ name: 'vulnerabilities' })
+      await flushPromises()
+      expect(wrapper.vm.activePane).toBeNull()
+      expect(wrapper.vm.vulnerabilityId).toBe('')
+    })
+
+    it('opens a deep-linked vulnerability on mount', async () => {
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln2' } })
+      await router.isReady()
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      expect(VulnerabilityService.getVulnerability).toHaveBeenCalledWith('vuln2')
+      expect(wrapper.vm.vulnerabilityId).toBe('vuln2')
+    })
+
+    it('resets the URL to the base list when opening the create pane', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+      await router.push({ name: 'vulnerabilities', params: { vulnerabilityId: 'vuln1' } })
+      await flushPromises()
+
+      await wrapper.vm.openCreateVulnerability()
+      await flushPromises()
+
+      expect(wrapper.vm.activePane).toBe('create')
+      expect(wrapper.vm.$route.params.vulnerabilityId).toBeUndefined()
+    })
+  })
+
+  describe('QA refresh after save', () => {
+    it('refreshes QA outdated state when the save changed content', async () => {
+      VulnerabilityService.updateVulnerability.mockResolvedValue({})
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      const vulnQaStore = useVulnQaStore()
+      vulnQaStore.panelOpen = true
+      const loadStatusSpy = vi.spyOn(vulnQaStore, 'loadStatus').mockResolvedValue()
+
+      wrapper.vm.vulnerabilityId = 'vuln1'
+      wrapper.vm.currentVulnerability = { details: [{ locale: 'en', title: 'Edited', customFields: [] }] }
+      wrapper.vm.currentVulnerabilityOrig = { details: [{ locale: 'en', title: 'Original', customFields: [] }] }
+
+      const tokenBefore = wrapper.vm.qaReloadToken
+      wrapper.vm.updateVulnerability()
+      await flushPromises()
+
+      expect(wrapper.vm.qaReloadToken).toBe(tokenBefore + 1)
+      expect(loadStatusSpy).toHaveBeenCalled()
+    })
+
+    it('does not refresh QA when saving without changes (no spurious outdated)', async () => {
+      VulnerabilityService.updateVulnerability.mockResolvedValue({})
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      const vulnQaStore = useVulnQaStore()
+      vulnQaStore.panelOpen = true
+      const loadStatusSpy = vi.spyOn(vulnQaStore, 'loadStatus').mockResolvedValue()
+
+      wrapper.vm.vulnerabilityId = 'vuln1'
+      const unchanged = { details: [{ locale: 'en', title: 'Same', customFields: [] }] }
+      wrapper.vm.currentVulnerability = unchanged
+      wrapper.vm.currentVulnerabilityOrig = wrapper.vm.$_.cloneDeep(unchanged)
+
+      const tokenBefore = wrapper.vm.qaReloadToken
+      wrapper.vm.updateVulnerability()
+      await flushPromises()
+
+      expect(wrapper.vm.qaReloadToken).toBe(tokenBefore)
+      expect(loadStatusSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Sticky QA panel', () => {
+    it('keeps the QA panel open across pane cleanup (navigation)', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.vulnQaOpen = true
+      await wrapper.vm.cleanupCurrentVulnerability()
+
+      expect(wrapper.vm.vulnQaOpen).toBe(true)
+    })
+  })
+
+  describe('setSort', () => {
+    it('should toggle direction when selecting the current sort field', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      expect(wrapper.vm.pagination.sortBy).toBe('title')
+      expect(wrapper.vm.sortDesc).toBe(false)
+
+      wrapper.vm.setSort('title')
+      expect(wrapper.vm.sortDesc).toBe(true)
+
+      wrapper.vm.setSort('category')
+      expect(wrapper.vm.pagination.sortBy).toBe('category')
+      expect(wrapper.vm.sortDesc).toBe(false)
+    })
   })
 
   describe('Draft Recovery Hints', () => {
-    it('should render the draft recovery status in create, edit, and update modal headers', async () => {
+    it('should render the draft recovery status in create, edit, and update pane headers', async () => {
       const wrapper = createWrapper({
         stubs: {
-          'q-dialog': { template: '<div><slot /></div>' },
-          'q-card': { template: '<div><slot /></div>' },
-          'q-layout': { template: '<div><slot /></div>' },
-          'q-header': { template: '<div><slot /></div>' },
           'q-bar': { template: '<div><slot /></div>' },
           'draft-recovery-status': { template: '<div data-testid="draft-recovery-status-stub" />' }
         }
       })
       await flushPromises()
 
-      expect(wrapper.findAll('[data-testid="draft-recovery-status-stub"]')).toHaveLength(3)
+      for (const pane of ['create', 'edit']) {
+        wrapper.vm.activePane = pane
+        await wrapper.vm.$nextTick()
+        expect(wrapper.find('[data-testid="draft-recovery-status-stub"]').exists()).toBe(true)
+      }
     })
 
     it('should request vulnerability drafts on mount', async () => {
@@ -672,29 +1107,69 @@ describe('Vulnerabilities Page', () => {
         { locale: 'en', title: 'New Vuln', customFields: [] }
       ]
 
-      setRefs(wrapper, { createModal: { hide: vi.fn() } })
       wrapper.vm.createVulnerability()
       await flushPromises()
 
       expect(VulnerabilityService.createVulnerabilities).toHaveBeenCalledWith([wrapper.vm.currentVulnerability])
     })
 
-    it('should show notification on create success', async () => {
+    it('should show the inline saved state without a success notification on create', async () => {
       VulnerabilityService.createVulnerabilities.mockResolvedValue({})
+      VulnerabilityService.getVulnerabilities.mockResolvedValue({
+        data: {
+          datas: [
+            ...mockVulnerabilities,
+            {
+              _id: 'new-vuln',
+              category: null,
+              status: 1,
+              details: [{ locale: 'en', title: 'New Vuln', customFields: [] }]
+            }
+          ]
+        }
+      })
       const wrapper = createWrapper()
       await flushPromises()
 
       wrapper.vm.currentVulnerability.details = [
         { locale: 'en', title: 'New Vuln', customFields: [] }
       ]
-      setRefs(wrapper, { createModal: { hide: vi.fn() } })
+      wrapper.vm.activePane = 'create'
+      await wrapper.vm.$nextTick()
       wrapper.vm.createVulnerability()
       await flushPromises()
 
-      expect(Notify.create).toHaveBeenCalledWith(expect.objectContaining({
-        message: 'msg.vulnerabilityCreatedOk',
-        color: 'positive'
-      }))
+      expect(wrapper.vm.saveButtonState).toBe('saved')
+      expect(Notify.create).not.toHaveBeenCalled()
+    })
+
+    it('keeps the typed rich content and adopts the new id after create', async () => {
+      VulnerabilityService.createVulnerabilities.mockResolvedValue({})
+      VulnerabilityService.getVulnerabilities.mockResolvedValue({
+        data: {
+          datas: [
+            ...mockVulnerabilities,
+            { _id: 'new-vuln', category: null, status: 0, details: [{ locale: 'en', title: 'Fresh', vulnType: 'Web' }] }
+          ]
+        }
+      })
+      const wrapper = createWrapper()
+      await flushPromises()
+      await router.isReady()
+
+      wrapper.vm.activePane = 'create'
+      wrapper.vm.currentVulnerability.details = [
+        { locale: 'en', title: 'Fresh', description: '<p>typed body</p>', customFields: [] }
+      ]
+      wrapper.vm.createVulnerability()
+      await flushPromises()
+
+      expect(wrapper.vm.vulnerabilityId).toBe('new-vuln')
+      // The lightweight list row lacks the body, so the typed content must be preserved.
+      expect(wrapper.vm.currentVulnerability.details[0].description).toBe('<p>typed body</p>')
+      // The created id is stamped onto the kept object so delete-by-currentVulnerability works.
+      expect(wrapper.vm.currentVulnerability._id).toBe('new-vuln')
+      expect(wrapper.vm.activePane).toBe('edit')
     })
 
     it('should show error notification on create failure', async () => {
@@ -740,10 +1215,6 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.currentVulnerability.details = [
         { locale: 'en', title: 'Updated Vuln', customFields: [] }
       ]
-      setRefs(wrapper, {
-        editModal: { hide: vi.fn() },
-        updatesModal: { hide: vi.fn() }
-      })
       wrapper.vm.updateVulnerability()
       await flushPromises()
 
@@ -753,7 +1224,7 @@ describe('Vulnerabilities Page', () => {
       )
     })
 
-    it('should show notification on update success', async () => {
+    it('should show the inline saved state without a success notification on update', async () => {
       VulnerabilityService.updateVulnerability.mockResolvedValue({})
       const wrapper = createWrapper()
       await flushPromises()
@@ -762,17 +1233,13 @@ describe('Vulnerabilities Page', () => {
       wrapper.vm.currentVulnerability.details = [
         { locale: 'en', title: 'Updated Vuln', customFields: [] }
       ]
-      setRefs(wrapper, {
-        editModal: { hide: vi.fn() },
-        updatesModal: { hide: vi.fn() }
-      })
+      wrapper.vm.activePane = 'edit'
+      await wrapper.vm.$nextTick()
       wrapper.vm.updateVulnerability()
       await flushPromises()
 
-      expect(Notify.create).toHaveBeenCalledWith(expect.objectContaining({
-        message: 'msg.vulnerabilityUpdatedOk',
-        color: 'positive'
-      }))
+      expect(wrapper.vm.saveButtonState).toBe('saved')
+      expect(Notify.create).not.toHaveBeenCalled()
     })
 
     it('should show error notification on update failure', async () => {
@@ -846,9 +1313,48 @@ describe('Vulnerabilities Page', () => {
         message: 'msg.vulnerabilityWillBeDeleted'
       }))
     })
+
+    it('falls back to the open vulnerabilityId when the row has no _id (create flow)', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      const deleteSpy = vi.spyOn(wrapper.vm, 'deleteVulnerability').mockImplementation(() => {})
+      // Invoke the confirm callback so the delete target id is exercised.
+      Dialog.create.mockReturnValueOnce({ onOk: (cb) => { cb(); return { onCancel: vi.fn() } } })
+
+      wrapper.vm.vulnerabilityId = 'open-id'
+      // currentVulnerability from the create flow has no _id.
+      wrapper.vm.confirmDeleteVulnerability(wrapper.vm.currentVulnerability)
+
+      expect(deleteSpy).toHaveBeenCalledWith('open-id')
+    })
   })
 
   describe('clone', () => {
+    it('remounts the full edit pane when navigating to another vulnerability', async () => {
+      let cvssMounts = 0
+      const wrapper = createWrapper({
+        stubs: {
+          'q-card-section': { template: '<div><slot /></div>' },
+          'cvss3-calculator': {
+            props: ['modelValue'],
+            mounted() { cvssMounts += 1 },
+            template: '<div />'
+          }
+        }
+      })
+      await flushPromises()
+
+      wrapper.vm.vulnerabilityId = 'vuln1'
+      wrapper.vm.activePane = 'edit'
+      await wrapper.vm.$nextTick()
+      expect(cvssMounts).toBe(1)
+
+      wrapper.vm.vulnerabilityId = 'vuln2'
+      await wrapper.vm.$nextTick()
+      expect(cvssMounts).toBe(2)
+    })
+
     it('should deep clone the row into currentVulnerability', async () => {
       const wrapper = createWrapper()
       await flushPromises()
@@ -944,16 +1450,30 @@ describe('Vulnerabilities Page', () => {
       expect(sorted[1].category).toBe('Category2')
     })
 
-    it('should sort by type', async () => {
+    it('should sort by last modified', async () => {
       const wrapper = createWrapper()
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
       const rows = [...mockVulnerabilities]
-      const sorted = wrapper.vm.customSort(rows, 'type', false)
+      const sorted = wrapper.vm.customSort(rows, 'lastModified', false)
 
-      expect(wrapper.vm.getDtType(sorted[0])).toBe('Network')
-      expect(wrapper.vm.getDtType(sorted[1])).toBe('Web')
+      expect(sorted[0]._id).toBe('vuln1')
+      expect(sorted[1]._id).toBe('vuln3')
+      expect(sorted[2]._id).toBe('vuln2')
+    })
+
+    it('should sort by last modified descending', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      const rows = [...mockVulnerabilities]
+      const sorted = wrapper.vm.customSort(rows, 'lastModified', true)
+
+      expect(sorted[0]._id).toBe('vuln2')
+      expect(sorted[1]._id).toBe('vuln3')
+      expect(sorted[2]._id).toBe('vuln1')
     })
 
     it('should return undefined for null rows', async () => {
@@ -971,35 +1491,128 @@ describe('Vulnerabilities Page', () => {
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
-      const terms = { title: 'SQL', category: '', type: '', valid: 0, new: 1, updates: 2 }
+      const terms = { title: 'SQL', status: 'all' }
       const result = wrapper.vm.customFilter(mockVulnerabilities, terms)
 
       expect(result.length).toBe(1)
       expect(result[0]._id).toBe('vuln1')
     })
 
-    it('should filter by status toggles', async () => {
+    it('should filter by status', async () => {
       const wrapper = createWrapper()
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
       // Only show valid (status 0), exclude new and updates
-      const terms = { title: '', category: '', type: '', valid: 0, new: null, updates: null }
+      const terms = { title: '', status: 'valid' }
       const result = wrapper.vm.customFilter(mockVulnerabilities, terms)
 
       expect(result.length).toBe(1)
       expect(result[0]._id).toBe('vuln1')
     })
 
-    it('should update filteredRowsCount', async () => {
+    it('should filter by selected categories (multi-select, No Category included)', async () => {
       const wrapper = createWrapper()
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
-      const terms = { title: '', category: '', type: '', valid: 0, new: 1, updates: 2 }
-      wrapper.vm.customFilter(mockVulnerabilities, terms)
+      let result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', categories: ['Category1'] })
+      expect(result.map(row => row._id)).toEqual(['vuln1'])
+
+      result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', categories: ['Category1', 'No Category'] })
+      expect(result.map(row => row._id)).toEqual(['vuln1', 'vuln3'])
+    })
+
+    it('should filter by selected types (multi-select)', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      const result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', types: ['Network'] })
+      expect(result.map(row => row._id)).toEqual(['vuln3'])
+    })
+
+    it('should filter by CVSS range bucket', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      // vuln1 has a 9.8 CVSSv3 vector -> critical; the others have no CVSS
+      const critical = wrapper.vm.customFilter(mockVulnerabilities, { title: '', cvssRange: 'critical' })
+      expect(critical.map(row => row._id)).toEqual(['vuln1'])
+
+      const low = wrapper.vm.customFilter(mockVulnerabilities, { title: '', cvssRange: 'low' })
+      expect(low.length).toBe(0)
+    })
+
+    it('should filter by creator username', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+
+      const result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', creator: 'admin' })
+      expect(result.map(row => row._id)).toEqual(['vuln1'])
+    })
+
+    it('should count active filter groups and reset them', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      expect(wrapper.vm.activeFilterCount).toBe(0)
+
+      wrapper.vm.search.categories = ['Category1']
+      wrapper.vm.search.types = ['Web']
+      wrapper.vm.search.cvssRange = 'high'
+      wrapper.vm.search.creator = 'admin'
+      expect(wrapper.vm.activeFilterCount).toBe(4)
+
+      wrapper.vm.search.unsavedOnly = true
+      expect(wrapper.vm.activeFilterCount).toBe(5)
+
+      wrapper.vm.resetAdvancedFilters()
+      expect(wrapper.vm.activeFilterCount).toBe(0)
+      expect(wrapper.vm.search).toEqual({
+        title: '', categories: [], types: [], cvssRange: 'all', creator: null, unsavedOnly: false
+      })
+    })
+
+    it('should count vulnerabilities with unsaved changes in the selected language', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+      wrapper.vm.vulnerabilityDrafts = [
+        { scope: 'vuln-modal-edit', refKey: 'vuln1', status: 'active_draft' },
+        { scope: 'vuln-modal-edit', refKey: 'vuln2', status: 'active_draft' },
+        { scope: 'vuln-modal-create', refKey: '_new:none', status: 'active_draft' }
+      ]
+
+      expect(wrapper.vm.unsavedChangesCount).toBe(2)
+
+      wrapper.vm.vulnerabilityId = 'vuln1'
+      expect(wrapper.vm.unsavedChangesCount).toBe(1)
+    })
+
+    it('should filter by unsaved changes only', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
+      wrapper.vm.vulnerabilityDrafts = [
+        { scope: 'vuln-modal-edit', refKey: 'vuln1', status: 'active_draft' }
+      ]
+
+      const result = wrapper.vm.customFilter(mockVulnerabilities, { title: '', unsavedOnly: true })
+      expect(result.map(row => row._id)).toEqual(['vuln1'])
+    })
+
+    it('should expose the filtered count through filteredRowsCount', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+      wrapper.vm.dtLanguage = 'en'
 
       expect(wrapper.vm.filteredRowsCount).toBe(3)
+
+      wrapper.vm.search.title = 'SQL'
+      expect(wrapper.vm.filteredRowsCount).toBe(1)
     })
 
     it('should filter case-insensitively', async () => {
@@ -1007,7 +1620,7 @@ describe('Vulnerabilities Page', () => {
       await flushPromises()
       wrapper.vm.dtLanguage = 'en'
 
-      const terms = { title: 'sql injection', category: '', type: '', valid: 0, new: 1, updates: 2 }
+      const terms = { title: 'sql injection', status: 'all' }
       const result = wrapper.vm.customFilter(mockVulnerabilities, terms)
 
       expect(result.length).toBe(1)
@@ -1150,11 +1763,14 @@ describe('Vulnerabilities Page', () => {
       expect(wrapper.vm.loading).toBe(true)
       expect(wrapper.vm.vulnerabilities).toEqual([])
       expect(wrapper.vm.search).toEqual({
-        title: '', type: '', category: '', valid: 0, new: 1, updates: 2
+        title: '', categories: [], types: [], cvssRange: 'all', creator: null, unsavedOnly: false
       })
+      expect(wrapper.vm.statusFilter).toBe('all')
       expect(wrapper.vm.errors).toEqual({ title: '' })
       expect(wrapper.vm.pagination.rowsPerPage).toBe(25)
       expect(wrapper.vm.pagination.sortBy).toBe('title')
+      expect(wrapper.vm.sortDesc).toBe(false)
+      expect(wrapper.vm.activePane).toBeNull()
     })
 
     it('should have correct rowsPerPageOptions', async () => {
@@ -1170,6 +1786,49 @@ describe('Vulnerabilities Page', () => {
   })
 
   describe('Merge computed filters', () => {
+    it('should show each merge search only after its language is selected', async () => {
+      const wrapper = createWrapper({
+        stubs: {
+          'q-card-section': { template: '<div><slot /></div>' },
+          'q-input': { template: '<input v-bind="$attrs" />' }
+        }
+      })
+      await flushPromises()
+      wrapper.vm.activePane = 'merge'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('[data-testid="merge-search-left"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="merge-search-right"]').exists()).toBe(false)
+
+      wrapper.vm.mergeLanguageLeft = 'en'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="merge-search-left"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="merge-search-right"]').exists()).toBe(false)
+
+      wrapper.vm.mergeLanguageRight = 'fr'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="merge-search-right"]').exists()).toBe(true)
+    })
+
+    it('should independently search merge candidates by their localized titles', async () => {
+      const wrapper = createWrapper()
+      await flushPromises()
+
+      wrapper.vm.vulnerabilities = [
+        { _id: 'en-alpha', details: [{ locale: 'en', title: 'Alpha finding' }] },
+        { _id: 'en-beta', details: [{ locale: 'en', title: 'Beta finding' }] },
+        { _id: 'fr-gamma', details: [{ locale: 'fr', title: 'Constat Gamma' }] },
+        { _id: 'fr-delta', details: [{ locale: 'fr', title: 'Constat Delta' }] }
+      ]
+      wrapper.vm.mergeLanguageLeft = 'en'
+      wrapper.vm.mergeLanguageRight = 'fr'
+      wrapper.vm.mergeSearchLeft = 'BETA'
+      wrapper.vm.mergeSearchRight = 'delta'
+
+      expect(wrapper.vm.filteredVulnerabilitiesMergeLeft.map(vuln => vuln._id)).toEqual(['en-beta'])
+      expect(wrapper.vm.filteredVulnerabilitiesMergeRight.map(vuln => vuln._id)).toEqual(['fr-delta'])
+    })
+
     it('should filter vulnerabilities for merge left panel', async () => {
       const wrapper = createWrapper()
       await flushPromises()

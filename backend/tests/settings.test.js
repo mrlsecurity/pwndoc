@@ -2,12 +2,75 @@ module.exports = function(request, app) {
     describe('Application settings', () => {
       var userToken = '';
       var Settings = require('mongoose').model('Settings')
+      const { sanitizeSettingsForClient, MASKED_SECRET } = require('../src/lib/settings-secrets')
       beforeAll(async () => {
         var response = await request(app).post('/api/users/token').send({username: 'admin', password: 'Admin123'})
         userToken = response.body.datas.token
       })
 
+      const defaultAiDeliverySettings = () => ({
+        "content": ""
+      })
+
+      const defaultAiPublicSettings = {
+        "enabled": false,
+        "defaultProvider": "openai",
+        "allowedProviders": [],
+        "redactionGuidelines": defaultAiDeliverySettings(),
+        "qaInstructions": defaultAiDeliverySettings(),
+        "qaChecks": {
+          "completeness": true,
+          "references": true,
+          "imageCaptions": true,
+          "duplicates": true,
+          "aiDuplicates": true,
+          "aiUnlinkedTranslations": true,
+          "redaction": true,
+          "customer": true,
+          "instructions": true
+        },
+        "globalPrompts": []
+      }
+
+      const defaultAiPrivateSettings = {
+        "openaiApiKey": "",
+        "openaiBaseUrl": "https://api.openai.com/v1",
+        "openaiModel": "gpt-5.4-mini",
+        "anthropicApiKey": "",
+        "anthropicBaseUrl": "https://api.anthropic.com/v1",
+        "anthropicModel": "claude-opus-4-8",
+        "anthropicVersion": "2023-06-01",
+        "deepseekApiKey": "",
+        "deepseekBaseUrl": "https://api.deepseek.com/v1",
+        "deepseekModel": "deepseek-v4-flash",
+        "ollamaApiKey": "",
+        "ollamaBaseUrl": "http://localhost:11434/v1",
+        "ollamaModel": "llama3.1",
+        "bedrockApiKey": "",
+        "bedrockAccessKeyId": "",
+        "bedrockSecretAccessKey": "",
+        "bedrockSessionToken": "",
+        "bedrockRegion": "us-east-1",
+        "bedrockModel": "global.anthropic.claude-opus-4-8"
+      }
+
       const defaultPublicSettings = {
+        "ai": {
+          "public": {
+            "enabled": false,
+            "defaultProvider": "openai",
+            "allowedProviders": [],
+            "qaChecks": defaultAiPublicSettings.qaChecks,
+            "globalPrompts": [],
+            "providerModels": {
+              "openai": "gpt-5.4-mini",
+              "anthropic": "claude-opus-4-8",
+              "deepseek": "deepseek-v4-flash",
+              "ollama": "llama3.1",
+              "bedrock": "global.anthropic.claude-opus-4-8"
+            }
+          },
+        },
         "report": {
             "enabled": true,
             "public": {
@@ -54,9 +117,13 @@ module.exports = function(request, app) {
             "minReviewers": 1,
           },
         },
-      }
+      };
 
-      const defaultSettings = {
+      const defaultSettings = sanitizeSettingsForClient({
+        "ai": {
+          "private": defaultAiPrivateSettings,
+          "public": defaultAiPublicSettings,
+        },
         "report": {
             "enabled": true,
             "private": {
@@ -113,7 +180,7 @@ module.exports = function(request, app) {
             "minReviewers": 1,
           },
         },
-      };
+      });
 
       it('Get settings', async () => {
           var response = await request(app).get('/api/settings')
@@ -133,10 +200,19 @@ module.exports = function(request, app) {
       
           expect(response.status).toBe(200);
           expect(response.body.datas).toEqual(defaultPublicSettings);
+          // Provider names are public (needed to populate the chat/QA selector) but no
+          // provider secrets/config may leak through the public projection.
+          expect(response.body.datas.ai.public.defaultProvider).toBe('openai');
+          expect(response.body.datas.ai.public.allowedProviders).toEqual([]);
+          expect(response.body.datas.ai.private).toBeUndefined();
       })
 
       it('Edit settings', async () => {
         const fullModification = {
+          "ai": {
+            "private": defaultAiPrivateSettings,
+            "public": defaultAiPublicSettings,
+          },
           "report": {
               "enabled": false,
               "private": {
@@ -207,7 +283,7 @@ module.exports = function(request, app) {
             `token=JWT ${userToken}`
           ]);
         expect(response.status).toBe(200);
-        expect(response.body.datas).toEqual(fullModification);
+        expect(response.body.datas).toEqual(sanitizeSettingsForClient(fullModification));
 
         const partialModification = {
           "reviews": {
@@ -250,6 +326,23 @@ module.exports = function(request, app) {
       expect(response.body.datas).toEqual(defaultSettings);
     })
 
+    it('Does not execute MongoDB operators from settings input', async () => {
+      var response = await request(app).put('/api/settings')
+        .set('Cookie', [
+          `token=JWT ${userToken}`
+        ])
+        .send({
+          $unset: {'report.enabled': 1},
+          $rename: {'reviews.enabled': 'injected'}
+        });
+      expect(response.status).toBe(200);
+
+      const stored = await Settings.findOne({}).lean();
+      expect(stored.report.enabled).toBe(true);
+      expect(stored.reviews.enabled).toBe(false);
+      expect(stored.injected).toBeUndefined();
+    })
+
     it('Export settings', async () => {
       var response = await request(app).get('/api/settings/export')
         .set('Cookie', [
@@ -258,6 +351,115 @@ module.exports = function(request, app) {
       expect(response.status).toBe(200);
       expect(response.type).toEqual('application/json');
       expect(response.headers['content-disposition'].indexOf('attachment; filename=')).toBe(0);
+      expect(response.body.ai.private.openaiApiKey).toBe('');
+      expect(response.body.ai.private.openaiApiKeyConfigured).toBe(false);
+    })
+
+    it('Does not return stored API keys to clients', async () => {
+      await Settings.update({
+        ai: {
+          private: {
+            ...defaultAiPrivateSettings,
+            openaiApiKey: 'super-secret-openai-key'
+          },
+          public: defaultAiPublicSettings
+        },
+        report: {
+          enabled: true,
+          private: {
+            imageBorder: false,
+            imageBorderColor: '#000000',
+            languageToolUrl: 'http://lt:8020',
+            languageToolApiKey: 'super-secret-lt-key',
+            languageToolUsername: ''
+          },
+          public: defaultSettings.report.public
+        },
+        reviews: defaultSettings.reviews
+      });
+
+      const response = await request(app).get('/api/settings')
+        .set('Cookie', [
+          `token=JWT ${userToken}`
+        ]);
+
+      expect(response.status).toBe(200);
+      expect(response.body.datas.ai.private.openaiApiKey).toBe('');
+      expect(response.body.datas.ai.private.openaiApiKeyConfigured).toBe(true);
+      expect(response.body.datas.report.private.languageToolApiKey).toBe('');
+      expect(response.body.datas.report.private.languageToolApiKeyConfigured).toBe(true);
+      expect(JSON.stringify(response.body.datas)).not.toContain('super-secret-openai-key');
+      expect(JSON.stringify(response.body.datas)).not.toContain('super-secret-lt-key');
+    })
+
+    it('Preserves stored API keys when clients submit the masked sentinel', async () => {
+      await Settings.update({
+        ai: {
+          private: {
+            ...defaultAiPrivateSettings,
+            openaiApiKey: 'persisted-openai-key'
+          },
+          public: defaultAiPublicSettings
+        },
+        report: defaultSettings.report,
+        reviews: defaultSettings.reviews
+      });
+
+      const response = await request(app).put('/api/settings')
+        .set('Cookie', [
+          `token=JWT ${userToken}`
+        ])
+        .send({
+          ai: {
+            private: {
+              ...defaultAiPrivateSettings,
+              openaiApiKey: MASKED_SECRET
+            },
+            public: defaultAiPublicSettings
+          },
+          report: defaultSettings.report,
+          reviews: defaultSettings.reviews
+        });
+
+      expect(response.status).toBe(200);
+
+      const stored = await Settings.getAll();
+      expect(stored.ai.private.openaiApiKey).toBe('persisted-openai-key');
+    })
+
+    it('Clears stored API keys when clients submit an empty value', async () => {
+      await Settings.update({
+        ai: {
+          private: {
+            ...defaultAiPrivateSettings,
+            openaiApiKey: 'persisted-openai-key'
+          },
+          public: defaultAiPublicSettings
+        },
+        report: defaultSettings.report,
+        reviews: defaultSettings.reviews
+      });
+
+      const response = await request(app).put('/api/settings')
+        .set('Cookie', [
+          `token=JWT ${userToken}`
+        ])
+        .send({
+          ai: {
+            private: {
+              ...defaultAiPrivateSettings,
+              openaiApiKey: ''
+            },
+            public: defaultAiPublicSettings
+          },
+          report: defaultSettings.report,
+          reviews: defaultSettings.reviews
+        });
+
+      expect(response.status).toBe(200);
+
+      const stored = await Settings.getAll();
+      expect(stored.ai.private.openaiApiKey).toBe('');
     })
 
     it('Returns internal error when loading full settings fails', async () => {
@@ -269,7 +471,7 @@ module.exports = function(request, app) {
       expect(response.status).toBe(500)
       spy.mockRestore()
     })
-
+    
     it('Returns internal error when loading public settings fails', async () => {
       var spy = jest.spyOn(Settings, 'getPublic').mockRejectedValueOnce(new Error('getPublic failed'))
       var response = await request(app).get('/api/settings/public')

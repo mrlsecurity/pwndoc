@@ -142,12 +142,20 @@ export default {
             })
         },
 
+        // Drop stored scopes no longer in the catalog. `wildcard` is used when allows === '*'.
+        resolveAllows: function(allows, wildcard) {
+            if (allows === '*')
+                return wildcard
+            const validScopes = new Set(this.allPermissionScopes())
+            return (allows || []).filter(scope => validScopes.has(scope))
+        },
+
         clone: function(row) {
             this.currentRole = {
                 name: row.name,
                 displayName: this.roleDisplayName(row),
                 description: row.description || '',
-                allows: row.allows === '*' ? [] : [...(row.allows || [])]
+                allows: this.resolveAllows(row.allows, [])
             }
             this.idUpdate = row.name
             this.roleNameTouched = true
@@ -158,7 +166,7 @@ export default {
         applyClone: function() {
             const role = this.roles.find(role => role.name === this.cloneFrom)
             if (role)
-                this.currentRole.allows = role.allows === '*' ? this.allPermissionScopes() : [...(role.allows || [])]
+                this.currentRole.allows = this.resolveAllows(role.allows, this.allPermissionScopes())
         },
 
         togglePermission: function(scope) {

@@ -1,0 +1,204 @@
+const {
+    computeAuditQaFingerprint,
+    getCachedQaReport,
+    getLatestQaReport,
+    getOutdatedQaReport,
+    isQaReportCurrent,
+    buildQaReportCache,
+    formatQaReportResponse
+} = require('../src/lib/ai-qa-cache');
+
+module.exports = function() {
+    describe('AI QA cache', () => {
+        const baseAudit = {
+            name: 'Web App Pentest',
+            findings: [{
+                identifier: 1,
+                title: 'SQL Injection',
+                description: '<p>Initial description</p>'
+            }],
+            sections: []
+        };
+
+        const buildStoredReport = (audit, summary = 'Cached summary') => {
+            const fingerprint = computeAuditQaFingerprint(audit);
+            return buildQaReportCache(fingerprint, {
+                summary: summary,
+                issues: [{
+                    severity: 'warning',
+                    category: 'completeness',
+                    title: 'Cached issue',
+                    message: 'Still valid',
+                    location: 'report',
+                    source: 'structural'
+                }],
+                aiAnalysis: false,
+                provider: null,
+                model: null,
+                counts: {
+                    total: 1,
+                    error: 0,
+                    warning: 1,
+                    info: 0
+                }
+            });
+        };
+
+        it('should compute a stable fingerprint for the same audit snapshot', () => {
+            const first = computeAuditQaFingerprint(baseAudit);
+            const second = computeAuditQaFingerprint({
+                ...baseAudit,
+                qaReport: {
+                    fingerprint: 'stale',
+                    summary: 'old'
+                }
+            });
+
+            expect(first).toBe(second);
+        });
+
+        it('should change the fingerprint when report content changes', () => {
+            const before = computeAuditQaFingerprint(baseAudit);
+            const after = computeAuditQaFingerprint({
+                ...baseAudit,
+                findings: [{
+                    identifier: 1,
+                    title: 'SQL Injection',
+                    description: '<p>Updated description</p>'
+                }]
+            });
+
+            expect(before).not.toBe(after);
+        });
+
+        it('should return cached QA results when the fingerprint matches', () => {
+            const cached = getCachedQaReport({
+                ...baseAudit,
+                qaReport: buildStoredReport(baseAudit)
+            });
+
+            expect(cached).toEqual(expect.objectContaining({
+                cached: true,
+                outdated: false,
+                summary: 'Cached summary',
+                issues: [expect.objectContaining({ title: 'Cached issue' })]
+            }));
+        });
+
+        it('should return the latest stored QA report even when outdated', () => {
+            const outdated = getOutdatedQaReport({
+                ...baseAudit,
+                findings: [{
+                    identifier: 1,
+                    title: 'SQL Injection',
+                    description: '<p>Changed after QA</p>'
+                }],
+                qaReport: buildStoredReport(baseAudit)
+            });
+
+            expect(outdated).toEqual(expect.objectContaining({
+                cached: true,
+                outdated: true,
+                summary: 'Cached summary'
+            }));
+            expect(isQaReportCurrent({
+                ...baseAudit,
+                findings: [{
+                    identifier: 1,
+                    title: 'SQL Injection',
+                    description: '<p>Changed after QA</p>'
+                }],
+                qaReport: buildStoredReport(baseAudit)
+            })).toBe(false);
+        });
+
+        it('should keep only the latest QA report when legacy array storage exists', () => {
+            const latest = getLatestQaReport({
+                ...baseAudit,
+                qaReport: [
+                    buildStoredReport(baseAudit, 'Old report'),
+                    buildStoredReport(baseAudit, 'Latest report')
+                ]
+            });
+
+            expect(latest.summary).toBe('Latest report');
+        });
+
+        it('should track separate run timestamps by QA scope', () => {
+            const fingerprint = computeAuditQaFingerprint(baseAudit);
+            const programmaticOnly = buildQaReportCache(fingerprint, {
+                summary: 'Programmatic',
+                issues: [{
+                    severity: 'warning',
+                    category: 'completeness',
+                    title: 'Structural issue',
+                    message: 'Missing field',
+                    location: 'report',
+                    source: 'structural'
+                }],
+                counts: { total: 1, error: 0, warning: 1, info: 0 }
+            }, { scope: 'programmatic' });
+
+            const merged = buildQaReportCache(fingerprint, {
+                summary: 'Merged',
+                issues: [
+                    ...programmaticOnly.issues,
+                    {
+                        severity: 'warning',
+                        category: 'redaction',
+                        title: 'AI issue',
+                        message: 'Sensitive data',
+                        location: 'report',
+                        source: 'ai'
+                    }
+                ],
+                aiAnalysis: true,
+                counts: { total: 2, error: 0, warning: 2, info: 0 }
+            }, {
+                existing: programmaticOnly,
+                scope: 'ai'
+            });
+
+            expect(merged.programmaticRanAt).toEqual(programmaticOnly.programmaticRanAt);
+            expect(merged.aiRanAt).not.toEqual(programmaticOnly.programmaticRanAt);
+
+            const response = formatQaReportResponse(merged);
+            expect(response.programmaticRanAt).toEqual(programmaticOnly.programmaticRanAt);
+            expect(response.aiRanAt).toEqual(merged.aiRanAt);
+        });
+
+        it('should not return cached or outdated QA results when no report exists', () => {
+            expect(getCachedQaReport(baseAudit)).toBeNull();
+            expect(getOutdatedQaReport(baseAudit)).toBeNull();
+            expect(getLatestQaReport(baseAudit)).toBeNull();
+        });
+
+        it('should resolve the loadOnly report as current when the fingerprint matches (route composition)', () => {
+            const audit = { ...baseAudit, qaReport: buildStoredReport(baseAudit) };
+            const report = getCachedQaReport(audit) || getOutdatedQaReport(audit);
+
+            expect(report).toEqual(expect.objectContaining({
+                outdated: false,
+                summary: 'Cached summary'
+            }));
+        });
+
+        it('should resolve the loadOnly report as outdated when audit content changed since the last run (route composition)', () => {
+            const audit = {
+                ...baseAudit,
+                findings: [{
+                    identifier: 1,
+                    title: 'SQL Injection',
+                    description: '<p>Changed after QA</p>'
+                }],
+                qaReport: buildStoredReport(baseAudit)
+            };
+            const report = getCachedQaReport(audit) || getOutdatedQaReport(audit);
+
+            expect(report).toEqual(expect.objectContaining({
+                outdated: true,
+                summary: 'Cached summary'
+            }));
+        });
+    });
+};

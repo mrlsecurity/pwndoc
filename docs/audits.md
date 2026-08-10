@@ -64,6 +64,18 @@ The ![Propose Creation / Update in Vulnerability Database](/_images/finding_upd
 
 Saving can be done with the upper right button or by the most acclaimed feature: <kbd>Ctrl</kbd>+<kbd>S</kbd> or <kbd>&#8984;</kbd>+<kbd>S</kbd>
 
+### AI-assisted editing
+
+When AI integration is enabled and your role has `audits:ai-assist`, supported finding and section fields show a sparkle button in the editor toolbar. Use it to generate or proofread the whole field, or select text in the editor first to work on that selection only.
+
+![AI assistant open on a finding field](/_images/audits-ai-assist.png)
+
+The AI panel opens beside the editor. Pick **Field prompt** to use the instructions configured for that field in [Data → Assisted Writing](data.md#assisted-writing), choose one of the generic prompts, or type your own request. When your administrator has allowed more than one provider, choose which to use from the selector at the bottom.
+
+Responses are drafts. **Apply to field** (or **Apply to selection**) writes the result into the editor, **Insert at cursor** adds it without replacing anything, and **Preview changes** switches the response between the rendered draft and an inline diff against the current content (**Original response** switches back). You still have to save the finding to persist the result.
+
+**Stop generating** cancels a request in progress. Navigating away or closing the panel during generation asks for confirmation first.
+
 ### Retest Audits
 
 When an audit type uses the `retest` stage, each finding includes additional retest fields:
@@ -114,6 +126,27 @@ Use the filter menu in the comment panel header to show:
 | Create comments and replies | `audits:comments:create` |
 | Edit comments and replies | `audits:comments:update` |
 | Delete comments and replies | `audits:comments:delete` |
+
+## Quality Assurance
+
+The **QA** button in the toolbar of the General Information, findings, and custom section pages opens the QA panel beside the editor. It reviews the whole audit, not just the page you are on, and stays open as you navigate between findings and sections.
+
+![Audit QA review panel](/_images/audits-qa-panel.png)
+
+Two kinds of checks are available:
+
+- **Built-in checks** are programmatic: report completeness, reference link reachability, and image captions. They need `audits:qa`, which the `user` role has by default, and work whether or not AI integration is enabled.
+- **AI checks** send report content to the configured provider: writing guidelines review, customer alignment, and your QA instructions. They need `audits:ai-qa` and AI integration enabled in [Settings](settings.md#ai-integration).
+
+Which checks are enabled is configured in [Data → Quality Assurance](data.md#quality-assurance). Run them separately or together from the buttons at the top of the panel; **Last run** shows when each kind last ran.
+
+Results are grouped by where they belong — Report, General information, Network, each finding, and each section — with the counters at the top filtering by severity. **Go to finding** / **Go to section** jumps straight to the affected page, and the panel follows.
+
+Runs happen on the server, so you can keep editing while one is in progress. A banner marks results as out of date when the audit changed after the last run, with a **Run again** shortcut.
+
+`audits:qa-read` alone shows the stored report without the run buttons.
+
+> AI review is advisory. Report content — including text imported from external sources — is sent to the configured AI provider, so crafted content could try to influence the AI's output. Verify AI-sourced findings before acting on them.
 
 ## Reviews
 

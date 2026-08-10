@@ -12,12 +12,17 @@ import ReviewerService from '@/services/reviewer';
 import TemplateService from '@/services/template';
 import DataService from '@/services/data';
 import Utils from '@/services/utils';
-import { useUserStore } from 'src/stores/user'
+import { useUserStore } from 'src/stores/user';
+import { useAuditQaStore } from '@/stores/audit-qa';
+import { useAiGenerationStore } from '@/stores/ai-generation';
+import { canAccessQa } from '@/services/qa-checks';
 import { createDraftRecovery } from '@/composables/useDraftRecovery';
 
-import { $t } from '@/boot/i18n'
+import { $t } from '@/boot/i18n';
 
-const SAVE_SUCCESS_TIMEOUT_MS = 2000
+const userStore = useUserStore();
+
+const SAVE_SUCCESS_TIMEOUT_MS = 2000;
 
 export default {
     data: () => {
@@ -180,10 +185,45 @@ export default {
             if (this.saveButtonState === 'saved')
                 return $t('btn.saved')
             return `${$t('btn.save')} (ctrl+s)`
+        },
+
+        qaDrawerOpen: function() {
+            return useAuditQaStore().drawerOpen;
+        },
+
+        qaRunning: function() {
+            return useAuditQaStore().runningForAudit(this.auditId);
+        },
+
+        sidePanelOpen: function() {
+            return this.qaDrawerOpen;
+        },
+
+        aiQaEnabled: function() {
+            return canAccessQa(
+                userStore.isAllowed('audits:qa-read'),
+                userStore.isAllowed('audits:qa'),
+                userStore.isAllowed('audits:ai-qa'),
+                this.$settings
+            );
         }
     },
 
     methods: {
+        toggleQaView: function() {
+            const qaStore = useAuditQaStore();
+            if (qaStore.drawerOpen) {
+                qaStore.close();
+                return;
+            }
+
+            const aiStore = useAiGenerationStore();
+            if (aiStore.drawerOpen)
+                aiStore.closeDrawer();
+
+            qaStore.open(this.auditId);
+        },
+
         _listener: function(e) {
             if ((window.navigator.platform.match("Mac") ? e.metaKey : e.ctrlKey) && e.keyCode == 83) {
                 e.preventDefault();

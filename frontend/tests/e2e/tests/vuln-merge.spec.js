@@ -48,15 +48,15 @@ test.describe('Vulnerability Merge', () => {
     }
   });
 
-  test('Merge Vulnerabilities button opens the merge dialog', async ({ page }) => {
+  test('Merge Vulnerabilities button opens the merge pane', async ({ page }) => {
     await page.goto('/vulnerabilities');
     await expect(page.getByRole('button', { name: 'Merge Vulnerabilities' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Merge Vulnerabilities' }).click();
 
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
-    await expect(dialog.getByText('Merge Vulnerabilities')).toBeVisible();
+    const pane = page.getByTestId('vulnerability-merge-pane');
+    await expect(pane).toBeVisible({ timeout: 5000 });
+    await expect(pane.getByText('Merge Vulnerabilities')).toBeVisible();
   });
 
   test('merging EN and FR vulnerabilities produces a single bilingual entry', async ({ page, request }) => {
@@ -66,30 +66,29 @@ test.describe('Vulnerability Merge', () => {
     await expect(page.getByRole('button', { name: 'Merge Vulnerabilities' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Merge Vulnerabilities' }).click();
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
-
-    const dialog = page.getByRole('dialog');
+    const pane = page.getByTestId('vulnerability-merge-pane');
+    await expect(pane).toBeVisible({ timeout: 5000 });
 
     // Left panel: select English language via its labelled select
-    await dialog.getByLabel('Language (Add from right)').click();
+    await pane.getByLabel('Language (Add from right)').click();
     await page.getByRole('option', { name: 'English' }).click();
     await expect(page.getByRole('listbox')).toBeHidden();
 
     // Click the list item that contains the English vuln title (tag="label" wraps radio+text)
-    await expect(dialog.getByText('E2E Merge Vuln EN')).toBeVisible({ timeout: 5000 });
-    await dialog.getByText('E2E Merge Vuln EN').click();
+    await expect(pane.getByText('E2E Merge Vuln EN')).toBeVisible({ timeout: 5000 });
+    await pane.getByText('E2E Merge Vuln EN').click();
 
     // Right panel: select French language
-    await dialog.getByLabel('Language (Move to left)').click();
+    await pane.getByLabel('Language (Move to left)').click();
     await page.getByRole('option', { name: 'French' }).click();
     await expect(page.getByRole('listbox')).toBeHidden();
 
     // Click the French vuln
-    await expect(dialog.getByText('E2E Merge Vuln FR')).toBeVisible({ timeout: 5000 });
-    await dialog.getByText('E2E Merge Vuln FR').click();
+    await expect(pane.getByText('E2E Merge Vuln FR')).toBeVisible({ timeout: 5000 });
+    await pane.getByText('E2E Merge Vuln FR').click();
 
     // Click Merge
-    await dialog.getByRole('button', { name: 'Merge' }).click();
+    await pane.getByRole('button', { name: 'Merge' }).click();
 
     await expect(page.getByText('Vulnerability merge successfully')).toBeVisible({
       timeout: 5000,

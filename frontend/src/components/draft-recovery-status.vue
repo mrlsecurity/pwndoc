@@ -2,16 +2,21 @@
   <q-btn-dropdown
     v-if="status"
     data-testid="draft-recovery-status"
-    outline no-caps dense
+    outline no-caps
+    :dense="!matchToolbar"
     class="q-ml-sm"
     :color="status.type === 'local_draft' ? 'orange' : 'primary'"
-    :class="status.type === 'local_draft' ? 'bg-orange-1' : 'bg-grey-3'"
+    :class="[
+      status.type === 'local_draft' ? 'bg-orange-1' : 'bg-grey-3',
+      matchToolbar ? 'draft-status-toolbar' : ''
+    ]"
     dropdown-icon="keyboard_arrow_down"
   >
     <template #label>
       <q-icon left name="mdi-database-outline" />
       <span class="text-weight-bold">{{ mainLabel }}</span>
       <span
+        v-if="!matchToolbar"
         class="status-meta-label q-ml-sm"
         :class="status.type === 'local_draft' ? 'text-brown-6' : 'text-primary'"
       >
@@ -96,6 +101,11 @@ const ACTION_ICON_MAP = {
 
 export default {
   name: 'DraftRecoveryStatus',
+
+  props: {
+    // Opt out of the dense sizing to line up with taller toolbar buttons.
+    matchToolbar: Boolean
+  },
 
   computed: {
     status() {
@@ -209,5 +219,12 @@ export default {
 
 .status-meta-label {
   font-size: 11px;
+}
+
+/* Sizing comes from the toolbar class the parent passes in. Only the margin needs a rule here:
+   !important to beat Quasar's `.q-bar > .q-btn { margin-left: 2px }`, which also overrides the
+   q-ml-sm utility class. */
+.draft-status-toolbar {
+  margin-left: 10px !important;
 }
 </style>

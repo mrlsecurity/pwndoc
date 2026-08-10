@@ -972,6 +972,7 @@ describe('Audit Edit General Page', () => {
       expect(wrapper.vm.customFields).toEqual([])
     })
   })
+
 })
 
 // Helper to flush all pending promises

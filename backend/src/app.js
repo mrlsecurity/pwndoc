@@ -68,9 +68,11 @@ require('./models/vulnerability-update');
 require('./models/language');
 require('./models/audit-type');
 require('./models/vulnerability-type');
+require('./models/vulnerability-qa-catalog');
 require('./models/vulnerability-category');
 require('./models/custom-section');
 require('./models/custom-field');
+require('./models/ai-prompt');
 require('./models/image');
 require('./models/settings');
 require('./models/dictionary');
@@ -179,6 +181,7 @@ require('./routes/backup')(app);
 require('./routes/test-utils')(app);
 require('./routes/spellcheck')(app);
 require('./routes/languagetool-rules')(app);
+require('./routes/ai')(app, io);
 
 app.all(/(.*)/, function(req, res) {
     res.status(404).json({"status": "error", "data": "Route undefined"});

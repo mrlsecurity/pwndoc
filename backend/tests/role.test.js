@@ -43,8 +43,50 @@ module.exports = function(request, app) {
             permissions: expect.arrayContaining([
               expect.objectContaining({scope: 'roles:read'})
             ])
+          }),
+          expect.objectContaining({
+            key: 'audits',
+            permissions: expect.arrayContaining([
+              expect.objectContaining({scope: 'audits:ai-assist', core: false}),
+              expect.objectContaining({scope: 'audits:qa-read', core: false}),
+              expect.objectContaining({scope: 'audits:qa', core: true}),
+              expect.objectContaining({scope: 'audits:ai-qa', core: false})
+            ])
+          }),
+          expect.objectContaining({
+            key: 'vulnerabilities',
+            permissions: expect.arrayContaining([
+              expect.objectContaining({scope: 'vulnerabilities:qa-read', core: false}),
+              expect.objectContaining({scope: 'vulnerabilities:qa-read-catalog', core: false}),
+              expect.objectContaining({scope: 'vulnerabilities:qa', core: false}),
+              expect.objectContaining({scope: 'vulnerabilities:qa-catalog', core: false}),
+              expect.objectContaining({scope: 'vulnerabilities:ai-qa', core: false}),
+              expect.objectContaining({scope: 'vulnerabilities:ai-qa-catalog', core: false}),
+              expect.objectContaining({scope: 'vulnerabilities:ai-assist', core: false})
+            ])
+          }),
+          expect.objectContaining({
+            key: 'ai',
+            permissions: expect.arrayContaining([
+              expect.objectContaining({scope: 'ai:prompts:read'}),
+              expect.objectContaining({scope: 'ai:prompts:update'}),
+              expect.objectContaining({scope: 'ai:redaction-guidelines:read', core: false}),
+              expect.objectContaining({scope: 'ai:redaction-guidelines:update'}),
+              expect.objectContaining({scope: 'ai:qa-instructions:read'}),
+              expect.objectContaining({scope: 'ai:qa-instructions:update'})
+            ])
           })
         ]))
+
+        // AI provider config (keys/model/defaultProvider) is managed through the same
+        // settings:read/settings:update scopes as the rest of /api/settings — there is no
+        // separate ai-settings:* granularity to imply the provider card is independently
+        // grantable. (The `ai` group's ai:prompts:*/ai:redaction-guidelines:*/ai:qa-instructions:*
+        // scopes above are unrelated: they gate the separate /api/data/ai-integration admin page.)
+        const settingsGroup = response.body.datas.find((group) => group.key === 'settings')
+        const settingsScopes = settingsGroup.permissions.map((permission) => permission.scope)
+        expect(settingsScopes).not.toContain('ai-settings:read')
+        expect(settingsScopes).not.toContain('ai-settings:update')
       })
 
       it('Allows read-only role users to list roles but not mutate them', async () => {

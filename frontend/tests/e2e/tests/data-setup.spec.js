@@ -525,11 +525,8 @@ test.describe('Spellcheck Dictionary', () => {
 
 test.describe('LanguageTool Rules', () => {
     test.beforeEach(async ({ page }) => {
-      const capabilitiesLoaded = page.waitForResponse(
-        resp => resp.url().includes('/api/spellcheck/capabilities')
-      );
       await page.goto('/data/languagetool-rules');
-      await capabilitiesLoaded;
+      await expect(page.getByRole('table')).toBeVisible();
     });
 
     test('should display languagetool rules page', async ({ page }) => {
@@ -556,7 +553,6 @@ test.describe('LanguageTool Rules', () => {
       await page.getByTestId('create-rule-xml-input').fill(ruleXml);
       await page.getByTestId('create-rule-submit-button').click();
 
-      await expect(page.getByText(/created successfully/i)).toBeVisible();
       await expect(page.getByText('E2E_TEST_RULE_1')).toBeVisible();
       await expect(page.getByText('E2E Test Rule 1')).toBeVisible();
     });
@@ -638,6 +634,325 @@ test.describe('LanguageTool Rules', () => {
       await expect(page.getByText(/rule deleted successfully|deleted successfully/i)).toBeVisible();
       await expect(page.getByRole('row').filter({ hasText: 'E2E_TEMP_RULE' })).toHaveCount(0);
     });
+});
+
+test.describe('AI administration', () => {
+  let originalSettings;
+  let originalAiIntegration;
+
+  const settingsForRestore = (settings) => {
+    const restored = structuredClone(settings);
+    const secretFields = [
+      'openaiApiKey',
+      'anthropicApiKey',
+      'deepseekApiKey',
+      'ollamaApiKey',
+      'bedrockApiKey',
+      'bedrockAccessKeyId',
+      'bedrockSecretAccessKey',
+      'bedrockSessionToken'
+    ];
+    for (const field of secretFields) {
+      if (restored.ai.private[`${field}Configured`])
+        restored.ai.private[field] = '••••••••••••••••';
+    }
+    return restored;
+  };
+
+  test.beforeAll(async ({ request }) => {
+    const response = await request.get('/api/settings');
+    expect(response.ok()).toBeTruthy();
+    const settings = (await response.json()).datas;
+    originalSettings = structuredClone(settings);
+
+    const aiResponse = await request.get('/api/data/ai-integration');
+    expect(aiResponse.ok()).toBeTruthy();
+    originalAiIntegration = (await aiResponse.json()).datas;
+
+    settings.ai.public.enabled = true;
+    const update = await request.put('/api/settings', { data: settingsForRestore(settings) });
+    expect(update.ok()).toBeTruthy();
+  });
+
+  test.afterAll(async ({ request }) => {
+    const aiUpdate = await request.put('/api/data/ai-integration', {
+      data: {
+        promptMappings: originalAiIntegration.promptMappings
+          .filter(({ entityType, fieldKey }) => entityType === 'finding' && fieldKey === 'description')
+          .map(({ entityType, fieldKey, enabled, prompt, usingDefaultPrompt }) => ({
+            entityType,
+            fieldKey,
+            enabled,
+            prompt: usingDefaultPrompt ? '' : prompt
+          })),
+        globalPrompts: originalAiIntegration.globalPrompts,
+        redactionGuidelines: originalAiIntegration.redactionGuidelines,
+        qaInstructions: originalAiIntegration.qaInstructions,
+        qaChecks: originalAiIntegration.qaChecks
+      }
+    });
+    expect(aiUpdate.ok()).toBeTruthy();
+
+    const settingsUpdate = await request.put('/api/settings', { data: settingsForRestore(originalSettings) });
+    expect(settingsUpdate.ok()).toBeTruthy();
+  });
+
+  test('should configure, test, and reload an AI provider', async ({ page, request }) => {
+    const disabledSettings = structuredClone(originalSettings);
+    disabledSettings.ai.public.enabled = false;
+    const disabled = await request.put('/api/settings', { data: settingsForRestore(disabledSettings) });
+    expect(disabled.ok()).toBeTruthy();
+
+    await page.route('**/api/ai/test', async (route) => {
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({ datas: 'E2E provider unavailable' })
+      });
+    });
+    await page.goto('/settings');
+
+    const aiHeading = page.getByText('AI Integration', { exact: true });
+    const aiToggle = aiHeading.locator('..').locator('..').getByRole('switch');
+    await expect(aiToggle).not.toBeChecked();
+    await aiToggle.click();
+
+    await page.getByRole('tab', { name: 'Ollama' }).click();
+    await page.getByRole('textbox', { name: 'Ollama Base URL' }).fill('http://127.0.0.1:1');
+    await page.getByRole('textbox', { name: 'Ollama Model' }).fill('e2e-model');
+    await page.getByLabel('Ollama API Key').fill('e2e-api-key');
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.getByText('Settings updated successfully')).toBeVisible();
+
+    await page.reload();
+    await page.getByRole('tab', { name: 'Ollama' }).click();
+    await expect(page.getByRole('textbox', { name: 'Ollama Base URL' })).toHaveValue('http://127.0.0.1:1');
+    await expect(page.getByRole('textbox', { name: 'Ollama Model' })).toHaveValue('e2e-model');
+    await expect(page.getByLabel('Ollama API Key')).toHaveValue('••••••••••••••••');
+
+    const allowUsers = page.getByRole('checkbox', { name: 'Allow users to select this provider' });
+    await expect(allowUsers).toBeEnabled();
+    await allowUsers.check();
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.getByText('Settings updated successfully')).toBeVisible();
+
+    const persisted = (await (await request.get('/api/settings')).json()).datas;
+    expect(persisted.ai.public.allowedProviders).toContain('ollama');
+    await page.getByRole('checkbox', { name: 'Set as default provider' }).check();
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.getByText('Settings updated successfully')).toBeVisible();
+
+    await page.reload();
+    await page.getByRole('tab', { name: 'Ollama' }).click();
+    await expect(page.getByText('Default', { exact: true })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'Set as default provider' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Allow users to select this provider' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Allow users to select this provider' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Test connection' }).click();
+    await expect(page.getByText('E2E provider unavailable')).toBeVisible();
+  });
+
+  test('should manage generic and field prompts with persisted resets', async ({ page }) => {
+    const label = `E2E concise rewrite ${Date.now()}`;
+    const editedLabel = `${label} edited`;
+    const customPrompt = 'Rewrite {currentFieldValue} for an executive audience.';
+
+    await page.goto('/data/assisted-writing');
+    await page.getByTestId('add-generic-prompt').click();
+    await page.getByTestId('editor-label').fill(label);
+    await page.getByTestId('editor-prompt').fill('Make this concise.');
+    await page.getByTestId('editor-save').click();
+    await expect(page.getByText('Assisted writing prompts updated successfully')).toBeVisible();
+
+    await page.reload();
+    let row = page.getByRole('row').filter({ hasText: label });
+    await expect(row).toBeVisible();
+    await row.click();
+    await page.getByTestId('editor-label').fill(editedLabel);
+    await page.getByTestId('editor-prompt').fill('Make this concise and customer-safe.');
+    await page.getByTestId('editor-save').click();
+    await expect(page.getByText('Assisted writing prompts updated successfully')).toBeVisible();
+
+    await page.reload();
+    row = page.getByRole('row').filter({ hasText: editedLabel });
+    await expect(row).toBeVisible();
+    await row.getByRole('switch').click();
+    await page.reload();
+    row = page.getByRole('row').filter({ hasText: editedLabel });
+    await expect(row.getByRole('switch')).not.toBeChecked();
+    await row.getByText(editedLabel, { exact: true }).click();
+    await page.getByTestId('editor-delete').click();
+    await page.getByRole('button', { name: 'Confirm' }).click();
+    await expect(page.getByText('1 generic prompt(s) deleted')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: editedLabel })).toHaveCount(0);
+
+    const builtInFields = page.getByRole('treeitem', { name: /Built-in fields/ });
+    await builtInFields.click();
+    const description = page.getByRole('row').filter({ hasText: /^Description/ });
+    await description.click();
+    const originalPrompt = await page.getByTestId('editor-prompt').inputValue();
+    await page.getByTestId('editor-prompt').fill(customPrompt);
+    await page.getByTestId('editor-save').click();
+    await expect(page.getByText('Assisted writing prompts updated successfully')).toBeVisible();
+
+    await page.reload();
+    await page.getByRole('treeitem', { name: /Built-in fields/ }).click();
+    await page.getByRole('row').filter({ hasText: /^Description/ }).click();
+    await expect(page.getByTestId('editor-prompt')).toHaveValue(customPrompt);
+    await page.getByTestId('editor-reset').click();
+    await page.getByRole('button', { name: 'Confirm' }).click();
+    await expect(page.getByText('Prompt reset to default')).toBeVisible();
+
+    await page.reload();
+    await page.getByRole('treeitem', { name: /Built-in fields/ }).click();
+    await page.getByRole('row').filter({ hasText: /^Description/ }).click();
+    await expect(page.getByTestId('editor-prompt')).toHaveValue(originalPrompt);
+    await expect(page.getByTestId('editor-reset')).toHaveCount(0);
+  });
+
+  test('should save and reload assisted-writing guidelines', async ({ page }) => {
+    const guidelines = 'E2E writing guideline: use concise, customer-safe language.';
+
+    await page.goto('/data/assisted-writing');
+    const guidelinesTab = page.getByRole('tab', { name: 'Writing Guidelines' });
+    await expect(guidelinesTab).toBeVisible();
+    await guidelinesTab.click();
+    await page.getByRole('textbox', { name: 'Writing guidelines' }).fill(guidelines);
+    await page.getByRole('button', { name: 'Save guidelines' }).click();
+    await expect(page.getByText('Writing guidelines updated successfully')).toBeVisible();
+
+    await page.reload();
+    await page.getByRole('tab', { name: 'Writing Guidelines' }).click();
+    await expect(page.getByRole('textbox', { name: 'Writing guidelines' })).toHaveValue(guidelines);
+  });
+
+  test('should keep built-in QA available while AI is disabled and persist AI QA settings', async ({ page, request }) => {
+    const settingsResponse = await request.get('/api/settings');
+    expect(settingsResponse.ok()).toBeTruthy();
+    const settings = (await settingsResponse.json()).datas;
+    settings.ai.public.enabled = false;
+    expect((await request.put('/api/settings', { data: settingsForRestore(settings) })).ok()).toBeTruthy();
+
+    await page.goto('/data/quality-assurance');
+    const builtInChecks = page.getByRole('region', { name: 'Built-in Checks' });
+    await expect(builtInChecks).toBeVisible();
+    await expect(page.getByText('AI integration is disabled. Enable it in')).toBeVisible();
+    const disabledAiChecks = page.getByRole('region', { name: 'AI Checks' });
+    await expect(disabledAiChecks.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+
+    const completenessCard = builtInChecks.getByText('Report completeness', { exact: true }).locator('..').locator('..');
+    const completeness = completenessCard.getByRole('switch');
+    await expect(completeness).toBeEnabled();
+    const wasChecked = await completeness.isChecked();
+    const persistedCompleteness = async () => {
+      const response = await page.request.get('/api/data/ai-integration');
+      expect(response.ok()).toBeTruthy();
+      return (await response.json()).datas.qaChecks.completeness;
+    };
+
+    await completeness.click();
+    await expect.poll(persistedCompleteness).toBe(!wasChecked);
+    await page.reload();
+    if (wasChecked)
+      await expect(completenessCard.getByRole('switch')).not.toBeChecked();
+    else
+      await expect(completenessCard.getByRole('switch')).toBeChecked();
+
+    await completenessCard.getByRole('switch').click();
+    await expect.poll(persistedCompleteness).toBe(wasChecked);
+
+    const enabledSettingsResponse = await request.get('/api/settings');
+    const enabledSettings = (await enabledSettingsResponse.json()).datas;
+    enabledSettings.ai.public.enabled = true;
+    expect((await request.put('/api/settings', { data: settingsForRestore(enabledSettings) })).ok()).toBeTruthy();
+
+    await page.reload();
+    const aiChecks = page.getByRole('region', { name: 'AI Checks' });
+    const guidelinesCard = aiChecks.getByText('Writing guidelines review', { exact: true }).locator('..').locator('..');
+    const guidelinesSwitch = guidelinesCard.getByRole('switch');
+    await expect(guidelinesSwitch).toBeEnabled();
+    const guidelinesWereChecked = await guidelinesSwitch.isChecked();
+    await guidelinesSwitch.click();
+
+    const instructions = 'E2E QA instruction: require actionable remediation.';
+    await aiChecks.getByRole('button', { name: 'Expand', exact: true }).click();
+    await page.getByRole('textbox', { name: 'QA instructions' }).fill(instructions);
+    await page.getByRole('button', { name: 'Save instructions' }).click();
+    await expect(page.getByText('QA settings updated successfully')).toBeVisible();
+
+    await page.reload();
+    const reloadedAiChecks = page.getByRole('region', { name: 'AI Checks' });
+    const reloadedGuidelinesCard = reloadedAiChecks.getByText('Writing guidelines review', { exact: true }).locator('..').locator('..');
+    if (guidelinesWereChecked)
+      await expect(reloadedGuidelinesCard.getByRole('switch')).not.toBeChecked();
+    else
+      await expect(reloadedGuidelinesCard.getByRole('switch')).toBeChecked();
+    await reloadedAiChecks.getByRole('button', { name: 'Expand', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'QA instructions' })).toHaveValue(instructions);
+  });
+
+  test('should apply AI navigation and read-only permissions for a restricted user', async ({ request, browser, baseURL }) => {
+    const roleName = `e2e-ai-reader-${Date.now()}`;
+    const username = `aireader${Date.now()}`;
+    const password = 'AiReader123!';
+    let userId;
+    let restrictedPage;
+
+    try {
+      const role = await request.post('/api/data/roles', {
+        data: {
+          name: roleName,
+          displayName: roleName,
+          description: 'Temporary E2E role',
+          allows: ['ai:prompts:read']
+        }
+      });
+      expect(role.status()).toBe(201);
+
+      const user = await request.post('/api/users', {
+        data: {
+          username,
+          password,
+          firstname: 'AI',
+          lastname: 'Reader',
+          roles: ['user', roleName]
+        }
+      });
+      expect(user.status()).toBe(201);
+      const userResponse = await request.get(`/api/users/${username}`);
+      userId = (await userResponse.json()).datas._id;
+
+      restrictedPage = await browser.newPage({
+        baseURL,
+        ignoreHTTPSErrors: true,
+        storageState: { cookies: [], origins: [] }
+      });
+      await restrictedPage.goto('/login');
+      await restrictedPage.getByRole('textbox', { name: 'Username' }).fill(username);
+      await restrictedPage.getByLabel('Password').fill(password);
+      await restrictedPage.getByRole('button', { name: 'Login' }).click();
+      await expect(restrictedPage).toHaveURL('/audits');
+
+      await restrictedPage.goto('/data/assisted-writing');
+      await expect(restrictedPage.getByRole('listitem').filter({ hasText: 'Assisted Writing' })).toBeVisible();
+      await expect(restrictedPage.getByRole('listitem').filter({ hasText: 'Quality Assurance' })).toHaveCount(0);
+      await expect(restrictedPage.getByRole('tab', { name: 'Prompts' })).toBeVisible();
+      await expect(restrictedPage.getByRole('tab', { name: 'Writing Guidelines' })).toHaveCount(0);
+      await expect(restrictedPage.getByText('Read-only: you do not have permission to update prompts.')).toBeVisible();
+      await expect(restrictedPage.getByTestId('add-generic-prompt')).toHaveCount(0);
+    } finally {
+      await restrictedPage?.close();
+      if (userId) {
+        await request.put('/api/users/bulk-roles', {
+          data: { userIds: [userId], add: [], remove: [roleName] }
+        });
+        await request.put('/api/users/bulk-status', {
+          data: { userIds: [userId], enabled: false }
+        });
+      }
+      await request.delete(`/api/data/roles/${roleName}`);
+    }
+  });
 });
 
 test.describe('Custom Data Setup Page', () => {

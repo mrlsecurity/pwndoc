@@ -25,12 +25,44 @@
             <q-card v-if="userStore.isAllowed('settings:read')" class="q-my-lg">
                 <q-card-section class="q-py-none bg-blue-grey-5 text-white">
                     <q-item style="padding:0px;">
+                        <q-item-section class="col-11">
+                            <div class="text-h6">{{ $t('aiIntegration.settingsCard.title') }}</div>
+                        </q-item-section>
+                        <q-item-section class="col-md-1 items-center">
+                            <q-toggle
+                                color="primary"
+                                keep-color
+                                :disable="!canEdit"
+                                v-model="settings.ai.public.enabled"
+                            />
+                        </q-item-section>
+                    </q-item>
+                </q-card-section>
+                <q-card-section>
+                    <div class="text-grey-8">
+                        {{ $t('aiIntegration.settingsCard.disableHint') }}
+                    </div>
+                </q-card-section>
+                <q-separator v-if="settings.ai && settings.ai.public && settings.ai.public.enabled" />
+                <q-card-section v-if="settings.ai && settings.ai.public && settings.ai.public.enabled">
+                    <div class="text-bold q-mb-md">{{ $t('aiIntegration.settingsCard.providerTitle') }}</div>
+                    <ai-provider-settings
+                    ref="aiProviderSettings"
+                    :settings="settings"
+                    :canEdit="canEdit"
+                    />
+                </q-card-section>
+            </q-card>
+
+            <q-card v-if="userStore.isAllowed('settings:read')" class="q-my-lg">
+                <q-card-section class="q-py-none bg-blue-grey-5 text-white">
+                    <q-item style="padding:0px;">
                         <q-item-section class="col-md-11">
                             <div class="text-h6">{{$t('reports')}}</div>
                         </q-item-section>
                     </q-item>
                 </q-card-section>
-                <div v-if="userStore.isAllowed('settings:update')">
+                <div>
                     <q-card-section>
                         <div class="text-bold">{{$t('reportsImagesBorder')}}</div>
                         <br/>
@@ -38,13 +70,13 @@
                         <br/>
                         <q-item>
                             <q-item-section class="col-md-2">
-                                <q-toggle data-testid="image-border-toggle" :label="$t('btn.enable')" v-model="settings.report.private.imageBorder" />
+                                <q-toggle data-testid="image-border-toggle" :label="$t('btn.enable')" :disable="!canEdit" v-model="settings.report.private.imageBorder" />
                             </q-item-section>
                             <q-item-section class="col-md-1">
-                                <input :disabled="!settings.report.private.imageBorder" type="color" id="colorpicker" v-model="settings.report.private.imageBorderColor" />
+                                <input :disabled="!canEdit || !settings.report.private.imageBorder" type="color" id="colorpicker" v-model="settings.report.private.imageBorderColor" />
                             </q-item-section>
                             <q-item-section class="col-md-2">
-                                <label :disabled="!settings.report.private.imageBorder" for="colorpicker" class="vertical-center">{{$t('currentColor')}}: {{settings.report.private.imageBorderColor}}</label>
+                                <label :disabled="!canEdit || !settings.report.private.imageBorder" for="colorpicker" class="vertical-center">{{$t('currentColor')}}: {{settings.report.private.imageBorderColor}}</label>
                             </q-item-section>
                         </q-item>
                     </q-card-section>
@@ -60,7 +92,7 @@
                                     <label class="vertical-center">{{$t('critical')}} : </label>
                                 </q-item-section>
                                 <q-item-section class="col-md-1">
-                                    <input type="color" id="colorpicker" v-model="settings.report.public.cvssColors.criticalColor"/>
+                                    <input :disabled="!canEdit" type="color" id="colorpicker" v-model="settings.report.public.cvssColors.criticalColor"/>
                                 </q-item-section>
                                 <q-item-section class="col-md-2">
                                     <label for="colorpicker" class="vertical-center">{{$t('currentColor')}}: {{settings.report.public.cvssColors.criticalColor}}</label>
@@ -71,7 +103,7 @@
                                     <label class="vertical-center">{{$t('high')}} : </label>
                                 </q-item-section>
                                 <q-item-section class="col-md-1">
-                                    <input type="color" id="colorpicker" v-model="settings.report.public.cvssColors.highColor"/>
+                                    <input :disabled="!canEdit" type="color" id="colorpicker" v-model="settings.report.public.cvssColors.highColor"/>
                                 </q-item-section>
                                 <q-item-section class="col-md-2">
                                     <label for="colorpicker" class="vertical-center">{{$t('currentColor')}}: {{settings.report.public.cvssColors.highColor}}</label>
@@ -82,7 +114,7 @@
                                     <label class="vertical-center">{{$t('medium')}} : </label>
                                 </q-item-section>
                                 <q-item-section class="col-md-1">
-                                    <input type="color" id="colorpicker" v-model="settings.report.public.cvssColors.mediumColor"/>
+                                    <input :disabled="!canEdit" type="color" id="colorpicker" v-model="settings.report.public.cvssColors.mediumColor"/>
                                 </q-item-section>
                                 <q-item-section class="col-md-2">
                                     <label for="colorpicker" class="vertical-center">{{$t('currentColor')}}: {{settings.report.public.cvssColors.mediumColor}}</label>
@@ -93,7 +125,7 @@
                                     <label class="vertical-center">{{$t('low')}} : </label>
                                 </q-item-section>
                                 <q-item-section class="col-md-1">
-                                    <input type="color" id="colorpicker" v-model="settings.report.public.cvssColors.lowColor"/>
+                                    <input :disabled="!canEdit" type="color" id="colorpicker" v-model="settings.report.public.cvssColors.lowColor"/>
                                 </q-item-section>
                                 <q-item-section class="col-md-2">
                                     <label for="colorpicker" class="vertical-center">{{$t('currentColor')}}: {{settings.report.public.cvssColors.lowColor}}</label>
@@ -104,7 +136,7 @@
                                     <label class="vertical-center">{{$t('informational')}} : </label>
                                 </q-item-section>
                                 <q-item-section class="col-md-1">
-                                    <input type="color" id="colorpicker" v-model="settings.report.public.cvssColors.noneColor"/>
+                                    <input :disabled="!canEdit" type="color" id="colorpicker" v-model="settings.report.public.cvssColors.noneColor"/>
                                 </q-item-section>
                                 <q-item-section class="col-md-2">
                                     <label for="colorpicker" class="vertical-center">{{$t('currentColor')}}: {{settings.report.public.cvssColors.noneColor}}</label>
@@ -124,6 +156,7 @@
                                 label="Caption Labels'"
                                 stack-label
                                 outlined
+                                :disable="!canEdit"
                                 v-model="settings.report.public.captions"
                                 use-input
                                 use-chips
@@ -144,23 +177,24 @@
                         <br/>
                         <q-item>
                             <q-item-section class="col-md-2">
-                                <q-toggle :label="$t('btn.enable')" v-model="settings.report.public.highlightWarning" />
+                                <q-toggle :label="$t('btn.enable')" :disable="!canEdit" v-model="settings.report.public.highlightWarning" />
                             </q-item-section>
                             <q-item-section class="col-md-1">
                                 <input
                                 v-model="settings.report.public.highlightWarningColor"
-                                :disabled="!settings.report.public.highlightWarning"
+                                :disabled="!canEdit || !settings.report.public.highlightWarning"
                                 type="color"
-                                id="colorpicker" 
+                                id="colorpicker"
                                 style="pointer-events: none"
                                 >
                                     <q-popup-proxy>
                                         <div class="row q-pa-xs" style="width: 144px; overflow: hidden">
                                             <div class="q-gutter-xs">
-                                                <q-btn 
+                                                <q-btn
                                                 v-close-popup
-                                                v-for="color of highlightPalette" :key="color" 
+                                                v-for="color of highlightPalette" :key="color"
                                                 square
+                                                :disable="!canEdit"
                                                 :style="{'background-color': color, 'width': '24px', 'height': '24px'}"
                                                 @click="settings.report.public.highlightWarningColor = color"
                                                 >
@@ -172,7 +206,7 @@
                             </q-item-section>
                             <q-item-section class="col-md-2">
                                 <label
-                                :disabled="!settings.report.public.highlightWarning"
+                                :disabled="!canEdit || !settings.report.public.highlightWarning"
                                 for="colorpicker"
                                 class="vertical-center">
                                     {{$t('currentColor')}}: {{settings.report.public.highlightWarningColor}}
@@ -196,7 +230,7 @@
                                 <q-item-label>{{$t('company')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.company" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.company" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -204,7 +238,7 @@
                                 <q-item-label>{{$t('client')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.client" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.client" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -212,7 +246,7 @@
                                 <q-item-label>{{$t('startDate')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.dateStart" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.dateStart" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -220,7 +254,7 @@
                                 <q-item-label>{{$t('endDate')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.dateEnd" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.dateEnd" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -236,7 +270,7 @@
                                 <q-item-label>{{$t('scope')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.scope" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.scope" />
                             </q-item-section>
                         </q-item>
                         <br/>
@@ -250,7 +284,7 @@
                                 <q-item-label>{{$t('type')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingType" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingType" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -258,7 +292,7 @@
                                 <q-item-label>{{$t('description')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingDescription" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingDescription" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -266,7 +300,7 @@
                                 <q-item-label>{{$t('observation')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingObservation" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingObservation" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -274,7 +308,7 @@
                                 <q-item-label>{{$t('references')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingReferences" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingReferences" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -282,7 +316,7 @@
                                 <q-item-label>{{$t('proofs')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingProofs" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingProofs" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -290,7 +324,7 @@
                                 <q-item-label>{{$t('affectedAssets')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingAffected" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingAffected" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -298,7 +332,7 @@
                                 <q-item-label>{{$t('remediationDifficulty')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingRemediationDifficulty" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingRemediationDifficulty" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -306,7 +340,7 @@
                                 <q-item-label>{{$t('remediationPriority')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingPriority" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingPriority" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -314,7 +348,7 @@
                                 <q-item-label>{{$t('remediation')}} {{$t('required')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.requiredFields.findingRemediation" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.requiredFields.findingRemediation" />
                             </q-item-section>
                         </q-item>
                     </q-card-section>
@@ -329,7 +363,7 @@
                                 <q-item-label>{{$t('cvss3Name')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.scoringMethods.CVSS3" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.scoringMethods.CVSS3" />
                             </q-item-section>
                         </q-item>
                         <q-item dense>
@@ -337,7 +371,7 @@
                                 <q-item-label>{{$t('cvss4Name')}}</q-item-label>
                             </q-item-section>
                             <q-item-section>
-                                <q-toggle v-model="settings.report.public.scoringMethods.CVSS4" />
+                                <q-toggle :disable="!canEdit" v-model="settings.report.public.scoringMethods.CVSS4" />
                             </q-item-section>
                         </q-item>
                     </q-card-section>
@@ -349,7 +383,7 @@
                         <br/>
                         <q-item>
                             <q-item-section class="col-md-2">
-                                <q-toggle :label="$t('btn.enable')" v-model="settings.report.public.enableSpellCheck" />
+                                <q-toggle :label="$t('btn.enable')" :disable="!canEdit" v-model="settings.report.public.enableSpellCheck" />
                             </q-item-section>
                         </q-item>
                         <div v-if="settings.report.public.enableSpellCheck" class="q-mt-md">
@@ -362,17 +396,20 @@
                                         placeholder="http://pwndoc-languagetools:8020"
                                         outlined
                                         dense
+                                        :disable="!canEdit"
                                     />
                                 </q-item-section>
                             </q-item>
                             <q-item>
                                 <q-item-section class="col-md-6">
                                     <q-input
-                                        v-model="settings.report.private.languageToolApiKey"
+                                        v-model="languageToolApiKeyInput"
                                         :label="$t('languageToolApiKey')"
                                         :hint="$t('languageToolApiKeyHint')"
+                                        type="password"
                                         outlined
                                         dense
+                                        :disable="!canEdit"
                                     />
                                 </q-item-section>
                             </q-item>
@@ -384,6 +421,7 @@
                                         :hint="$t('languageToolUsernameHint')"
                                         outlined
                                         dense
+                                        :disable="!canEdit"
                                     />
                                 </q-item-section>
                             </q-item>
@@ -396,6 +434,7 @@
                                         dense
                                         no-caps
                                         class="q-mt-sm"
+                                        :disable="!canEdit"
                                         @click="testLanguageToolConnection"
                                         :loading="testingLtConnection"
                                     />

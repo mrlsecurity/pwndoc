@@ -9,6 +9,25 @@
     >
         <template v-slot:buttons>
             <q-btn
+            v-if="aiQaEnabled"
+            color="primary"
+            :flat="!qaDrawerOpen"
+            :outline="qaDrawerOpen"
+            :class="{'bg-grey-3': qaDrawerOpen}"
+            icon="o_gpp_good"
+            :label="$t('btn.qa')"
+            no-caps
+            :ripple="false"
+            @click="toggleQaView()"
+            class="q-mr-sm"
+            >
+                <q-badge v-if="qaRunning" floating rounded color="orange" class="qa-run-badge" />
+                <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
+                    {{ $t('tooltip.auditQa') }}
+                </q-tooltip>
+            </q-btn>
+            <q-separator v-if="aiQaEnabled || frontEndAuditState === AUDIT_VIEW_STATE.EDIT" vertical inset class="q-mr-sm" />
+            <q-btn
                 v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
                 outline
                 :color="saveButtonColor"
@@ -31,7 +50,7 @@
     </breadcrumb>
 
     <div class="row content q-pa-md">
-        <q-card class=" col-xl-8 offset-xl-2 col-12">
+        <q-card :class="sidePanelOpen ? 'col-8' : 'col-xl-8 offset-xl-2 col-12'">
             <q-card-section>
                 <div class="row q-col-gutter-md">
                     <q-input
@@ -274,10 +293,10 @@
             default-opened
             header-class="bg-blue-grey-5 text-white" 
             expand-icon-class="text-white">
-                <custom-fields 
-                ref="customfields" 
-                v-model="audit.customFields" 
-                custom-element="QCardSection" 
+                <custom-fields
+                ref="customfields"
+                v-model="audit.customFields"
+                custom-element="QCardSection"
                 no-sync-editor
                 :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                 :locale="audit.language"

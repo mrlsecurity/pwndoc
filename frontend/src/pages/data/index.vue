@@ -49,6 +49,18 @@
                 </q-item-section>
                 <q-item-section>{{$t('languageToolRules')}}</q-item-section>
             </q-item>
+            <q-item v-if="showAssistedWriting" to='/data/assisted-writing'>
+                <q-item-section avatar>
+                    <q-icon name="auto_awesome" />
+                </q-item-section>
+                <q-item-section>{{ $t('aiIntegration.menu.assistedWriting') }}</q-item-section>
+            </q-item>
+            <q-item v-if="showQualityAssurance" to='/data/quality-assurance'>
+                <q-item-section avatar>
+                    <q-icon name="fas fa-list-check" />
+                </q-item-section>
+                <q-item-section>{{ $t('aiIntegration.menu.qualityAssurance') }}</q-item-section>
+            </q-item>
 
             <q-separator spaced />
 
@@ -88,6 +100,20 @@ export default {
     },
 
     computed: {
+        showAssistedWriting() {
+            return this.$settings?.ai?.public?.enabled !== false && (
+                userStore.isAllowed('ai:prompts:read') ||
+                userStore.isAllowed('ai:redaction-guidelines:read')
+            )
+        },
+
+        showQualityAssurance() {
+            // Not gated on ai.public.enabled: the built-in QA checks run even when AI
+            // integration is disabled, so admins still need to reach this page to
+            // configure them. The AI-only checks show a "disabled" banner in-page.
+            return userStore.isAllowed('ai:qa-instructions:read')
+        },
+
         isDesktop() {
             return this.$q.screen.gt.sm
         },

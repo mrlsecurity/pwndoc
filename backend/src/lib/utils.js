@@ -57,6 +57,40 @@ function isHttpUrl(urlString) {
 }
 exports.isHttpUrl = isHttpUrl
 
+// Bounded-parallel map. Runs `worker(item, index)` over `items` with at most `limit`
+// tasks in flight. Per-item failures never abort the batch: every slot resolves to
+// {status: 'fulfilled', value} or {status: 'rejected', reason}. An optional
+// options.shouldStop() is checked before each dispatch; remaining items resolve to
+// {status: 'skipped'} once it returns true (in-flight tasks still finish).
+async function runWithConcurrency(items = [], limit, worker, options = {}) {
+  const results = new Array(items.length)
+  const size = Math.max(1, Math.min(Number(limit) || 1, items.length || 1))
+  let cursor = 0
+
+  const runner = async () => {
+    while (true) {
+      const index = cursor++
+      if (index >= items.length)
+        return
+
+      if (typeof options.shouldStop === 'function' && options.shouldStop()) {
+        results[index] = { status: 'skipped' }
+        continue
+      }
+
+      try {
+        results[index] = { status: 'fulfilled', value: await worker(items[index], index) }
+      } catch (err) {
+        results[index] = { status: 'rejected', reason: err }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: size }, runner))
+  return results
+}
+exports.runWithConcurrency = runWithConcurrency
+
 function getSockets(io, room) {
   var result = []
   io.sockets.sockets.forEach((data) => {

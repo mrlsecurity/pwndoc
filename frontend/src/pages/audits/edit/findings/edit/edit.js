@@ -7,12 +7,19 @@ import Cvss4Calculator from 'components/cvss4calculator'
 import TextareaArray from 'components/textarea-array'
 import CustomFields from 'components/custom-fields'
 import CommentsList from 'components/comments-list'
+import AiChatDrawer from '@/components/ai-chat-drawer.vue'
 
 import AuditService from '@/services/audit';
 import DataService from '@/services/data';
+import AiService from '@/services/ai';
 import { useUserStore } from 'src/stores/user'
 import VulnService from '@/services/vulnerability';
+import AiFieldHelper from '@/services/ai-field-helper';
+import { useAiGenerationStore } from '@/stores/ai-generation';
+import { useAuditQaStore } from '@/stores/audit-qa';
+import { runAfterAiGenerationCheck } from '@/composables/confirmLeaveIfAiGenerating';
 import Utils from '@/services/utils';
+import { canAccessQa } from '@/services/qa-checks';
 import { createDraftRecovery } from '@/composables/useDraftRecovery';
 
 import { $t } from '@/boot/i18n'
@@ -32,6 +39,8 @@ export default {
             AUDIT_VIEW_STATE: Utils.AUDIT_VIEW_STATE,
             overrideLeaveCheck: false,
             transitionEnd: true,
+            aiPromptFieldKeys: [],
+            aiFieldPrompts: [],
             // Comments
             commentTemp: null,
             replyTemp: null,
@@ -45,13 +54,15 @@ export default {
             },
             draftRecovery: null,
             saveSuccess: false,
-            saveSuccessTimer: null
+            saveSuccessTimer: null,
+            highlightScrollIntervalId: null
         }
     },
 
     inject: [
         'frontEndAuditState',
         'auditParent',
+        'auditDrawerOpen',
         'retestSplitView',
         'retestSplitRatio',
         'retestSplitLimits',
@@ -72,7 +83,8 @@ export default {
         Cvss4Calculator,
         TextareaArray,
         CustomFields,
-        CommentsList
+        CommentsList,
+        AiChatDrawer
     },
 
     mounted: async function() {
@@ -80,6 +92,7 @@ export default {
         this.findingId = this.$route.params.findingId;
         this.getFinding();
         this.getVulnTypes();
+        this.loadAiEnabledFieldKeys();
 
         this.$socket.emit('menu', {menu: 'editFinding', finding: this.findingId, room: this.auditId});
 
@@ -119,6 +132,7 @@ export default {
         if (this.draftRecovery)
             this.draftRecovery.stop()
         this.clearSaveSuccess()
+        this.clearHighlightScrollPoll()
     },
 
     beforeRouteLeave (to, from , next) {
@@ -127,77 +141,15 @@ export default {
             return
         }
 
-        Utils.syncEditors(this.$refs)
-
-        var displayHighlightWarning = this.displayHighlightWarning()
-
-        if (this.unsavedChanges()) {
-            Dialog.create({
-            title: $t('msg.thereAreUnsavedChanges'),
-            message: $t('msg.doYouWantToLeave'),
-            ok: {label: $t('btn.confirm'), color: 'negative'},
-            cancel: {label: $t('btn.cancel'), color: 'white'},
-            focus: 'cancel'
-            })
-            .onOk(async () => {
-                if (this.draftRecovery)
-                    await this.draftRecovery.flushPendingWrite()
-                next()
-            })
-        }
-        else if (!this.commentMode && displayHighlightWarning) {
-            Dialog.create({
-                title: $t('msg.highlightWarningTitle'),
-                message: `${displayHighlightWarning}</mark>`,
-                html: true,
-                ok: {label: $t('btn.leave'), color: 'negative'},
-                cancel: {label: $t('btn.stay'), color: 'white'},
-            })
-            .onOk(async () => {
-                if (this.draftRecovery)
-                    await this.draftRecovery.flushPendingWrite()
-                next()
-            })
-        }
-        else
-            next()
+        runAfterAiGenerationCheck(() => {
+            this.continueRoute(to, from, next)
+        })
     },
 
     beforeRouteUpdate (to, from , next) {
-        Utils.syncEditors(this.$refs)
-
-        var displayHighlightWarning = this.displayHighlightWarning()
-
-        if (this.unsavedChanges()) {
-            Dialog.create({
-            title: $t('msg.thereAreUnsavedChanges'),
-            message: $t('msg.doYouWantToLeave'),
-            ok: {label: $t('btn.confirm'), color: 'negative'},
-            cancel: {label: $t('btn.cancel'), color: 'white'},
-            focus: 'cancel'
-            })
-            .onOk(async () => {
-                if (this.draftRecovery)
-                    await this.draftRecovery.flushPendingWrite()
-                next()
-            })
-        }
-        else if (!this.commentMode && displayHighlightWarning) {
-            Dialog.create({
-                title: $t('msg.highlightWarningTitle'),
-                message: `${displayHighlightWarning}</mark>`,
-                html: true,
-                ok: {label: $t('btn.leave'), color: 'negative'},
-                cancel: {label: $t('btn.stay'), color: 'white'},
-            })
-            .onOk(async () => {
-                if (this.draftRecovery)
-                    await this.draftRecovery.flushPendingWrite()
-                next()
-            })
-        }
-        else
-            next()
+        runAfterAiGenerationCheck(() => {
+            this.continueRoute(to, from, next)
+        })
     },
 
     watch: {
@@ -227,6 +179,10 @@ export default {
             return this.canManageAuditComments('update') || this.canManageAuditComments('delete')
         },
 
+        aiEnabled: function() {
+            return this.$settings?.ai?.public?.enabled !== false && userStore.isAllowed('audits:ai-assist')
+        },
+
         saveButtonState: function() {
             if (this.unsavedChanges())
                 return 'dirty'
@@ -254,9 +210,78 @@ export default {
                 return $t('btn.saved')
             return `${$t('btn.save')} (ctrl+s)`
         },
+
+        qaDrawerOpen: function() {
+            return useAuditQaStore().drawerOpen
+        },
+
+        qaRunning: function() {
+            return useAuditQaStore().runningForAudit(this.auditParent?._id)
+        },
+
+        aiDrawerOpen: function() {
+            return useAiGenerationStore().drawerOpen
+        },
+
+        sidePanelOpen: function() {
+            return this.commentMode || this.qaDrawerOpen || this.aiDrawerOpen
+        },
+
+        aiQaEnabled: function() {
+            return canAccessQa(
+                userStore.isAllowed('audits:qa-read'),
+                userStore.isAllowed('audits:qa'),
+                userStore.isAllowed('audits:ai-qa'),
+                this.$settings
+            )
+        },
+
+        findingTabsBarStyle: function() {
+            const hasDesktopDrawer = this.auditDrawerOpen && this.$q.screen.gt.sm
+            return {
+                left: hasDesktopDrawer ? '400px' : '0px'
+            }
+        },
     },
 
     methods: {
+        continueRoute: function(to, from, next) {
+            Utils.syncEditors(this.$refs)
+
+            var displayHighlightWarning = this.displayHighlightWarning()
+
+            if (this.unsavedChanges()) {
+                Dialog.create({
+                title: $t('msg.thereAreUnsavedChanges'),
+                message: $t('msg.doYouWantToLeave'),
+                ok: {label: $t('btn.confirm'), color: 'negative'},
+                cancel: {label: $t('btn.cancel'), color: 'white'},
+                focus: 'cancel'
+                })
+                .onOk(async () => {
+                    if (this.draftRecovery)
+                        await this.draftRecovery.flushPendingWrite()
+                    next()
+                })
+            }
+            else if (!this.commentMode && displayHighlightWarning) {
+                Dialog.create({
+                    title: $t('msg.highlightWarningTitle'),
+                    message: `${displayHighlightWarning}</mark>`,
+                    html: true,
+                    ok: {label: $t('btn.leave'), color: 'negative'},
+                    cancel: {label: $t('btn.stay'), color: 'white'},
+                })
+                .onOk(async () => {
+                    if (this.draftRecovery)
+                        await this.draftRecovery.flushPendingWrite()
+                    next()
+                })
+            }
+            else
+                next()
+        },
+
         _listener: function(e) {
             if ((window.navigator.platform.match("Mac") ? e.metaKey : e.ctrlKey) && e.keyCode == 83) {
                 e.preventDefault();
@@ -273,6 +298,25 @@ export default {
             })
             .catch((err) => {
                 console.log(err)
+            })
+        },
+
+        loadAiEnabledFieldKeys: function() {
+            if (!this.aiEnabled) {
+                this.aiPromptFieldKeys = []
+                this.aiFieldPrompts = []
+                return
+            }
+
+            AiService.getEnabledFields('finding')
+            .then((data) => {
+                const fields = data.data.datas?.fields || []
+                this.aiFieldPrompts = fields
+                this.aiPromptFieldKeys = fields.map((field) => String(field.fieldKey || ''))
+            })
+            .catch(() => {
+                this.aiPromptFieldKeys = []
+                this.aiFieldPrompts = []
             })
         },
 
@@ -472,6 +516,112 @@ export default {
             })
         },
 
+        getCustomFieldAiKey: function(customFieldId) {
+            return `custom-field:${customFieldId}`
+        },
+
+        canGenerateAi: function(fieldKey) {
+            return this.aiEnabled && this.aiPromptFieldKeys.includes(fieldKey)
+        },
+
+        buildAiLockKey: function(fieldKey) {
+            return `finding:${this.auditId}:${this.findingId}:${fieldKey}`
+        },
+
+        isAiFieldLoading: function(fieldKey) {
+            return useAiGenerationStore().isFieldGenerating(this.buildAiLockKey(fieldKey))
+        },
+
+        isAiFieldSessionActive: function(fieldKey) {
+            return AiFieldHelper.isFieldSessionActive(this.buildAiLockKey(fieldKey))
+        },
+
+        isAiFieldSelectionLocked: function(fieldKey) {
+            return AiFieldHelper.isFieldSelectionLocked(this.buildAiLockKey(fieldKey))
+        },
+
+        isFieldEditable: function(fieldKey) {
+            return this.frontEndAuditState === this.AUDIT_VIEW_STATE.EDIT
+        },
+
+        generateCustomFieldDraftAI: function(customField) {
+            return this.generateFieldDraftAI(null, customField)
+        },
+
+        getAiSelectionTarget: function(field, customField = null) {
+            if (customField)
+                return this.$refs.customfields?.getAiSelectionTarget?.(customField) || null
+
+            if (field === 'references')
+                return this.$refs.referencesField || null
+
+            return this.$refs[`basiceditor_${field}`] || null
+        },
+
+        generateFieldDraftAI: async function(field, customField = null) {
+            const fieldKey = customField ? this.getCustomFieldAiKey(customField?.customField?._id) : field
+            if (!fieldKey || !this.canGenerateAi(fieldKey))
+                return
+
+            if (this.frontEndAuditState !== this.AUDIT_VIEW_STATE.EDIT || this.isAiFieldLoading(fieldKey))
+                return
+
+            this.prepareSidePanel('ai')
+
+            const lockKey = this.buildAiLockKey(fieldKey)
+            const aiStore = useAiGenerationStore()
+
+            if (aiStore.drawerOpen && aiStore.isActive && aiStore.lockKey !== lockKey) {
+                runAfterAiGenerationCheck(
+                    () => this.runFieldDraftGeneration(field, customField, fieldKey, lockKey),
+                    {
+                        title: $t('aiChat.discardAiSessionTitle'),
+                        message: $t('aiChat.discardAiSessionMessage'),
+                        okLabel: $t('aiChat.discardAndStart')
+                    }
+                )
+                return
+            }
+
+            await this.runFieldDraftGeneration(field, customField, fieldKey, lockKey)
+        },
+
+        runFieldDraftGeneration: async function(field, customField, fieldKey, lockKey) {
+            Utils.syncEditors(this.$refs)
+
+            try {
+                await AiFieldHelper.runFieldSession({
+                    field,
+                    customField,
+                    fieldKey,
+                    lockKey,
+                    selectionTarget: this.getAiSelectionTarget(field, customField),
+                    entityShape: 'finding',
+                    requestEntityType: 'finding',
+                    locale: this.auditParent.language,
+                    aiFieldPrompts: this.aiFieldPrompts,
+                    buildContext: () => AiFieldHelper.buildFindingAiContext(this.finding, customField),
+                    getDiffEntity: () => {
+                        Utils.syncEditors(this.$refs)
+                        return this.finding
+                    },
+                    setValue: (value) => {
+                        if (customField)
+                            customField.text = value
+                        else
+                            this.finding[field] = value
+                    }
+                })
+            } catch (err) {
+                Notify.create({
+                    message: err.response?.data?.datas || err.message || 'Unable to generate AI draft',
+                    color: 'negative',
+                    textColor: 'white',
+                    position: 'top-right'
+                })
+            }
+        },
+
         syncEditors: function() {
             this.transitionEnd = false
             Utils.syncEditors(this.$refs)
@@ -507,15 +657,80 @@ export default {
 
         // *** Comments Handling ***
 
+        prepareSidePanel: function(except, callback) {
+            const proceed = () => {
+                if (except !== 'comments' && this.commentMode) {
+                    this.commentMode = false
+                    this.focusedComment = ''
+                    this.fieldHighlighted = null
+                }
+                if (except !== 'qa')
+                    useAuditQaStore().close()
+                if (except !== 'ai') {
+                    const aiStore = useAiGenerationStore()
+                    if (aiStore.isActive)
+                        aiStore.cancelSession({ force: true })
+                }
+                if (callback)
+                    callback()
+            }
+
+            if (except === 'ai') {
+                proceed()
+                return
+            }
+
+            runAfterAiGenerationCheck(proceed)
+        },
+
         toggleCommentView: function() {
             Utils.syncEditors(this.$refs)
-            this.commentMode = !this.commentMode
-            if (!this.commentMode) {
+
+            if (this.commentMode) {
+                this.commentMode = false
                 this.focusedComment = ""
                 this.fieldHighlighted = null
+                return
             }
-            if (this.commentMode && this.retestSplitView)
-                this.toggleSplitView()
+
+            this.prepareSidePanel('comments', () => {
+                this.commentMode = true
+                if (this.retestSplitView)
+                    this.toggleSplitView()
+            })
+        },
+
+        toggleQaView: function() {
+            const qaStore = useAuditQaStore()
+            if (qaStore.drawerOpen) {
+                qaStore.close()
+                return
+            }
+
+            this.prepareSidePanel('qa', () => {
+                qaStore.open(this.auditParent._id)
+            })
+        },
+
+        clearHighlightScrollPoll: function() {
+            if (this.highlightScrollIntervalId) {
+                clearInterval(this.highlightScrollIntervalId)
+                this.highlightScrollIntervalId = null
+            }
+        },
+
+        // Used by comment focus to land on the tab containing the focused field.
+        getFieldTab: function(fieldName) {
+            const definitionFields = ["titleField", "typeField", "descriptionField", "observationField", "referencesField"]
+            const detailsFields = ["affectedField", "cvssField", "cvss3Field", "cvss4Field", "remediationDifficultyField", "priorityField", "remediationField", "retestStatusField", "retestDescriptionField"]
+
+            if (fieldName === 'pocField')
+                return "proofs"
+            if (detailsFields.includes(fieldName))
+                return "details"
+            if (definitionFields.includes(fieldName) || (fieldName || '').startsWith('field-'))
+                return "definition"
+            return null
         },
 
         focusComment: function(comment) {
@@ -558,28 +773,21 @@ export default {
                 return
             }
 
-            let definitionFields = ["titleField", "typeField", "descriptionField", "observationField", "referencesField"]
-            let detailsFields = ["affectedField", "cvssField", "cvss3Field", "cvss4Field", "remediationDifficultyField", "priorityField", "remediationField"]
+            // Go to the tab containing the field and scrollTo it
+            const targetTab = this.getFieldTab(comment.fieldName)
+            if (targetTab && this.selectedTab !== targetTab)
+                this.selectedTab = targetTab
 
-            // Go to definition tab and scrollTo field
-            if (this.selectedTab !== 'definition' && (definitionFields.includes(comment.fieldName) || comment.fieldName.startsWith('field-'))) {
-                this.selectedTab = "definition"
-            }
-            else if (this.selectedTab !== 'poc' && comment.fieldName === 'pocField') {
-                this.selectedTab = "proofs"
-            }
-            else if (this.selectedTab !== 'details' && detailsFields.includes(comment.fieldName)) {
-                this.selectedTab = "details"
-            }
+            this.clearHighlightScrollPoll()
             let checkCount = 0
             let elementField = null
             let elementCommentEditor = null
-            const intervalId = setInterval(() => {
+            this.highlightScrollIntervalId = setInterval(() => {
                 checkCount++
                 elementField = document.getElementById(comment.fieldName)
                 elementCommentEditor = document.getElementById(commentId)
                 if (elementField || elementCommentEditor) {
-                    clearInterval(intervalId)
+                    this.clearHighlightScrollPoll()
                     if (elementCommentEditor) {
                         elementCommentEditor.scrollIntoView({block: "center"})
                     }
@@ -588,7 +796,7 @@ export default {
                     }
                 }
                 else if (checkCount >= 10) {
-                    clearInterval(intervalId)
+                    this.clearHighlightScrollPoll()
                 }
             }, 200)
         },

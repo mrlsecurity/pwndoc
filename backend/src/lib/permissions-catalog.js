@@ -18,7 +18,11 @@ const catalog = [
             {scope: 'audits:comments:delete', core: true},
             {scope: 'audits:comments:create-all', core: false},
             {scope: 'audits:comments:update-all', core: false},
-            {scope: 'audits:comments:delete-all', core: false}
+            {scope: 'audits:comments:delete-all', core: false},
+            {scope: 'audits:ai-assist', core: false},
+            {scope: 'audits:qa-read', core: false},
+            {scope: 'audits:qa', core: true},
+            {scope: 'audits:ai-qa', core: false}
         ]
     },
     {
@@ -69,7 +73,14 @@ const catalog = [
             {scope: 'vulnerabilities:update', core: false},
             {scope: 'vulnerabilities:delete', core: false},
             {scope: 'vulnerabilities:delete-all', core: false},
-            {scope: 'vulnerability-updates:create', core: true}
+            {scope: 'vulnerability-updates:create', core: true},
+            {scope: 'vulnerabilities:qa-read', core: false},
+            {scope: 'vulnerabilities:qa-read-catalog', core: false},
+            {scope: 'vulnerabilities:qa', core: false},
+            {scope: 'vulnerabilities:qa-catalog', core: false},
+            {scope: 'vulnerabilities:ai-qa', core: false},
+            {scope: 'vulnerabilities:ai-qa-catalog', core: false},
+            {scope: 'vulnerabilities:ai-assist', core: false}
         ]
     },
     {
@@ -152,14 +163,26 @@ const catalog = [
             {scope: 'proofing-rules:update', core: false},
             {scope: 'proofing-rules:delete', core: false}
         ]
+    },
+    {
+        key: 'ai',
+        label: 'AI',
+        permissions: [
+            {scope: 'ai:prompts:read', core: false},
+            {scope: 'ai:prompts:update', core: false},
+            {scope: 'ai:redaction-guidelines:read', core: false},
+            {scope: 'ai:redaction-guidelines:update', core: false},
+            {scope: 'ai:qa-instructions:read', core: false},
+            {scope: 'ai:qa-instructions:update', core: false}
+        ]
     }
 ]
 
-const flatten = () => catalog.flatMap(group => group.permissions.map(permission => permission.scope))
-const core = () => catalog.flatMap(group => group.permissions.filter(permission => permission.core).map(permission => permission.scope))
+const flatten = () => catalog.flatMap(group => group.permissions.map(permission => permission.scope));
+const core = () => catalog.flatMap(group => group.permissions.filter(permission => permission.core).map(permission => permission.scope));
 
 module.exports = {
     catalog,
     flatten,
     core
-}
+};

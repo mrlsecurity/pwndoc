@@ -1,6 +1,9 @@
 <template>
-  <div class="draft-diff">
-    <div class="row items-center q-gutter-sm q-mb-sm">
+  <div
+    class="draft-diff"
+    :class="{ 'draft-diff--chat-preview': chatPreview }"
+  >
+    <div v-if="!chatPreview" class="row items-center q-gutter-sm q-mb-sm">
       <span class="text-body2 text-grey-8">View</span>
       <q-btn-toggle
         v-model="splitView"
@@ -20,7 +23,7 @@
       :key="section.key"
       class="draft-section"
     >
-      <div v-if="diffSections.length > 1" class="draft-section__title">{{ section.label }}</div>
+      <div v-if="!chatPreview && diffSections.length > 1" class="draft-section__title">{{ section.label }}</div>
 
       <template v-if="!splitView">
         <!-- Unified view -->
@@ -29,7 +32,7 @@
           :key="field.key"
           class="diff-block"
         >
-          <div class="diff-block__header">@@ {{ field.label }} @@</div>
+          <div v-if="!chatPreview" class="diff-block__header">@@ {{ field.label }} @@</div>
           <div
             v-if="field.isHtml"
             class="diff-block__body diff-block__body--html editor__content"
@@ -97,7 +100,7 @@
 <script>
 import { Diff, diffLines, diffWords } from 'diff'
 import _ from 'lodash'
-import Utils from '@/services/utils'
+import { normalizeEditorHtml } from '@/services/editor-html-renderer'
 
 const HTML_FIELDS = ['description', 'observation', 'remediation', 'poc', 'text', 'retestDescription']
 const DETAIL_KEYS = ['title', 'vulnType', 'description', 'observation', 'remediation', 'references', 'customFields']
@@ -146,56 +149,8 @@ function htmlEscape(str) {
     .replace(/>/g, '&gt;')
 }
 
-function sanitizeHtml(html) {
-  return Utils.htmlEncode(String(html || ''))
-}
-
-function renderLegendText(label, alt) {
-  return [label, alt].filter(Boolean).join(' - ')
-}
-
-function resolveImageSrc(src) {
-  return /^[a-fA-F0-9]{24}$/.test(src || '')
-    ? `/api/images/download/${src}`
-    : src
-}
-
 function normalizeEditorHtmlForDiff(html) {
-  const clean = sanitizeHtml(html)
-  if (!clean) return ''
-
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(clean, 'text/html')
-
-  doc.body.querySelectorAll('legend').forEach((legend) => {
-    const label = legend.getAttribute('label') || ''
-    const alt = legend.getAttribute('alt') || ''
-    const visibleCaption = renderLegendText(label, alt)
-    if (visibleCaption && !legend.textContent.trim()) {
-      legend.textContent = visibleCaption
-    }
-    legend.removeAttribute('label')
-    legend.removeAttribute('alt')
-    legend.removeAttribute('commentid')
-  })
-
-  doc.body.querySelectorAll('img').forEach((img) => {
-    const figure = doc.createElement('figure')
-    const normalizedImg = doc.createElement('img')
-    const caption = doc.createElement('figcaption')
-    const alt = img.getAttribute('alt') || ''
-
-    figure.className = 'draft-image'
-    normalizedImg.setAttribute('src', resolveImageSrc(img.getAttribute('src') || ''))
-    normalizedImg.setAttribute('alt', '')
-    caption.textContent = alt
-
-    figure.appendChild(normalizedImg)
-    if (alt) figure.appendChild(caption)
-    img.replaceWith(figure)
-  })
-
-  return doc.body.innerHTML
+  return normalizeEditorHtml(html)
 }
 
 function buildHtmlDiff() {
@@ -351,6 +306,10 @@ export default {
     languages: {
       type: Array,
       default: () => []
+    },
+    chatPreview: {
+      type: Boolean,
+      default: false
     }
   },
 
@@ -880,6 +839,49 @@ export default {
 .draft-preview :deep(.diff-unset) {
   color: var(--diff-unset-color);
   font-style: italic;
+}
+
+.draft-diff--chat-preview {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.draft-diff--chat-preview .diff-block {
+  border: 0;
+  overflow: visible;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.draft-diff--chat-preview .diff-block__body {
+  max-height: none;
+  overflow: visible;
+}
+
+.draft-diff--chat-preview .diff-block__body--html {
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.draft-diff--chat-preview .diff-line {
+  display: block;
+  min-height: 0;
+  line-height: 1.5;
+}
+
+.draft-diff--chat-preview .diff-line__glyph {
+  display: none;
+}
+
+.draft-diff--chat-preview .diff-line__content {
+  display: block;
+  padding: 0;
 }
 
 </style>

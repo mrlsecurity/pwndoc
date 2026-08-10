@@ -10,6 +10,37 @@ Most settings require the `settings:read` permission to view and `settings:updat
 
 **Language** — Change the display language of the PwnDoc interface. This is a per-instance setting.
 
+## AI Integration
+
+AI integration is **disabled by default**. The toggle in the card header turns it on; leaving it off hides every AI generation button and AI QA check for all users. Built-in QA checks keep working either way.
+
+![AI Integration section of Settings](/_images/settings-ai-integration.png)
+
+### AI Provider
+
+One tab per supported provider: OpenAI, Anthropic, DeepSeek, Ollama, and AWS Bedrock. A green check on a tab means credentials are stored for that provider.
+
+| Provider | Fields |
+|----------|--------|
+| OpenAI | Base URL, Model, API Key |
+| Anthropic | Base URL, Model, Version, API Key |
+| DeepSeek | Base URL, Model, API Key |
+| Ollama | Base URL, Model, API Key |
+| AWS Bedrock | AWS Region, Model ID, and either a Bedrock API Key or IAM credentials (Access Key ID, Secret Access Key, optional Session Token) |
+
+Stored keys are shown masked and never sent back to the browser. Leave a masked field untouched to keep the current key, type a new value to replace it, or clear it to remove the key.
+
+**Test connection** validates the credentials and configuration against the provider and reports the model that answered.
+
+Two checkboxes apply to the provider whose tab is open:
+
+- **Set as default provider** — used whenever a request does not specify one. The default is always available to users.
+- **Allow users to select this provider** — adds it to the provider selector shown in the AI assistant and QA panels. Only configured providers can be allowed; the default is always allowed implicitly. With nothing else allowed, users are restricted to the default.
+
+Prompts, writing guidelines, and QA checks are configured in Data → [Assisted Writing](data.md#assisted-writing) and [Quality Assurance](data.md#quality-assurance).
+
+Requires `settings:read` to view and `settings:update` to change, including the enable toggle and provider credentials.
+
 ## Reports
 
 Controls how generated reports look and what fields are required during audits.

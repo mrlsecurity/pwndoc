@@ -142,6 +142,8 @@ import DataService from '@/services/data'
 import DraftRecoveryService from '@/services/draft-recovery'
 import AuditEditPage from '@/pages/audits/edit/index.vue'
 import { Dialog, Notify } from 'quasar'
+import { useAiGenerationStore } from '@/stores/ai-generation'
+import { useAuditQaStore } from '@/stores/audit-qa'
 
 // Mock lodash globally (component uses _ globally)
 globalThis._ = {
@@ -311,6 +313,11 @@ describe('Audit Edit Page', () => {
           'router-view': true,
           'draggable': { template: '<div><slot /><slot v-for="element in list" name="item" :element="element" /></div>', props: ['list', 'handle', 'ghostClass', 'itemKey'] },
           'comments-list': true,
+          'audit-qa-sidebar': {
+            name: 'AuditQaSidebarStub',
+            props: ['auditId', 'findings', 'sections', 'height'],
+            template: '<div data-testid="audit-qa-sidebar-content" />'
+          },
           ...(options.stubs || {})
         },
         mocks: {
@@ -589,6 +596,65 @@ describe('Audit Edit Page', () => {
   })
 
   describe('Computed Properties', () => {
+    it('hosts the QA sidebar on general with the existing geometry and audit data', async () => {
+      const wrapper = await createWrapper()
+      await flushPromises()
+
+      useAuditQaStore().drawerOpen = true
+      await wrapper.vm.$nextTick()
+
+      const host = wrapper.get('[data-testid="audit-qa-sidebar-host"]')
+      const sidebar = wrapper.getComponent({ name: 'AuditQaSidebarStub' })
+      const routerView = wrapper.get('router-view-stub')
+
+      expect(host.classes()).toContain('audit-qa-sidebar-host--standard')
+      expect(routerView.element.compareDocumentPosition(host.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(sidebar.props()).toMatchObject({
+        auditId: 'audit-123',
+        findings: mockAudit.findings,
+        sections: mockAudit.sections,
+        height: 'calc(100vh - 104px)'
+      })
+    })
+
+    it('uses finding and retest geometry without remounting the sidebar', async () => {
+      const wrapper = await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      useAuditQaStore().drawerOpen = true
+      await wrapper.vm.$nextTick()
+
+      const initialSidebar = wrapper.getComponent({ name: 'AuditQaSidebarStub' }).vm
+      expect(wrapper.get('[data-testid="audit-qa-sidebar-host"]').classes()).toContain('audit-qa-sidebar-host--finding')
+      expect(wrapper.getComponent({ name: 'AuditQaSidebarStub' }).props('height')).toBe('calc(100vh - 152px)')
+
+      await router.push('/audits/audit-123/sections/s1')
+      await flushPromises()
+
+      expect(wrapper.getComponent({ name: 'AuditQaSidebarStub' }).vm).toBe(initialSidebar)
+      expect(wrapper.get('[data-testid="audit-qa-sidebar-host"]').classes()).toContain('audit-qa-sidebar-host--standard')
+      expect(wrapper.getComponent({ name: 'AuditQaSidebarStub' }).props('height')).toBe('calc(100vh - 104px)')
+
+      await router.push('/audits/audit-123/findings/f2')
+      await flushPromises()
+      wrapper.vm.audit.type = 'retest'
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.getComponent({ name: 'AuditQaSidebarStub' }).vm).toBe(initialSidebar)
+      expect(wrapper.get('[data-testid="audit-qa-sidebar-host"]').classes()).toContain('audit-qa-sidebar-host--retest')
+      expect(wrapper.getComponent({ name: 'AuditQaSidebarStub' }).props('height')).toBe('calc(100vh - 104px)')
+    })
+
+    it('does not render the persistent QA host on unsupported audit routes', async () => {
+      const wrapper = await createWrapper({ route: '/audits/audit-123/network' })
+      await flushPromises()
+
+      useAuditQaStore().drawerOpen = true
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('[data-testid="audit-qa-sidebar-host"]').exists()).toBe(false)
+    })
+
     it('should filter generalUsers correctly', async () => {
       const wrapper = await createWrapper()
       wrapper.vm.users = [
@@ -1336,7 +1402,7 @@ describe('Audit Edit Page', () => {
       const wrapper = await createWrapper()
 
       expect(wrapper.vm.auditId).toBeDefined()
-      expect(wrapper.vm.findings).toEqual([])
+      expect(Array.isArray(wrapper.vm.audit.findings)).toBe(true)
       expect(wrapper.vm.users).toEqual([])
       expect(wrapper.vm.splitterRatio).toBe(80)
       expect(wrapper.vm.loading).toBe(true)
@@ -1388,6 +1454,99 @@ describe('Audit Edit Page', () => {
 
       const noCategory = wrapper.vm.findingList.find(f => f.category === 'No Category')
       expect(noCategory).toBeDefined()
+    })
+  })
+
+  describe('AI session confirm on in-audit route change', () => {
+    it('confirms before leaving a report page with an active AI session', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const aiStore = useAiGenerationStore()
+      aiStore.sessionConfig = { lockKey: 'pocField' }
+      aiStore.drawerOpen = true
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/general', name: 'general' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(Dialog.create).toHaveBeenCalled()
+      expect(next).not.toHaveBeenCalled()
+    })
+
+    it('navigates away immediately when there is no active AI session', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/general', name: 'general' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(Dialog.create).not.toHaveBeenCalled()
+      expect(next).toHaveBeenCalled()
+      expect(next.mock.calls[0][0]).not.toBe(false)
+    })
+
+    it('does not confirm when navigating between report pages', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const aiStore = useAiGenerationStore()
+      aiStore.sessionConfig = { lockKey: 'pocField' }
+      aiStore.drawerOpen = true
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/findings/f2' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(Dialog.create).not.toHaveBeenCalled()
+      expect(next).toHaveBeenCalled()
+      expect(next.mock.calls[0][0]).not.toBe(false)
+    })
+
+    it('does not close the QA drawer when navigating from a finding to general', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const qaStore = useAuditQaStore()
+      qaStore.drawerOpen = true
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/general', name: 'general' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(next).toHaveBeenCalled()
+      expect(qaStore.drawerOpen).toBe(true)
+    })
+
+    it('still closes the QA drawer when navigating away to a page without the sidebar', async () => {
+      await createWrapper({ route: '/audits/audit-123/findings/f1' })
+      await flushPromises()
+
+      const qaStore = useAuditQaStore()
+      qaStore.drawerOpen = true
+
+      const next = vi.fn()
+      AuditEditPage.beforeRouteUpdate(
+        { path: '/audits/audit-123/network', name: 'network' },
+        { path: '/audits/audit-123/findings/f1' },
+        next
+      )
+
+      expect(next).toHaveBeenCalled()
+      expect(qaStore.drawerOpen).toBe(false)
     })
   })
 })

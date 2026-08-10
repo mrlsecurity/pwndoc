@@ -6,6 +6,8 @@ import { test, expect } from './base.js';
  * Multiple tables use @row-dblclick="dblClick" to open an edit modal or
  * navigate to the edit page.  Button-click navigation is tested elsewhere;
  * these tests cover the separate dblclick code path.
+ * (The vulnerabilities page uses a sidebar list where a single click opens
+ * the edit pane — covered here alongside the dblclick paths.)
  */
 
 let auditId;
@@ -45,14 +47,14 @@ test.describe('Double-Click to Edit', () => {
     await expect(page).toHaveURL(new RegExp(`/audits/${auditId}`));
   });
 
-  test('double-click vulnerability row opens edit dialog', async ({ page }) => {
+  test('click vulnerability list item opens edit pane', async ({ page }) => {
     await page.goto('/vulnerabilities');
-    await expect(page.getByRole('row').filter({ hasText: 'E2E DblClick Vuln' })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'E2E DblClick Vuln' })).toBeVisible();
 
-    const row = page.getByRole('row').filter({ hasText: 'E2E DblClick Vuln' });
-    await row.dblclick();
+    const item = page.getByRole('listitem').filter({ hasText: 'E2E DblClick Vuln' });
+    await item.click();
 
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('vulnerability-edit-pane')).toBeVisible({ timeout: 5000 });
   });
 
   test('double-click collaborator row opens edit dialog', async ({ page }) => {

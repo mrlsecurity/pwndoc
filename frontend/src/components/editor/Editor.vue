@@ -1,5 +1,5 @@
 <template>
-<q-card flat bordered class="editor full-width" :style="(editable)?'':'border: 1px dashed lightgrey'">
+<q-card flat bordered class="editor full-width relative-position" :class="{'editor--ai-active': aiSessionActive || aiLoading}" :style="editable?'':'border: 1px dashed lightgrey'">
     <div v-sticky="!noAffix && !diff && editable" sticky-offset="affixOffset" class="bg-grey-4">
         <template v-if="editable">
             <q-toolbar data-testid="editor-toolbar" class="editor-toolbar">
@@ -239,14 +239,27 @@
                     </q-btn-dropdown>
                 </template>
 
-                <template v-if="commentMode">
+                <template v-if="commentMode || (showAiButton && editable)">
                     <q-separator vertical class="q-mx-sm" />
-                    <q-btn unelevated size="sm" dense color="deep-purple"
-                    @click="editor.chain().focus().setComment(fieldName).run()"
-                    >
-                        <q-tooltip :delay="500" class="text-bold">Add Comment</q-tooltip>
-                        <q-icon name="add_comment" />
-                    </q-btn>
+                    <div class="row items-center no-wrap q-gutter-xs editor-toolbar__assisted-actions">
+                        <q-btn v-if="commentMode" unelevated size="sm" dense color="deep-purple"
+                        data-testid="editor-comment-action"
+                        @click="editor.chain().focus().setComment(fieldName).run()"
+                        >
+                            <q-tooltip :delay="500" class="text-bold">Add Comment</q-tooltip>
+                            <q-icon name="add_comment" />
+                        </q-btn>
+                        <q-btn v-if="showAiButton && editable" flat size="sm" dense
+                        class="ai-gradient-icon-btn"
+                        data-testid="editor-ai-action"
+                        :loading="aiLoading"
+                        :disable="aiLoading || aiSessionActive"
+                        @click="$emit('ai-click')"
+                        >
+                            <q-tooltip :delay="500" class="text-bold">{{$t('aiChat.tooltip')}}</q-tooltip>
+                            <q-icon name="auto_awesome" />
+                        </q-btn>
+                    </div>
                 </template>
             </q-toolbar>
         </template>
@@ -292,6 +305,9 @@
     <div v-else class="editor__content q-pa-sm">
         <div class="ProseMirror" v-html="diffContent"></div>
     </div>
+    <q-inner-loading :showing="aiLoading">
+        <q-badge color="deep-purple-12">{{ $t('aiChat.generating') }}</q-badge>
+    </q-inner-loading>
 </q-card>
 </template>
 
@@ -311,16 +327,20 @@ import CustomHighlight from './editor-highlight'
 import TrailingNode from './editor-trailing-node'
 import CodeBlockComponent from './editor-code-block'
 import CommentExtension from './editor-comment-extension'
+import AiAnchor, { getAiAnchorState } from './editor-ai-anchor'
 
 import { ref, computed } from 'vue'
 import { LanguageTool } from './editor-spellcheck'
 import { useSpellcheckStore, ALL_CATEGORIES } from '@/stores/spellcheck'
+import { useAiGenerationStore } from '@/stores/ai-generation'
 
 import {Diff} from 'diff';
 
 import Utils from '@/services/utils'
 import ImageService from '@/services/image'
 
+import { DOMSerializer } from '@tiptap/pm/model'
+import { createNodeFromContent } from '@tiptap/core'
 import {common, createLowlight} from 'lowlight'
 const lowlight = createLowlight(common)
 lowlight.registerAlias('xml', ['html'])
@@ -369,8 +389,22 @@ export default {
         focusedComment: {
             type: String,
             default: ''
+        },
+        showAiButton: {
+            type: Boolean,
+            default: false
+        },
+        aiLoading: {
+            type: Boolean,
+            default: false
+        },
+        aiSessionActive: {
+            type: Boolean,
+            default: false
         }
     },
+
+    emits: ['update:modelValue', 'ai-click'],
     components: {
         EditorContent,
         BubbleMenu
@@ -418,6 +452,7 @@ export default {
                         excludes: "bold italic strike underline"
                     }),
                     CommentExtension,
+                    AiAnchor,
 
                     LanguageTool.configure({
                         language: 'auto',
@@ -455,17 +490,21 @@ export default {
             if (value === this.editor.getHTML()) {
                 return;
             }
+
+            if (this._ownsAiAnchor)
+                this.editor.commands.invalidateAiAnchor()
+
             var content = this.htmlEncode(this.modelValue)
             this.editor.commands.setContent(content);
 
             if (this.commentMode)
-                setTimeout(() => { 
+                setTimeout(() => {
                     this.handleFocusComment({detail: {id: this.focusedComment}})
                 }, 200)
        },
 
         editable (value) {
-            this.editor.setEditable(this.editable, false)
+            this.editor.setEditable(value, false)
        },
 
         highlightColor (value) {
@@ -486,15 +525,17 @@ export default {
 
     mounted: async function() {
         document.addEventListener('comment-deleted', this.handleDeleteComment)
-        
+
         this.editor.setEditable(this.editable, false)
+
+        this.editor.on('transaction', this.pushAiAnchorToStore)
 
         if (typeof this.modelValue === "undefined" || this.modelValue === this.editor.getHTML()) {
             return;
         }
         var content = this.htmlEncode(this.modelValue)
         this.editor.commands.setContent(content)
-        
+
         // Handle comments styling when initialized
         if (this.commentMode)
             this.handleFocusComment({detail: {id: this.focusedComment}})
@@ -502,6 +543,10 @@ export default {
 
     beforeUnmount() {
         document.removeEventListener('comment-deleted', this.handleDeleteComment)
+
+        if (this._ownsAiAnchor)
+            this.editor.commands.invalidateAiAnchor()
+
         this.editor.destroy()
     },
 
@@ -734,6 +779,118 @@ export default {
                 this._spellcheckCategoryDirty = false
                 this.editor.commands.proofread()
             }
+        },
+
+        getTextSelection() {
+            if (!this.editor)
+                return null
+
+            const { from, to } = this.editor.state.selection
+            if (from === to)
+                return null
+
+            const text = this.editor.state.doc.textBetween(from, to, '\n')
+            const slice = this.editor.state.doc.slice(from, to)
+            const serializer = DOMSerializer.fromSchema(this.editor.schema)
+            const container = document.createElement('div')
+            container.appendChild(serializer.serializeFragment(slice.content))
+
+            return {
+                from,
+                to,
+                text,
+                html: container.innerHTML
+            }
+        },
+
+        replaceTextSelection(content, range, { reanchor = false } = {}) {
+            if (!this.editor)
+                return
+
+            const anchor = this._ownsAiAnchor ? getAiAnchorState(this.editor.state) : null
+            if (anchor?.status === 'invalid')
+                return
+
+            const from = anchor ? anchor.from : (range?.from ?? this.editor.state.selection.from)
+            const to = anchor ? anchor.to : (range?.to ?? this.editor.state.selection.to)
+            const replacement = String(content || '')
+
+            this.editor.chain().focus()
+                .deleteRange({ from, to })
+                .insertContentAt(from, replacement, {
+                    parseOptions: { preserveWhitespace: 'full' }
+                })
+                .run()
+
+            if (this._ownsAiAnchor) {
+                if (reanchor)
+                    this.editor.commands.setAiAnchor({ from, to: this.editor.state.selection.to })
+                else
+                    this.clearAiSelectionAnchor()
+            }
+
+            this.updateHTML()
+        },
+
+        insertAtCursor(content) {
+            if (!this.editor)
+                return
+
+            const replacement = String(content || '')
+            this.editor.chain().focus()
+                .insertContentAt(this.editor.state.selection, replacement, {
+                    parseOptions: { preserveWhitespace: 'full' }
+                })
+                .run()
+            this.updateHTML()
+        },
+
+        setAiSelectionAnchor(range) {
+            if (!this.editor || !range)
+                return
+
+            this._ownsAiAnchor = true
+            this.editor.commands.setAiAnchor({ from: range.from, to: range.to })
+        },
+
+        clearAiSelectionAnchor() {
+            if (!this._ownsAiAnchor)
+                return
+
+            this._ownsAiAnchor = false
+            if (this.editor)
+                this.editor.commands.clearAiAnchor()
+            useAiGenerationStore().setSelectionAnchor(null)
+        },
+
+        pushAiAnchorToStore() {
+            if (!this._ownsAiAnchor || !this.editor)
+                return
+
+            useAiGenerationStore().setSelectionAnchor(getAiAnchorState(this.editor.state))
+        },
+
+        // Simulates applying `replacementHtml` over the live anchor range without
+        // dispatching, so the chat drawer can render an up-to-date diff preview
+        // even after the user has kept editing the field.
+        buildAnchoredPreviewHtml(replacementHtml) {
+            if (!this.editor)
+                return null
+
+            const anchor = getAiAnchorState(this.editor.state)
+            if (!anchor || anchor.status === 'invalid')
+                return null
+
+            const { state, schema } = this.editor
+            const content = createNodeFromContent(String(replacementHtml || ''), schema, {
+                parseOptions: { preserveWhitespace: 'full' }
+            })
+            const tr = state.tr.replaceWith(anchor.from, anchor.to, content)
+
+            const serializer = DOMSerializer.fromSchema(schema)
+            const container = document.createElement('div')
+            container.appendChild(serializer.serializeFragment(tr.doc.content))
+            return container.innerHTML
         }
     }
 }
@@ -1027,6 +1184,30 @@ export default {
 
 .editor-toolbar {
     min-height: 32px;
+}
+
+.editor--ai-active {
+    overflow: hidden;
+    border-color: transparent !important;
+}
+
+.editor--ai-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    border-radius: inherit;
+    border: 2px solid #7986cb;
+    pointer-events: none;
+}
+
+.ai-anchor-highlight {
+    background: rgba(121, 134, 203, 0.22);
+    border-radius: 2px;
+}
+
+.body--dark .ai-anchor-highlight {
+    background: rgba(159, 168, 218, 0.3);
 }
 
 .diffrem {

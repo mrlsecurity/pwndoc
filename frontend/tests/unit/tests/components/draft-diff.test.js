@@ -5,6 +5,11 @@ import DraftDiff from '@/components/draft-diff.vue'
 function createWrapper(props) {
   return createTestWrapper(DraftDiff, {
     props,
+    global: {
+      stubs: {
+        'q-btn-toggle': true
+      }
+    },
     messages: {
       'en-US': {
         draftRecovery: {
@@ -474,4 +479,18 @@ describe('DraftDiff', () => {
     expect(wrapper.find('.draft-field__label').exists()).toBe(true)
     expect(wrapper.find('.diff-block').exists()).toBe(false)
   })
+
+  it('renders chat preview mode without field headers or scroll containers', () => {
+    const wrapper = createWrapper({
+      current: { description: '<p>Old description</p>' },
+      draft: { description: '<p>New description</p>' },
+      chatPreview: true
+    })
+
+    expect(wrapper.find('.draft-diff--chat-preview').exists()).toBe(true)
+    expect(wrapper.find('.diff-block__header').exists()).toBe(false)
+    expect(wrapper.find('.diff-block__body--html').classes()).toContain('editor__content')
+    expect(wrapper.find('.draft-rendered-diff').classes()).toContain('ProseMirror')
+  })
+
 })
