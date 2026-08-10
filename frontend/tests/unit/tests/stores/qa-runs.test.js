@@ -160,4 +160,77 @@ describe('qa-runs store', () => {
     expect(store.getRun('audit:1').report).toEqual({ summary: 'A' })
     expect(store.getRun('audit:2').report).toEqual({ summary: 'B' })
   })
+
+  it('exposes safe defaults for missing keys', () => {
+    const store = useQaRunsStore()
+    expect(store.getRun(null)).toBeNull()
+    expect(store.getRun('missing')).toBeNull()
+    expect(store.isRunning(null)).toBe(false)
+    expect(store.isLoading('missing')).toBe(false)
+    expect(store.startedAt(null)).toBeNull()
+    expect(store.runScope('missing')).toBeNull()
+    expect(store.isJobRunning('missing')).toBe(false)
+  })
+
+  it.each([
+    [{ response: { data: { datas: 'server detail' } } }, '', 'server detail'],
+    [{ response: { status: 502 } }, 'fallback', 'The QA request timed out. Partial results may already be saved — try running again.'],
+    [{ response: { status: 504 } }, '', 'The QA request timed out. Partial results may already be saved — try running again.'],
+    [{ code: 'ECONNABORTED' }, '', 'The QA request timed out. Partial results may already be saved — try running again.'],
+    [new Error('request timeout'), '', 'The QA request timed out. Partial results may already be saved — try running again.'],
+    [new Error('boom'), 'fallback', 'fallback'],
+    [new Error('boom'), '', 'boom']
+  ])('normalizes load failures', async (error, fallback, expected) => {
+    const store = useQaRunsStore()
+    await store.load('audit:1', () => Promise.reject(error), { errorFallback: fallback })
+    expect(store.getRun('audit:1').error).toBe(expected)
+    expect(store.getRun('audit:1').loading).toBe(false)
+  })
+
+  it('does not let a run starting during a failed load publish its error', async () => {
+    const store = useQaRunsStore()
+    const fetch = deferred()
+    const run = deferred()
+    const loading = store.load('audit:1', () => fetch.promise)
+    const running = store.start('audit:1', () => run.promise)
+    fetch.reject(new Error('stale error'))
+    await loading
+    expect(store.getRun('audit:1').error).toBe('')
+    run.resolve()
+    await running
+    expect(store.getRun('audit:1').report).toBeNull()
+  })
+
+  it('clears stale progress and accepts runner-driven reports', async () => {
+    const store = useQaRunsStore()
+    store.setReport('audit:1', { progress: { processed: 3 } })
+    await store.start('audit:1', async ({ setReport }) => {
+      expect(store.getRun('audit:1').report.progress).toBeNull()
+      setReport(null)
+    })
+    expect(store.getRun('audit:1').report).toEqual({})
+  })
+
+  it('tracks background jobs, rejects duplicates, and resets them', async () => {
+    const store = useQaRunsStore()
+    store.setReport('audit:1', { progress: { processed: 3 } })
+    await store.startJob('audit:1', () => Promise.resolve({ job: { state: 'running' } }), { scope: 'ai' })
+    expect(store.isJobRunning('audit:1')).toBe(true)
+    expect(store.getRun('audit:1').report.progress).toBeNull()
+    const duplicate = vi.fn()
+    await store.startJob('audit:1', duplicate)
+    expect(duplicate).not.toHaveBeenCalled()
+    store.setJob('audit:1', null)
+    store.reset('missing')
+    expect(store.isJobRunning('audit:1')).toBe(false)
+  })
+
+  it('records startJob errors and inline empty results', async () => {
+    const store = useQaRunsStore()
+    await store.startJob('audit:1', () => Promise.reject(new Error('boom')), { errorFallback: 'fallback' })
+    expect(store.getRun('audit:1').error).toBe('fallback')
+    await store.startJob('audit:1', () => Promise.resolve(null))
+    expect(store.getRun('audit:1').report).toEqual({})
+    expect(store.getRun('audit:1').loaded).toBe(true)
+  })
 })

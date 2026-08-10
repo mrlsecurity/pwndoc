@@ -43,6 +43,7 @@ app-settings.json
 
 # Frontend test files
 storageState.*
+frontend/tests/e2e/.artifacts
 copilot-context.md
 
 # Coverage reports

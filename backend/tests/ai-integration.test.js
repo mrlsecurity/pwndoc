@@ -194,6 +194,54 @@ module.exports = function(request, app) {
             expect(response.body.datas.promptMappings).toBeUndefined();
         });
 
+        it('should deny the AI generation endpoints without an ai-assist permission', async () => {
+            let response = await request(app).get('/api/ai/enabled-fields?entityType=finding')
+                .set('Cookie', [`token=JWT ${noAiToken}`]);
+            expect(response.status).toBe(403);
+
+            response = await request(app).post('/api/ai/generate')
+                .set('Cookie', [`token=JWT ${noAiToken}`])
+                .send({ entityType: 'finding', fieldKey: 'description', context: {} });
+            expect(response.status).toBe(403);
+
+            // Base QA must not imply AI-assist.
+            response = await request(app).post('/api/ai/generate')
+                .set('Cookie', [`token=JWT ${baseQaToken}`])
+                .send({ entityType: 'finding', fieldKey: 'description', context: {} });
+            expect(response.status).toBe(403);
+        });
+
+        it('should enforce the three update scopes on the AI integration config independently', async () => {
+            // redactionReaderToken has a read scope but no update scope: every branch must reject.
+            const rejected = [
+                { globalPrompts: [] },
+                { promptMappings: [] },
+                { redactionGuidelines: { content: 'attacker policy' } },
+                { qaInstructions: { content: 'attacker checklist' } },
+                { qaChecks: { completeness: false } }
+            ];
+
+            for (const payload of rejected) {
+                const response = await request(app).put('/api/data/ai-integration')
+                    .set('Cookie', [`token=JWT ${redactionReaderToken}`])
+                    .send(payload);
+                expect(response.status).toBe(403);
+            }
+
+            const check = await request(app).get('/api/data/ai-integration')
+                .set('Cookie', [`token=JWT ${adminToken}`]);
+            expect(check.body.datas.redactionGuidelines.content).toBe('Secret redaction policy');
+            expect(check.body.datas.qaInstructions.content).toBe('Secret QA checklist');
+        });
+
+        it('should reject an AI integration update with no recognised payload', async () => {
+            const response = await request(app).put('/api/data/ai-integration')
+                .set('Cookie', [`token=JWT ${adminToken}`])
+                .send({ unrelated: true });
+
+            expect(response.status).toBe(422);
+        });
+
         it('should return full AI integration config for settings admins', async () => {
             const response = await request(app).get('/api/data/ai-integration')
                 .set('Cookie', [`token=JWT ${adminToken}`]);

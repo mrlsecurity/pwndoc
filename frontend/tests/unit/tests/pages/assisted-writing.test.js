@@ -226,6 +226,13 @@ describe('Assisted Writing Page', () => {
 
       expect(wrapper.text()).toContain('aiIntegration.pageTitleWriting')
     })
+
+    it('should surface loading failures', async () => {
+      DataService.getAiIntegration.mockRejectedValueOnce({ response: { data: { datas: 'Load failed' } } })
+      createWrapper()
+      await wrapper_flushPromises()
+      expect(Notify.create).toHaveBeenCalledWith(expect.objectContaining({ message: 'Load failed' }))
+    })
   })
 
   describe('promptTreeNodes', () => {
@@ -559,6 +566,18 @@ describe('Assisted Writing Page', () => {
   })
 
   describe('editor panel', () => {
+    it('should switch tree nodes and close a clean editor immediately', async () => {
+      const wrapper = createWrapper()
+      await wrapper_flushPromises()
+
+      wrapper.vm.selectTreeNode('findings')
+      expect(wrapper.vm.selectedNode).toBe('findings')
+
+      wrapper.vm.openFieldEditor(wrapper.vm.promptMappings[0])
+      wrapper.vm.closeEditor()
+      expect(wrapper.vm.editor).toBe(null)
+    })
+
     it('should open a field editor with a working copy and breadcrumbs', async () => {
       const wrapper = createWrapper()
       await wrapper_flushPromises()

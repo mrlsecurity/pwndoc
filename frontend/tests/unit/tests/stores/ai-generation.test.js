@@ -103,4 +103,43 @@ describe('closing/cancelling fully resets the store', () => {
 
     expect(store.conversation.messages.length).toBe(0)
   })
+
+  it('keeps a loading request alive unless cancellation is forced', async () => {
+    const store = useAiGenerationStore()
+    const promise = store.openSession({ title: 'AI', selectedText: 'picked', lockKey: 'field', onInsertAtCursor: vi.fn() })
+    const rejection = expect(promise).rejects.toThrow('cancelled')
+    store.setLoading(true)
+    store.closeDrawer()
+    expect(store.drawerOpen).toBe(false)
+    expect(store.sessionConfig).not.toBeNull()
+    expect(store.cancelSession()).toBe(false)
+    expect(store.cancelSession({ force: true })).toBe(true)
+    await rejection
+  })
+
+  it('covers field-generation, selection locking, provider and insert callbacks', async () => {
+    const insert = vi.fn()
+    const store = useAiGenerationStore()
+    const promise = store.openSession({ title: 'AI', selectedText: 'picked', lockKey: 'field', onInsertAtCursor: insert })
+    const rejection = expect(promise).rejects.toThrow('cancelled')
+    expect(store.isFieldGenerating()).toBe(false)
+    store.setLoading(true)
+    expect(store.isFieldGenerating('field')).toBe(true)
+    expect(store.isFieldSelectionLocked('field')).toBe(true)
+    store.insertDraftAtCursor('draft')
+    expect(insert).toHaveBeenCalledWith('draft')
+    store.setSelectedProvider('openai')
+    expect(store.selectedProvider).toBe('openai')
+    store.setSelectionAnchor({ from: 1 })
+    expect(store.selectionAnchor).toEqual({ from: 1 })
+    store.cancelSession({ force: true })
+    await rejection
+  })
+
+  it('closes an already empty drawer', () => {
+    const store = useAiGenerationStore()
+    store.drawerOpen = true
+    store.closeDrawer()
+    expect(store.drawerOpen).toBe(false)
+  })
 })

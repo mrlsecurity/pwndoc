@@ -267,6 +267,13 @@ const getErrorMessage = (err) => {
     }
 };
 
+// Provider error bodies quote the offending credential back, and reach any AI-assist user.
+const redactSecrets = (text = '') => String(text)
+    .replace(/\b(sk|xai|gsk|pplx|rk)-[A-Za-z0-9_-]{8,}/g, '$1-[redacted]')
+    .replace(/\b(AKIA|ASIA)[0-9A-Z]{8,}/g, '$1[redacted]')
+    .replace(/\b(sk-ant|anthropic)[A-Za-z0-9_-]{8,}/gi, '$1-[redacted]')
+    .replace(/(\/\/[^/\s:@]+):[^/\s@]+@/g, '$1:[redacted]@');
+
 const mapLlmError = (err, providerLabel, timeoutMs) => {
     if (err && err.name === 'AbortError') {
         return {
@@ -289,13 +296,15 @@ const mapLlmError = (err, providerLabel, timeoutMs) => {
         else if (err.body)
             detail = JSON.stringify(err.body);
 
+        detail = redactSecrets(detail);
+
         return {
             fn: 'BadRequest',
             message: `${providerLabel} returned HTTP ${err.status}${detail ? `: ${detail}` : ''}`
         };
     }
 
-    const detail = getErrorMessage(err);
+    const detail = redactSecrets(getErrorMessage(err));
     if (detail.includes("reading 'message'")) {
         return {
             fn: 'BadRequest',
@@ -552,11 +561,14 @@ const buildQaSystemPrompt = (scopeInstruction = '') => {
 const QA_SEVERITIES = ['error', 'warning', 'info'];
 const QA_CATEGORIES = ['completeness', 'redaction', 'customer', 'instructions', 'references', 'imageCaptions', 'duplicates', 'aiDuplicates', 'aiUnlinkedTranslations', 'other'];
 
+// Dropping these collapses every duplicate/translation pair into an unpaired issue.
+const QA_ISSUE_LINK_FIELDS =['vulnerabilityId', 'templateTitle', 'locale', 'reason', 'relatedTemplates', 'relatedTitles'];
+
 const normalizeQaIssueFromParsed = (issue = {}) => {
     const severity = QA_SEVERITIES.includes(issue.severity) ? issue.severity : 'warning';
     const category = QA_CATEGORIES.includes(issue.category) ? issue.category : 'other';
 
-    return {
+    const normalized = {
         severity: severity,
         category: category,
         title: String(issue.title || 'Issue').trim(),
@@ -564,6 +576,13 @@ const normalizeQaIssueFromParsed = (issue = {}) => {
         location: String(issue.location || 'report').trim() || 'report',
         source: 'ai'
     };
+
+    QA_ISSUE_LINK_FIELDS.forEach((field) => {
+        if (issue[field] !== undefined && issue[field] !== null)
+            normalized[field] = issue[field];
+    });
+
+    return normalized;
 };
 
 const getQaIssuesFromParsed = (parsed = {}, providerLabel = 'AI provider') => {
@@ -1088,5 +1107,13 @@ module.exports = {
     runVulnerabilityTemplateQaWithProvider,
     runVulnerabilityUnlinkedTranslationQaWithProvider,
     runVulnerabilityDuplicateQaWithProvider,
-    testProviderConnection
+    testProviderConnection,
+    // Exported for tests
+    extractJsonObjectFromText,
+    getQaIssuesFromParsed,
+    getDraftFromParsed,
+    normalizeChatMessages,
+    mapLlmError,
+    buildLlmConfig,
+    configureChatTemperature
 };

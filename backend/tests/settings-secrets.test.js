@@ -58,6 +58,17 @@ module.exports = function() {
                 expect(merged.ai.private.openaiApiKey).toBe('');
             });
 
+            // Regression guard for "API key lost after disabling AI".
+            it('preserves stored secrets when the payload omits the private branch', () => {
+                const existing = buildSettings('persisted-key');
+                const incoming = { ai: { public: { enabled: false } } };
+
+                const merged = mergeSettingsSecrets(incoming, existing);
+
+                expect(merged.ai.private).toBeUndefined();
+                expect(existing.ai.private.openaiApiKey).toBe('persisted-key');
+            });
+
             it('sets a new secret when the client submits a different value', () => {
                 const existing = buildSettings('old-key');
                 const incoming = buildSettings('new-key');

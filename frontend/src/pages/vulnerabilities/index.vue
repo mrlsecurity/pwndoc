@@ -37,15 +37,19 @@
                     options-sanitize
                     outlined
                     />
-                    <q-btn
-                    class="q-ml-sm vuln-filter-btn"
-                    outline
-                    data-testid="vulnerability-filters"
-                    :color="activeFilterCount > 0 ? 'primary' : 'grey-7'"
-                    >
-                        <q-icon name="o_filter_alt" size="20px" />
-                        <q-badge v-if="activeFilterCount > 0" floating rounded color="primary">{{activeFilterCount}}</q-badge>
-                        <q-menu anchor="top right" self="top left" :offset="[8, 0]">
+                    <div class="q-ml-sm">
+                        <q-btn
+                        class="vuln-filter-btn"
+                        outline
+                        data-testid="vulnerability-filters"
+                        :aria-label="$t('filters')"
+                        :color="activeFilterCount > 0 ? 'primary' : 'grey-7'"
+                        >
+                            <q-icon name="o_filter_alt" size="20px" />
+                            <q-badge v-if="activeFilterCount > 0" floating rounded color="primary">{{activeFilterCount}}</q-badge>
+                            <q-tooltip anchor="bottom middle" self="center middle" :delay="500" class="text-bold">{{$t('filters')}}</q-tooltip>
+                        </q-btn>
+                        <q-menu style="width: 300px; min-height: 1px; max-height: 75vh" anchor="top right" self="top left" :offset="[8, 0]">
                             <div class="vuln-filter-popover column no-wrap">
                                 <div class="row items-center q-px-md q-pt-md">
                                     <span class="text-subtitle2">{{$t('filters')}}</span>
@@ -175,8 +179,7 @@
                                 </div>
                             </div>
                         </q-menu>
-                        <q-tooltip anchor="bottom middle" self="center middle" :delay="500" class="text-bold">{{$t('filters')}}</q-tooltip>
-                    </q-btn>
+                    </div>
                 </div>
 
                 <div class="row items-center q-gutter-xs q-mt-sm no-wrap">

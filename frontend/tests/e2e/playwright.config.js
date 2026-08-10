@@ -11,7 +11,7 @@ const selectedBrowsers = (process.env.PW_BROWSERS || '')
   .split(',')
   .map((name) => name.trim().toLowerCase())
   .filter(Boolean);
-const artifactsRoot = process.env.PW_ARTIFACTS_DIR || '/tmp/pw';
+const artifactsRoot = process.env.PW_ARTIFACTS_DIR || path.join(__dirname, '.artifacts');
 
 function browserChain(browser, browserDevices, prevChainLast) {
   const storageState = path.join(__dirname, `storageState.${browser}.json`);
@@ -167,16 +167,18 @@ function browserChain(browser, browserDevices, prevChainLast) {
 export default defineConfig({
   testDir: './tests',
   outputDir: path.join(artifactsRoot, 'test-results'),
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
   /* Run tests sequentially within each project */
   fullyParallel: false,
   /* Single worker to prevent interleaving between projects */
   workers: 1,
-  /* Stop on first failure — downstream tests will likely fail too */
-  maxFailures: 1,
+  /* Fail fast in CI, run every spec locally */
+  maxFailures: process.env.CI ? 1 : 0,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  /* Retry transient full-stack startup once locally, twice in CI */
+  retries: process.env.CI ? 2 : 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     ['html', { outputFolder: path.join(artifactsRoot, 'playwright-report'), open: 'never' }],

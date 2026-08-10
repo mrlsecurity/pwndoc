@@ -5,7 +5,7 @@ const RECOVERY_CATEGORY = 'Critical Findings';
 async function openCreateVulnerability(page, category = 'No Category') {
   await page.getByTestId('new-vulnerability-button').click();
   await expect(page.getByText('Select category')).toBeVisible();
-  await page.locator('.q-menu').getByRole('listitem').filter({ hasText: category }).click();
+  await page.getByRole('listitem').filter({ hasText: new RegExp(`^${category}$`) }).click();
   await expect(page.getByTestId('vulnerability-create-pane')).toBeVisible();
   await expect(page.getByTestId('vulnerability-created-by')).toHaveCount(0);
   await expect(page.getByTestId('create-vulnerability-title')).toBeVisible();
@@ -124,7 +124,8 @@ async function deleteDrafts(page, predicateSource, arg) {
   }, { predicateSource, arg });
 }
 
-async function createVulnerabilityViaApi(request, title, category = null) {
+async function createVulnerabilityViaApi(request, title, category = null, overrides = {}) {
+  const { detail = {}, ...vulnerabilityOverrides } = overrides;
   const payload = [{
     category,
     status: 0,
@@ -132,6 +133,7 @@ async function createVulnerabilityViaApi(request, title, category = null) {
     cvssv4: '',
     priority: '',
     remediationComplexity: '',
+    ...vulnerabilityOverrides,
     details: [{
       locale: 'en',
       title,
@@ -141,6 +143,7 @@ async function createVulnerabilityViaApi(request, title, category = null) {
       remediation: '',
       references: [],
       customFields: [],
+      ...detail,
     }],
   }];
 
@@ -214,7 +217,7 @@ test.describe('Vulnerabilities Page', () => {
       // Click "New Vulnerability" dropdown and wait for menu to appear
       await page.getByTestId('new-vulnerability-button').click();
       await expect(page.getByText('Select category')).toBeVisible();
-      await page.locator('.q-menu').getByRole('listitem').filter({ hasText: 'No Category' }).click();
+      await page.getByRole('listitem').filter({ hasText: /^No Category$/ }).click();
 
       // Wait for the create pane to open and fill in the title
       await expect(page.getByTestId('vulnerability-create-pane')).toBeVisible();
@@ -233,7 +236,7 @@ test.describe('Vulnerabilities Page', () => {
     test('should edit an existing vulnerability', async ({ page }) => {
       // First create a vulnerability to edit
       await page.getByTestId('new-vulnerability-button').click();
-      await page.locator('.q-menu').getByRole('listitem').filter({ hasText: 'No Category' }).click();
+      await page.getByRole('listitem').filter({ hasText: /^No Category$/ }).click();
       await page.getByTestId('create-vulnerability-title').fill('Vuln To Edit');
       await page.getByTestId('save-vulnerability-button').click();
       await expect(page.getByTestId('save-vulnerability-button')).toContainText('Saved');
@@ -264,7 +267,7 @@ test.describe('Vulnerabilities Page', () => {
     test('should delete a vulnerability', async ({ page }) => {
       // First create a vulnerability to delete
       await page.getByTestId('new-vulnerability-button').click();
-      await page.locator('.q-menu').getByRole('listitem').filter({ hasText: 'No Category' }).click();
+      await page.getByRole('listitem').filter({ hasText: /^No Category$/ }).click();
       await page.getByTestId('create-vulnerability-title').fill('Vuln To Delete');
       await page.getByTestId('save-vulnerability-button').click();
       await expect(page.getByTestId('save-vulnerability-button')).toContainText('Saved');
@@ -287,17 +290,196 @@ test.describe('Vulnerabilities Page', () => {
     });
   });
 
+  test.describe('Quality Assurance', () => {
+    test('should run built-in checks without AI provider credentials', async ({ page, request }) => {
+      const title = `E2E Built-in QA ${Date.now()}`;
+      await createVulnerabilityViaApi(request, title);
+      await page.reload();
+      await openEditVulnerability(page, title);
+
+      await page.getByTestId('vulnerability-qa-toggle').click();
+      await expect(page.getByText('QA Review', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Run Built-in Checks' }).click();
+
+      await expect(page.getByText('Missing description', { exact: true })).toBeVisible();
+      await expect(page.getByText('Missing remediation', { exact: true })).toBeVisible();
+      await expect(page.getByText('Missing observation', { exact: true })).toBeVisible();
+    });
+
+    test('should run catalog built-in checks and keep the dock open while navigating to a result', async ({ page, request }) => {
+      const title = `E2E Catalog QA ${Date.now()}`;
+      await createVulnerabilityViaApi(request, title);
+      await page.reload();
+
+      await page.getByTestId('vulnerability-qa-all-toggle').click();
+      const dock = page.getByTestId('vulnerability-qa-dock');
+      await expect(dock.getByText('Vulnerability Database QA Review')).toBeVisible();
+      await dock.getByRole('button', { name: /^(Run Built-in Checks|Run again Built-in checks)$/i }).click();
+
+      await expect(dock.getByText(/Reviewed \d+ vulnerabilities for the selected language\./)).toBeVisible();
+      await dock.getByTestId('qa-text-filter').fill(title);
+      const goToVulnerability = dock.getByRole('listitem').filter({ hasText: title })
+        .getByRole('button', { name: 'Go to vulnerability' });
+      await expect(goToVulnerability).toBeVisible();
+      await goToVulnerability.click();
+
+      await expect(page.getByTestId('edit-vulnerability-title')).toHaveValue(title);
+      await expect(dock).toBeVisible();
+    });
+  });
+
+  test.describe('Update proposals', () => {
+    test('should compare and dismiss a proposal from the review modal', async ({ page, request }) => {
+      const title = `E2E Proposal ${Date.now()}`;
+      await createVulnerabilityViaApi(request, title, null, {
+        detail: { description: '<p>Current description</p>' },
+      });
+      const proposal = await request.post('/api/vulnerabilities/finding/en', {
+        data: { title, description: '<p>Proposed description</p>' },
+      });
+      expect(proposal.ok()).toBeTruthy();
+      await page.reload();
+      await openEditVulnerability(page, title);
+
+      await page.getByTestId('vulnerability-updates-button').click();
+      const modal = page.getByRole('dialog').filter({ hasText: 'Review vulnerability proposals' });
+      await expect(modal.getByText('Current version · English')).toBeVisible();
+      await expect(modal.getByText(/Proposed version/)).toBeVisible();
+      await expect(modal.getByTestId('updates-current-title')).toHaveValue(title);
+      await expect(modal.getByTestId('vulnerability-update-proposal').getByText('Proposed description')).toBeVisible();
+
+      await modal.getByTestId('dismiss-vulnerability-update-button').click();
+      const confirmation = page.getByRole('dialog').filter({ hasText: 'Confirm dismissal' });
+      await confirmation.getByRole('button', { name: 'Confirm' }).click();
+      await expect(page.getByText('Update proposals dismissed successfully')).toBeVisible();
+      await expect(page.getByTestId('vulnerability-updates-button')).not.toBeVisible();
+    });
+  });
+
+  test.describe('Assisted writing', () => {
+    test('should preview and apply a generated description before saving it', async ({ page, request }) => {
+      const title = `E2E AI Description ${Date.now()}`;
+      const generated = 'Generated vulnerability description';
+      const settingsResponse = await request.get('/api/settings');
+      expect(settingsResponse.ok()).toBeTruthy();
+      const settings = (await settingsResponse.json()).datas;
+      const aiWasEnabled = settings.ai.public.enabled;
+      settings.ai.public.enabled = true;
+      expect((await request.put('/api/settings', { data: settings })).ok()).toBeTruthy();
+
+      try {
+        await createVulnerabilityViaApi(request, title);
+        let generatePayload;
+        await page.route('**/api/ai/generate', async (route) => {
+          generatePayload = route.request().postDataJSON();
+          await route.fulfill({
+            status: 200,
+            contentType: 'text/event-stream',
+            body: `event: done\ndata: ${JSON.stringify({ draft: `<p>${generated}</p>`, reply: 'Draft ready' })}\n\n`,
+          });
+        });
+        await page.reload();
+        await openEditVulnerability(page, title);
+
+        const pane = page.getByTestId('vulnerability-edit-pane');
+        await pane.getByTestId('editor-ai-action').first().click();
+        const drawer = page.locator('.ai-chat-drawer__panel');
+        await expect(drawer.getByText('AI - Description')).toBeVisible();
+        await expect(drawer.getByText('How can I help?')).toBeVisible();
+        await expect(drawer.getByText('OpenAI', { exact: true })).toBeVisible();
+        await drawer.getByPlaceholder('Ask anything').fill('Write the description');
+        await drawer.getByRole('button', { name: 'Send' }).click();
+
+        await expect(drawer.getByText('Draft ready')).toBeVisible();
+        await drawer.getByRole('button', { name: 'Preview changes' }).click();
+        await expect(drawer.getByRole('button', { name: 'Original response' })).toBeVisible();
+        await drawer.getByRole('button', { name: 'Apply to field' }).click();
+        expect(generatePayload).toMatchObject({ entityType: 'finding', field: 'description', locale: 'en' });
+        await drawer.getByRole('button').first().click();
+
+        await expect(pane.getByText(generated, { exact: true })).toBeVisible();
+        await pane.getByTestId('save-vulnerability-button').click();
+        await expect(pane.getByTestId('save-vulnerability-button')).toContainText('Saved');
+        await page.reload();
+        await expect(page.getByTestId('edit-vulnerability-title')).toHaveValue(title);
+        await expect(page.getByTestId('vulnerability-edit-pane').getByText(generated, { exact: true })).toBeVisible();
+      }
+      finally {
+        settings.ai.public.enabled = aiWasEnabled;
+        expect((await request.put('/api/settings', { data: settings })).ok()).toBeTruthy();
+      }
+    });
+  });
+
   test.describe('Search and Filter', () => {
+    test('should combine status and advanced filters, clear them, and reverse title sort', async ({ page, request }) => {
+      const runId = `E2E Browse ${Date.now()}`;
+      const titles = {
+        alpha: `${runId} A Valid`,
+        beta: `${runId} B Valid`,
+        created: `${runId} C New`,
+        updated: `${runId} D Updates`,
+      };
+      await createVulnerabilityViaApi(request, titles.alpha, 'Critical Findings', {
+        cvssv3: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+        detail: { vulnType: 'Web Application' },
+      });
+      await createVulnerabilityViaApi(request, titles.beta, 'Minor Findings', {
+        detail: { vulnType: 'Network' },
+      });
+      const created = await request.post('/api/vulnerabilities/finding/en', {
+        data: { title: titles.created, category: 'Critical Findings', vulnType: 'Network' },
+      });
+      expect(created.ok()).toBeTruthy();
+      await createVulnerabilityViaApi(request, titles.updated, 'Critical Findings', {
+        detail: { vulnType: 'Network' },
+      });
+      const updated = await request.post('/api/vulnerabilities/finding/en', {
+        data: { title: titles.updated, category: 'Critical Findings', vulnType: 'Network', description: 'Changed' },
+      });
+      expect(updated.ok()).toBeTruthy();
+      await page.reload();
+
+      const search = page.getByTestId('search-vulnerability-title');
+      await search.fill(runId);
+      const item = (title) => page.getByRole('listitem').filter({ hasText: title });
+      for (const title of Object.values(titles))
+        await expect(item(title)).toBeVisible();
+
+      await page.getByRole('button', { name: 'Filters' }).click();
+      await page.getByLabel('Critical Findings').check();
+      await page.getByLabel('Web Application').check();
+      await expect(item(titles.alpha)).toBeVisible();
+      await expect(item(titles.updated)).not.toBeVisible();
+      await page.getByRole('button', { name: 'Clear all' }).click();
+      for (const title of Object.values(titles))
+        await expect(item(title)).toBeVisible();
+      await page.keyboard.press('Escape');
+
+      await page.getByTestId('status-filter-new').click();
+      await expect(item(titles.created)).toBeVisible();
+      await expect(item(titles.alpha)).not.toBeVisible();
+      await page.getByTestId('status-filter-updates').click();
+      await expect(item(titles.updated)).toBeVisible();
+      await expect(item(titles.created)).not.toBeVisible();
+      await page.getByTestId('status-filter-all').click();
+
+      await page.getByTestId('vulnerability-sort').click();
+      await page.getByRole('listitem').filter({ hasText: /^Title/ }).click();
+      await expect.poll(async () => (await page.getByRole('listitem').filter({ hasText: runId }).first().innerText()))
+        .toContain(titles.updated);
+    });
+
     test('should filter vulnerabilities by title search', async ({ page }) => {
       // Create two vulnerabilities with different titles
       await page.getByTestId('new-vulnerability-button').click();
-      await page.locator('.q-menu').getByRole('listitem').filter({ hasText: 'No Category' }).click();
+      await page.getByRole('listitem').filter({ hasText: /^No Category$/ }).click();
       await page.getByTestId('create-vulnerability-title').fill('XSS Reflected');
       await page.getByTestId('save-vulnerability-button').click();
       await expect(page.getByTestId('save-vulnerability-button')).toContainText('Saved');
 
       await page.getByTestId('new-vulnerability-button').click();
-      await page.locator('.q-menu').getByRole('listitem').filter({ hasText: 'No Category' }).click();
+      await page.getByRole('listitem').filter({ hasText: /^No Category$/ }).click();
       await page.getByTestId('create-vulnerability-title').fill('CSRF Token Missing');
       await page.getByTestId('save-vulnerability-button').click();
       await expect(page.getByTestId('save-vulnerability-button')).toContainText('Saved');
@@ -327,7 +509,7 @@ test.describe('Vulnerabilities Page', () => {
       await page.getByTestId('new-vulnerability-button').click();
 
       // Select "No Category"
-      await page.locator('.q-menu').getByRole('listitem').filter({ hasText: 'No Category' }).click();
+      await page.getByRole('listitem').filter({ hasText: /^No Category$/ }).click();
 
       // Verify create pane opened
       await expect(page.getByTestId('vulnerability-create-pane')).toBeVisible();
@@ -368,7 +550,7 @@ test.describe('Vulnerabilities Page', () => {
         await page.getByTestId('new-vulnerability-button').click();
         await expect(page.getByText('Select category')).toBeVisible();
         await expect(page.getByTestId('create-vulnerability-draft-badge-none')).toBeVisible();
-        await page.locator('.q-menu').getByRole('listitem').filter({ hasText: 'No Category' }).click();
+        await page.getByRole('listitem').filter({ hasText: /^No Category$/ }).click();
         await expect(page.getByTestId('create-vulnerability-title')).toHaveValue(noCategoryDraftTitle);
         await expect(page.getByTestId('vulnerability-detail-pane').getByTestId('draft-recovery-status')).toBeVisible();
 

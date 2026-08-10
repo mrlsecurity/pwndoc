@@ -370,3 +370,96 @@ describe('AiFieldHelper.getOutputType', () => {
     expect(AiFieldHelper.getOutputType(null, { customField: { fieldType: 'unknown' } })).toBe('text')
   })
 })
+
+describe('AiFieldHelper value helpers', () => {
+  it('resolves standard/custom labels and prompt context values', () => {
+    expect(AiFieldHelper.getFieldLabel('poc', null, 'poc')).toBe('Proofs')
+    expect(AiFieldHelper.getFieldLabel('unknown', null, 'fallback')).toBe('fallback')
+    expect(AiFieldHelper.getFieldLabel(null, { customField: { label: 'Custom' } }, 'x')).toBe('Custom')
+    expect(AiFieldHelper.getDefaultPrompt([
+      { fieldKey: 'description', prompt: 'Use {title}: {refs}; {missing}; {meta}' }
+    ], 'description', { title: 'A', refs: ['one', 'two'], missing: null, meta: { safe: true } }))
+      .toBe('Use A: one, two; ; {"safe":true}')
+    expect(AiFieldHelper.getDefaultPrompt(null, 'missing')).toBe('')
+  })
+
+  it('reads non-empty DOM input selections only', () => {
+    expect(AiFieldHelper.getInputSelection(null)).toBeNull()
+    const el = { selectionStart: 1, selectionEnd: 4, value: 'abcde' }
+    expect(AiFieldHelper.getInputSelection({ $el: { querySelector: () => el } })).toEqual({
+      start: 1, end: 4, text: 'bcd', html: 'bcd'
+    })
+    el.selectionEnd = 1
+    expect(AiFieldHelper.getInputSelection({ $el: { querySelector: () => el } })).toBeNull()
+  })
+
+  it('normalizes array/html/text field applications', () => {
+    const setValue = vi.fn()
+    AiFieldHelper.applyFieldDraft({ draft: [' a ', '', 'b'], outputType: 'array', setValue })
+    expect(setValue).toHaveBeenLastCalledWith(['a', 'b'])
+    AiFieldHelper.applyFieldDraft({ draft: ' a\n\n b ', outputType: 'array', setValue })
+    expect(setValue).toHaveBeenLastCalledWith(['a', 'b'])
+    AiFieldHelper.applyFieldDraft({ draft: '<script>x</script><p>ok</p>', outputType: 'html', setValue })
+    expect(setValue).toHaveBeenLastCalledWith('<p>ok</p>')
+    AiFieldHelper.applyFieldDraft({ draft: ' text ', outputType: 'text', setValue })
+    expect(setValue).toHaveBeenLastCalledWith('text')
+  })
+
+  it('builds isolated context objects for findings, sections and vulnerabilities', () => {
+    expect(AiFieldHelper.buildFindingAiContext({
+      title: 'Finding', references: ['r'], customFields: [
+        { customField: { label: 'Named' }, text: 'value' }, { customField: {}, text: 'ignored' }
+      ]
+    }, { customField: { label: 'Named' }, text: 'value' })).toMatchObject({
+      title: 'Finding', observation: '', references: ['r'], customFieldLabel: 'Named', customFields: { Named: 'value' }
+    })
+    expect(AiFieldHelper.buildSectionAiContext({ field: 'summary', customFields: [] })).toMatchObject({
+      sectionField: 'summary', sectionName: '', customFields: {}
+    })
+    expect(AiFieldHelper.buildVulnerabilityAiContext({ category: 'Web' }, {
+      title: 'Vulnerability', customFields: [{ customField: { label: 'CV' }, text: 'x' }]
+    })).toMatchObject({ category: 'Web', title: 'Vulnerability', customFields: { CV: 'x' } })
+  })
+
+  it('supports custom fields, array selections and missing diff targets', () => {
+    expect(AiFieldHelper.buildAiDiffDraft(null, 'draft')).toBeNull()
+    const entity = { customFields: [{ customField: 'id', text: 'old' }], references: ['one', 'two'] }
+    const custom = AiFieldHelper.buildAiDiffDraft({
+      getDiffEntity: () => entity, entityShape: 'finding', fieldKey: 'custom-field:id', outputType: 'text', mode: 'field'
+    }, 'new')
+    expect(custom.customFields[0].text).toBe('new')
+    const array = AiFieldHelper.buildAiDiffDraft({
+      getDiffEntity: () => entity, entityShape: 'finding', fieldKey: 'references', outputType: 'array', mode: 'selection',
+      selection: { start: 4, end: 7 }
+    }, ['three'])
+    expect(array.references).toEqual(['one', 'three'])
+    expect(AiFieldHelper.buildAiDiffDraft({
+      getDiffEntity: () => entity, entityShape: 'finding', fieldKey: 'references', outputType: 'array', mode: 'selection', selection: {}
+    }, ['x'])).toBeNull()
+  })
+
+  it('uses editor fallback replacement and exposes session locks', async () => {
+    const replaceTextSelection = vi.fn()
+    AiFieldHelper.applySelectionDraft({
+      selectionTarget: { editor: { replaceTextSelection } }, selection: { start: 0, end: 1 }, draft: 'x', outputType: 'text'
+    })
+    expect(replaceTextSelection).toHaveBeenCalled()
+    expect(AiFieldHelper.isFieldSessionActive('field')).toBe(false)
+    expect(AiFieldHelper.isFieldSelectionLocked('field')).toBe(false)
+  })
+})
+
+describe('AiFieldHelper cancellation and error handling', () => {
+  it('runs cancellation callbacks for field and selection sessions', async () => {
+    const onCancel = vi.fn()
+    const field = AiFieldHelper.runFieldAiChat({ title: 'AI', outputType: 'text', requestParams: { field: 'x', context: {} }, onCancel })
+    useAiGenerationStore().cancelSession({ force: true })
+    await expect(field).resolves.toBeNull()
+    const selection = AiFieldHelper.runSelectionAiChat({
+      title: 'AI', selectedText: 'x', outputType: 'text', requestParams: {}, onCancel
+    })
+    useAiGenerationStore().cancelSession({ force: true })
+    await expect(selection).resolves.toBeNull()
+    expect(onCancel).toHaveBeenCalledTimes(2)
+  })
+})

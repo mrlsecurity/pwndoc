@@ -44,6 +44,7 @@ services:
     environment:
       - BASE_URL=https://pwndoc-frontend:8443
       - DEMO_OUTPUT_DIR=/app/demos
+      - CI
     depends_on:
       - pwndoc-frontend
     networks:
