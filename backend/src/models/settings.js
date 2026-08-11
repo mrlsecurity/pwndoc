@@ -294,6 +294,7 @@ SettingSchema.statics.restore = (path) => {
             return new Promise((resolve, reject) => {
                 const readStream = fs.createReadStream(`${path}/settings.json`)
                 const JSONStream = require('JSONStream')
+                const documents = []
 
                 let jsonStream = JSONStream.parse('*')
                 readStream.pipe(jsonStream)
@@ -302,15 +303,26 @@ SettingSchema.statics.restore = (path) => {
                     reject(error)
                 })
 
-                jsonStream.on('data', async (document) => {
-                    Settings.findOneAndReplace({_id: document._id}, document, { upsert: true })
-                    .catch(err => {
-                        console.log(err)
-                        reject(err)
-                    })
+                // Collect docs synchronously; resolve only after bulkWrite completes.
+                // Resolving on stream 'end' alone raced ensureInitialized() and created a
+                // second Settings document via create({}).
+                jsonStream.on('data', (document) => {
+                    documents.push(document)
                 })
                 jsonStream.on('end', () => {
-                    resolve()
+                    if (documents.length === 0) {
+                        resolve()
+                        return
+                    }
+                    Settings.bulkWrite(documents.map(document => ({
+                        replaceOne: {
+                            filter: {_id: document._id},
+                            replacement: document,
+                            upsert: true
+                        }
+                    })))
+                    .then(() => resolve())
+                    .catch(err => reject(err))
                 })
                 jsonStream.on('error', (error) => {
                     reject(error)
