@@ -16,6 +16,38 @@ const LanguageToolHelpingWords = {
   WordIgnoredEventName: 'spellcheck-word-ignored',
 }
 
+// Code content must never be spellchecked. Note the two are different schema
+// concepts: `codeBlock` is a NODE (so it can be filtered by node type), while
+// inline `code` is a MARK carried by ordinary text nodes — it has no node type
+// of its own and must be detected through node.marks.
+const EXCLUDED_NODE_TYPES = ['codeBlock']
+const EXCLUDED_MARK_TYPES = ['code']
+
+const hasExcludedMark = (node) =>
+  !!node?.marks?.some(mark => EXCLUDED_MARK_TYPES.includes(mark.type.name))
+
+// True when any text in [from, to) carries an excluded mark, used to drop
+// matches that LanguageTool returned for a block containing inline code.
+const rangeHasExcludedMark = (doc, from, to) => {
+  if (!doc || from >= to) return false
+
+  let found = false
+  try {
+    doc.nodesBetween(from, to, (node) => {
+      if (found) return false
+      if (node.isText && hasExcludedMark(node)) {
+        found = true
+        return false
+      }
+      return true
+    })
+  } catch (_) {
+    // Stale positions against a newer doc — fail open rather than throw.
+    return false
+  }
+  return found
+}
+
 const updateMatchAndRange = (storage, m, range) => {
   storage.match = m || undefined
   storage.matchRange = range || undefined
@@ -186,6 +218,11 @@ const getMatchAndSetDecorations = async (storage, doc, text, originalFrom, offse
       docFrom = match.offset + originalFrom
       docTo = docFrom + match.length
     }
+    // The per-block path sends a whole block's textContent, which may include
+    // inline `code` spans. Drop any match that lands on code-marked text.
+    if (rangeHasExcludedMark(doc, docFrom, docTo))
+      continue
+
     decorations.push(gimmeDecoration(docFrom, docTo, match))
   }
 
@@ -218,7 +255,7 @@ const proofreadAndDecorateWholeDoc = async (storage, doc) => {
   let index = 0
 
   doc.descendants((node, pos, parent) => {
-    if (node.isText && parent?.type.name !== 'codeBlock') {
+    if (node.isText && !EXCLUDED_NODE_TYPES.includes(parent?.type.name) && !hasExcludedMark(node)) {
       if (textNodesWithPosition[index]) {
         const text = textNodesWithPosition[index].text + node.text
         const from = textNodesWithPosition[index].from
@@ -482,7 +519,7 @@ export const LanguageTool = Extension.create({
 
                 tr.doc.descendants((node, pos) => {
                   if (!node.isBlock) return false
-                  if (node.type.name === 'codeBlock') return false
+                  if (EXCLUDED_NODE_TYPES.includes(node.type.name)) return false
 
                   const nodeFrom = pos
                   const nodeTo = pos + node.nodeSize

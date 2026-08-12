@@ -210,6 +210,83 @@
                     </q-list>
                 </q-card-section>
             </q-card>
+
+            <q-card class="q-mt-md" data-testid="api-key-card">
+                <q-card-section class="q-py-xs bg-blue-grey-5 text-white">
+                    <div class="text-h6">{{ $t('apiKeys') }}</div>
+                </q-card-section>
+                <q-separator />
+
+                <!-- No key yet -->
+                <q-card-section v-if="!apiKey">
+                    <div class="text-grey-7 q-mb-md">{{ $t('apiKeyIntro') }}</div>
+                    <q-input
+                        v-model="apiKeyNewName"
+                        :label="$t('apiKeyName')"
+                        outlined stack-label
+                        data-testid="api-key-name-input"
+                        @keyup.enter="createApiKey"
+                    >
+                        <template v-slot:append>
+                            <q-btn :label="$t('btn.create')" unelevated color="secondary" @click="createApiKey" data-testid="api-key-create-btn" />
+                        </template>
+                    </q-input>
+                </q-card-section>
+
+                <!-- Existing key -->
+                <q-card-section v-else>
+                    <q-list dense>
+                        <q-item><q-item-section side>{{ $t('name') }}</q-item-section><q-item-section>{{ apiKey.name }}</q-item-section></q-item>
+                        <q-item><q-item-section side>{{ $t('apiKeyPrefix') }}</q-item-section><q-item-section><code>{{ apiKey.prefix }}…</code></q-item-section></q-item>
+                        <q-item><q-item-section side>{{ $t('created') }}</q-item-section><q-item-section>{{ new Date(apiKey.created).toLocaleString() }}</q-item-section></q-item>
+                        <q-item><q-item-section side>{{ $t('lastUsed') }}</q-item-section><q-item-section>{{ apiKey.lastUsed ? new Date(apiKey.lastUsed).toLocaleString() : $t('never') }}</q-item-section></q-item>
+                    </q-list>
+                    <q-btn :label="$t('btn.revoke')" color="negative" unelevated class="q-mt-sm" @click="revokeApiKey" data-testid="api-key-revoke-btn" />
+
+                    <q-expansion-item
+                        class="q-mt-md"
+                        icon="history"
+                        :label="$t('apiKeyRecentAccesses') + ' (' + apiKey.recentAccesses.length + ')'"
+                    >
+                        <div v-if="apiKey.recentAccesses.length === 0" class="q-pa-md text-grey-7">{{ $t('apiKeyNoAccesses') }}</div>
+                        <q-markup-table v-else dense flat>
+                            <thead>
+                                <tr>
+                                    <th class="text-left">{{ $t('time') }}</th>
+                                    <th class="text-left">{{ $t('ipAddress') }}</th>
+                                    <th class="text-left">{{ $t('userAgent') }}</th>
+                                    <th class="text-left">{{ $t('action') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(a, i) in apiKey.recentAccesses" :key="i">
+                                    <td>{{ new Date(a.at).toLocaleString() }}</td>
+                                    <td>{{ a.ip }}</td>
+                                    <td :title="a.userAgent">{{ (a.userAgent || '').slice(0, 40) }}{{ (a.userAgent || '').length > 40 ? '…' : '' }}</td>
+                                    <td>{{ a.action }}</td>
+                                </tr>
+                            </tbody>
+                        </q-markup-table>
+                    </q-expansion-item>
+                </q-card-section>
+            </q-card>
+
+            <!-- Reveal dialog -->
+            <q-dialog v-model="apiKeyReveal.show" persistent>
+                <q-card style="min-width: 520px; max-width: 90vw;">
+                    <q-card-section class="bg-warning text-black">
+                        <div class="text-h6">{{ $t('apiKeyCreatedTitle') }}</div>
+                    </q-card-section>
+                    <q-card-section>
+                        <div class="q-mb-sm text-negative">{{ $t('apiKeyCopyWarning') }}</div>
+                        <q-input readonly :model-value="apiKeyReveal.key" type="textarea" autogrow outlined data-testid="api-key-reveal-textarea" />
+                    </q-card-section>
+                    <q-card-actions align="right">
+                        <q-btn :label="$t('btn.copy')" color="primary" unelevated @click="copyApiKey" />
+                        <q-btn :label="$t('btn.close')" flat v-close-popup />
+                    </q-card-actions>
+                </q-card>
+            </q-dialog>
         </div>
     </div>
 </template>

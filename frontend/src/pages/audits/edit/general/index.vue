@@ -55,7 +55,7 @@
                 <div class="row q-col-gutter-md">
                     <q-input
                     ref="nameField"
-                    class="col-md-6 col-12" 
+                    class="col-md-6 col-12"
                     label-slot
                     v-model="audit.name"
                     outlined
@@ -66,17 +66,17 @@
                         </template>
                     </q-input>
                     <div class="col"></div>
-                    <q-select 
+                    <q-select
                     class="col-md-6 col-12 q-pt-none"
                     :label="$t('language')"
-                    v-model="audit.language" 
-                    :options="languages" 
-                    option-value="locale" 
-                    option-label="language" 
-                    emit-value 
+                    v-model="audit.language"
+                    :options="languages"
+                    option-value="locale"
+                    option-label="language"
+                    emit-value
                     map-options
                     options-sanitize
-                    outlined 
+                    outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                     />
                     <q-select
@@ -89,9 +89,9 @@
                     emit-value
                     map-options
                     options-sanitize
-                    outlined 
+                    outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
-                    /> 
+                    />
                 </div>
             </q-card-section>
 
@@ -115,7 +115,7 @@
                     options-sanitize
                     use-input
                     outlined
-                    :rules="($settings.report.public.requiredFields.company) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.company) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                     >
@@ -136,7 +136,7 @@
                     clearable
                     options-sanitize
                     outlined
-                    :rules="($settings.report.public.requiredFields.client) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.client) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                     >
@@ -144,7 +144,7 @@
                             {{$t('client')}} <span v-if="$settings.report.public.requiredFields.client" class="text-red">*</span>
                         </template>
                     </q-select>
-                    <q-select 
+                    <q-select
                     class="col-md-12 col-12 q-pt-none"
                     :label="$t('collaborators')"
                     stack-label
@@ -155,14 +155,14 @@
                     multiple
                     use-chips
                     options-sanitize
-                    outlined 
+                    outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                     >
                         <template v-slot:after>
-                            <q-chip 
-                            class="q-mt-lg" 
-                            color="blue-grey-5" 
-                            text-color="white" 
+                            <q-chip
+                            class="q-mt-lg"
+                            color="blue-grey-5"
+                            text-color="white"
                             dense
                             >
                                 {{audit.creator.firstname}} {{audit.creator.lastname}}
@@ -181,7 +181,7 @@
                             </q-chip>
                         </template>
                     </q-select>
-                    <q-select 
+                    <q-select
                     v-if="$settings.reviews.enabled"
                     class="col-md-12 col-12"
                     :label="$t('reviewers')"
@@ -193,7 +193,7 @@
                     multiple
                     use-chips
                     options-sanitize
-                    outlined 
+                    outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                     >
                         <template v-slot:selected-item="scope">
@@ -216,14 +216,14 @@
 
             <q-card-section>
                 <div class="row q-col-gutter-md">
-                    <q-input 
+                    <q-input
                     ref="dateStartField"
                     class="col-md-4 col-12"
                     label-slot
                     v-model="audit.date_start"
-                    :rules="($settings.report.public.requiredFields.dateStart) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.dateStart) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
-                    outlined 
+                    outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT">
                         <template v-slot:append>
                             <q-icon name="event" class="cursor-pointer">
@@ -241,7 +241,7 @@
                     class="col-md-4 col-12"
                     label-slot
                     v-model="audit.date_end"
-                    :rules="($settings.report.public.requiredFields.dateEnd) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.dateEnd) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT">
@@ -261,7 +261,7 @@
                     class="col-md-4 col-12"
                     label-slot
                     v-model="audit.date"
-                    :rules="($settings.report.public.requiredFields.dateReport) ? [val => !!val || $t('fieldIsRequired')] : ['']"
+                    :rules="($settings.report.public.requiredFields.dateReport) ? [val => !!val || $t('fieldIsRequired')] : []"
                     lazy-rules="ondemand"
                     outlined
                     :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT">
@@ -282,10 +282,13 @@
             <q-card-section class="q-pt-none">
                 <textarea-array
                 ref="scopeField"
-                :label="$t('auditScope')" 
-                v-model="audit.scope" 
-                :rules="($settings.report.public.requiredFields.scope) ? [val => !!val || $t('fieldIsRequired')] : ['']"
-                :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"/>
+                :label="$t('auditScope')"
+                v-model="audit.scope"
+                :object-fields="{name: 'name', description: 'description'}"
+                :no-empty-line="true"
+                :rules="($settings.report.public.requiredFields.scope) ? [val => !!val || $t('fieldIsRequired')] : []"
+                :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+                :lazy="true"/>
             </q-card-section>
             <q-expansion-item 
             :label="$t('customFields')"

@@ -101,6 +101,24 @@
 								<i class="fa fa-download fa-lg"></i>
 							</q-btn>
 						</q-item-section>
+						<q-item-section side class="topButtonSection">
+							<q-btn flat color="info" no-caps size="sm" icon="fa fa-file-export">
+								<q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">{{$t('tooltip.exportFindings')}}</q-tooltip>
+								<q-menu>
+									<q-list>
+										<q-item clickable v-close-popup @click="exportFindings('csv')">
+											<q-item-section>CSV</q-item-section>
+										</q-item>
+										<q-item clickable v-close-popup @click="exportFindings('json-defectdojo')">
+											<q-item-section>DefectDojo JSON</q-item-section>
+										</q-item>
+										<q-item clickable v-close-popup @click="exportFindings('json-pwndoc')">
+											<q-item-section>PwnDoc JSON</q-item-section>
+										</q-item>
+									</q-list>
+								</q-menu>
+							</q-btn>
+						</q-item-section>
 					</q-item>
 
 					<q-item :to='"/audits/"+auditId+"/general"'>
@@ -298,11 +316,21 @@
 													</q-badge>
 												</q-item-section>
 												<q-item-section side>
-													<q-icon v-if="audit.type === 'default' && finding.status === 0" name="check" color="green" />
-													<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'ok'" name="check" color="green" />
-													<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'ko'" name="fas fa-xmark" color="red" />
-													<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'partial'" name="priority_high" color="orange" />
-													<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'unknown'" name="question_mark" color="brown" />
+													<!-- Show "needs work" badge when present -->
+													<template v-if="findingNeedsWork(finding)">
+														<q-badge color="orange" text-color="white" class="q-mr-sm">
+															needs work
+														</q-badge>
+														<q-icon name="warning" color="red" />
+													</template>
+													<!-- Otherwise show existing status icons -->
+													<template v-else>
+														<q-icon v-if="audit.type === 'default' && finding.status === 0" name="check" color="green" />
+														<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'ok'" name="check" color="green" />
+														<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'ko'" name="fas fa-xmark" color="red" />
+														<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'partial'" name="priority_high" color="orange" />
+														<q-icon v-else-if="audit.type === 'retest' && finding.retestStatus === 'unknown'" name="question_mark" color="brown" />
+													</template>
 												</q-item-section>
 											</q-item>
 											<div class="row">
@@ -701,6 +729,13 @@ export default {
 
 		closeDrawer: function() {
 			this.drawerModel = false
+		findingNeedsWork: function(finding) {
+			// Check if finding has any comments with needsWork: true and !resolved
+			return this.audit.comments.some(comment => 
+				comment.findingId === finding._id && 
+				comment.needsWork && 
+				!comment.resolved
+			)
 		},
 
 		getFindingColor: function(finding) {
@@ -909,6 +944,7 @@ export default {
 			})
 			.then((data) => {
 				this.audit = data.data.datas;
+				auditR.value = this.audit;
 				this.getUIState()
 				this.getSections()
 				if (this.loading)
@@ -987,6 +1023,52 @@ export default {
 				}
 
 				fileReader.readAsText(data)
+			})
+		},
+
+		exportFindings: function(format) {
+			const exportNotif = Notify.create({
+				spinner: QSpinnerGears,
+				message: this.$t('msg.exportingFindings'),
+				color: "blue",
+				timeout: 0,
+				group: false
+			})
+			AuditService.exportFindings(this.auditId, format)
+			.then(response => {
+				var blob = new Blob([response.data], {type: response.headers['content-type'] || "application/octet-stream"});
+				var link = document.createElement('a');
+				link.href = window.URL.createObjectURL(blob);
+				link.download = response.headers['content-disposition'].split('"')[1];
+				document.body.appendChild(link);
+				link.click();
+				link.remove();
+
+				exportNotif({
+					icon: 'done',
+					spinner: false,
+					message: this.$t('msg.findingsExported'),
+					color: 'green',
+					timeout: 2500
+				})
+			})
+			.catch( async err => {
+				var message = this.$t('msg.exportError')
+				if (err.response && err.response.data) {
+					var blob = new Blob([err.response.data], {type: "application/json"})
+					var blobData = await this.BlobReader(blob)
+					message = JSON.parse(blobData).datas
+				}
+				exportNotif()
+				Notify.create({
+					message: message,
+					type: 'negative',
+					textColor:'white',
+					position: 'top',
+					closeBtn: true,
+					timeout: 0,
+					classes: "text-pre-wrap"
+				})
 			})
 		},
 

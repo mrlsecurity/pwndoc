@@ -96,8 +96,60 @@ class ACL {
     hasPermission (permission) {
         var Response = require('./httpResponse')
         var jwt = require('jsonwebtoken')
+        var mongoose = require('mongoose')
+        var actionLabels = require('./api-key-actions')
+        var self = this
 
         return (req, res, next) => {
+            var authHeader = req.headers['authorization']
+            if (authHeader && authHeader.startsWith('Bearer pwndoc_')) {
+                var raw = authHeader.slice('Bearer '.length)
+                var User = mongoose.model('User')
+                User.findByApiKey(raw).then(match => {
+                    if (!match) return Response.Unauthorized(res, 'Invalid API key')
+                    var user = match.user
+                    if (user.enabled === false) return Response.Unauthorized(res, 'Invalid API key')
+
+                    // Mirror the JWT payload built in models/user.js so that every downstream
+                    // acl.isAllowedToken()/hasPermission() check sees the same shape:
+                    // `roles` = role names, `permissions` = the expanded scope list.
+                    var roles = user.roles || []
+                    var decodedToken = {
+                        id: user._id,
+                        username: user.username,
+                        roles: roles,
+                        permissions: self.getRoles(roles),
+                        firstname: user.firstname,
+                        lastname: user.lastname,
+                        email: user.email,
+                        phone: user.phone,
+                        jobTitle: user.jobTitle
+                    }
+
+                    if (permission !== 'validtoken' && !self.isAllowedToken(decodedToken, permission))
+                        return Response.Forbidden(res, 'Insufficient privileges')
+
+                    req.decodedToken = decodedToken
+                    req.apiKeyId = match.apiKeyId
+
+                    // Fire-and-forget access log write. IMPORTANT: never trust X-Forwarded-For.
+                    var entry = {
+                        at: new Date(),
+                        ip: req.ip || (req.connection && req.connection.remoteAddress) || '',
+                        userAgent: req.headers['user-agent'] || '',
+                        method: req.method,
+                        path: req.originalUrl,
+                        action: actionLabels.labelFor(req)
+                    }
+                    User.recordApiKeyAccess(user._id, entry).catch(err => {
+                        console.warn('Failed to record API key access log:', err && err.message)
+                    })
+                    return next()
+                }).catch(() => Response.Internal(res, { message: 'API key auth error' }))
+                return
+            }
+
+            // ---- Cookie-JWT branch ----
             if (!req.cookies['token']) {
                 Response.Unauthorized(res, 'No token provided')
                 return;

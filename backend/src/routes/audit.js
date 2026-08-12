@@ -4,9 +4,21 @@ module.exports = function(app, io) {
     var Audit = require('mongoose').model('Audit');
     var acl = require('../lib/auth').acl;
     var reportGenerator = require('../lib/report-generator');
+    var findingsExport = require('../lib/findings-export');
     var _ = require('lodash');
     var utils = require('../lib/utils');
     var Settings = require('mongoose').model('Settings');
+
+    // Helper to check if user is a reviewer on this audit
+    var isReviewer = async function(auditId, userId) {
+        try {
+            var audit = await Audit.findById(auditId).select('reviewers').exec()
+            if (!audit) return false
+            return audit.reviewers.some(reviewer => reviewer.toString() === userId)
+        } catch(err) {
+            return false
+        }
+    }
 
     /* ### AUDITS LIST ### */
 
@@ -47,6 +59,49 @@ module.exports = function(app, io) {
                     result.push(a)
                 })
             Response.Ok(res, result)
+        })
+        .catch(err => Response.Internal(res, err))
+    });
+
+    // Get finding statistics by vulnerability type
+    app.get("/api/audits/stats/findings-by-type", acl.hasPermission('data:stats'), function(req, res) {
+        var YAML = require('js-yaml');
+        var format = req.query.format || 'json';
+        var filters = {};
+
+        // Optional filters
+        if (req.query.companyId) filters.companyId = req.query.companyId;
+        if (req.query.auditType) filters.auditType = req.query.auditType;
+        if (req.query.dateFrom) filters.dateFrom = req.query.dateFrom;
+        if (req.query.dateTo) filters.dateTo = req.query.dateTo;
+
+        Audit.getFindingStatsByType(
+            acl.isAllowed(req.decodedToken.roles, 'audits:read-all'),
+            req.decodedToken.id,
+            filters
+        )
+        .then(stats => {
+            if (format === 'yaml') {
+                var yamlData = YAML.dump(stats);
+                res.set('Content-Type', 'application/yaml');
+                res.set('Content-Disposition', 'attachment; filename="finding-statistics.yml"');
+                res.send(yamlData);
+            } else if (format === 'csv') {
+                var lines = ['Vulnerability Type,Count,Percentage,Critical,High,Medium,Low,None'];
+                stats.statisticsByType.forEach(s => {
+                    lines.push(`"${s.vulnType}",${s.count},${s.percentage},${s.bySeverity.critical},${s.bySeverity.high},${s.bySeverity.medium},${s.bySeverity.low},${s.bySeverity.none}`);
+                });
+                lines.push('');
+                lines.push(`Total Findings,${stats.totalFindings}`);
+                lines.push(`Total Audits,${stats.totalAudits}`);
+                lines.push(`Generated At,${stats.generatedAt}`);
+                var csvData = lines.join('\n');
+                res.set('Content-Type', 'text/csv');
+                res.set('Content-Disposition', 'attachment; filename="finding-statistics.csv"');
+                res.send(csvData);
+            } else {
+                Response.Ok(res, stats);
+            }
         })
         .catch(err => Response.Internal(res, err))
     });
@@ -148,11 +203,18 @@ module.exports = function(app, io) {
 
     // Update audit general information
     app.put("/api/audits/:auditId/general", acl.hasPermission('audits:update'), async function(req, res) {
-        var update = {};
         
-        var settings = await Settings.getAll();
-        var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        var update = {};
+
+        var settings, audit;
+        try {
+            settings = await Settings.getAll();
+            audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
+        } catch(err) {
+            return Response.Internal(res, err);
+        }
+
+        if (settings && settings.reviews && settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -164,7 +226,7 @@ module.exports = function(app, io) {
             }
 
             // Is the new reviewer the creator of the audit? 
-            if (req.body.reviewers.some(element => element._id === audit.creator._id)) {
+            if (!audit.creatorCanReview && req.body.reviewers.some(element => element._id === audit.creator._id)) {
                 Response.BadParameters(res, "A user cannot simultaneously be a reviewer and a collaborator/creator");
                 return;
             }
@@ -229,19 +291,36 @@ module.exports = function(app, io) {
         if (req.body.collaborators) update.collaborators = req.body.collaborators;
         if (req.body.reviewers) update.reviewers = req.body.reviewers;
         if (req.body.language && utils.validFilename(req.body.language)) update.language = req.body.language;
-        if (req.body.scope && typeof(req.body.scope === "array")) {
-            update.scope = req.body.scope.map(item => {return {name: item}});
+        if (req.body.scope && Array.isArray(req.body.scope)) {
+            update.scope = req.body.scope.map((item, index) => {
+                let name, description;
+                if (typeof item === 'string') {
+                    name = item;
+                    description = '';
+                } else {
+                    name = item.name || '';
+                    description = item.description || '';
+                }
+
+                // Preserve hosts from existing scope if it exists
+                const existingScopeItem = audit.scope && audit.scope[index];
+                const hosts = existingScopeItem ? existingScopeItem.hosts || [] : [];
+
+                return {name, description, hosts};
+            });
         }
         if (req.body.template) update.template = req.body.template;
         if (req.body.customFields) update.customFields = req.body.customFields;
-        if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) update.approvals = [];
+        if (settings?.reviews?.enabled && settings?.reviews?.private?.removeApprovalsUponUpdate) update.approvals = [];
 
         Audit.updateGeneral(acl.isAllowed(req.decodedToken.roles, 'audits:update-all'), req.params.auditId, req.decodedToken.id, update)
         .then(msg => {
             io.to(req.params.auditId).emit('updateAudit');
             Response.Ok(res, msg)
         })
-        .catch(err => Response.Internal(res, err))
+        .catch(err => {
+            Response.Internal(res, err)
+        })
     });
 
     // Get audit network information
@@ -256,7 +335,7 @@ module.exports = function(app, io) {
         var settings = await Settings.getAll();
 
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -264,7 +343,7 @@ module.exports = function(app, io) {
         var update = {};
         // Optional parameters
         if (req.body.scope) update.scope = req.body.scope;
-        if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) update.approvals = [];
+        if (settings?.reviews?.enabled && settings?.reviews?.private?.removeApprovalsUponUpdate) update.approvals = [];
 
         Audit.updateNetwork(acl.isAllowed(req.decodedToken.roles, 'audits:update-all'), req.params.auditId, req.decodedToken.id, update)
         .then(msg => Response.Ok(res, msg))
@@ -275,7 +354,7 @@ module.exports = function(app, io) {
     app.post("/api/audits/:auditId/findings", acl.hasPermission('audits:update'), async function(req, res) {
         var settings = await Settings.getAll();
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -304,7 +383,7 @@ module.exports = function(app, io) {
         if (req.body.category) finding.category = req.body.category
         if (req.body.customFields) finding.customFields = req.body.customFields
 
-        if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) {
+        if (settings?.reviews?.enabled && settings?.reviews?.private?.removeApprovalsUponUpdate) {
             Audit.updateGeneral(acl.isAllowed(req.decodedToken.roles, 'audits:update-all'), req.params.auditId, req.decodedToken.id, { approvals: [] });
         }
 
@@ -327,7 +406,7 @@ module.exports = function(app, io) {
     app.put("/api/audits/:auditId/findings/:findingId", acl.hasPermission('audits:update'), async function(req, res) {
         var settings = await Settings.getAll();
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -352,7 +431,7 @@ module.exports = function(app, io) {
         if (req.body.retestDescription) finding.retestDescription = req.body.retestDescription
         if (req.body.retestStatus) finding.retestStatus = req.body.retestStatus
 
-        if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) {
+        if (settings?.reviews?.enabled && settings?.reviews?.private?.removeApprovalsUponUpdate) {
             Audit.updateGeneral(acl.isAllowed(req.decodedToken.roles, 'audits:update-all'), req.params.auditId, req.decodedToken.id, { approvals: [] });
         }
 
@@ -368,7 +447,7 @@ module.exports = function(app, io) {
     app.delete("/api/audits/:auditId/findings/:findingId", acl.hasPermission('audits:update'), async function(req, res) {
         var settings = await Settings.getAll();
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -391,7 +470,7 @@ module.exports = function(app, io) {
     app.put("/api/audits/:auditId/sections/:sectionId", acl.hasPermission('audits:update'), async function(req, res) {
         var settings = await Settings.getAll();
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -406,7 +485,7 @@ module.exports = function(app, io) {
         // For retrocompatibility with old section.text usage
         if (req.body.text) section.text = req.body.text; 
 
-        if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) {
+        if (settings?.reviews?.enabled && settings?.reviews?.private?.removeApprovalsUponUpdate) {
             Audit.updateGeneral(acl.isAllowed(req.decodedToken.roles, 'audits:update-all'), req.params.auditId, req.decodedToken.id, { approvals: [] });
         }
 
@@ -423,7 +502,7 @@ module.exports = function(app, io) {
         .then(async audit => {
             var settings = await Settings.getAll();
 
-            if (settings.reviews.enabled && settings.reviews.public.mandatoryReview && audit.state !== 'APPROVED') {
+            if (settings?.reviews?.enabled && settings?.reviews?.public?.mandatoryReview && audit.state !== 'APPROVED') {
                 Response.Forbidden(res, "Audit was not approved therefore cannot be exported.");
                 return;
             }
@@ -442,18 +521,56 @@ module.exports = function(app, io) {
         });
     });
 
+    // Export findings for specific audit
+    app.get("/api/audits/:auditId/export", acl.hasPermission('audits:read'), function(req, res){
+        Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id)
+        .then(async audit => {
+            var settings = await Settings.getAll();
+
+            if (!settings.export || !settings.export.enabled) {
+                Response.Forbidden(res, "Findings export is disabled.");
+                return;
+            }
+
+            var format = req.query.format;
+            var validFormats = ['csv', 'json-defectdojo', 'json-pwndoc'];
+            if (!format || !validFormats.includes(format)) {
+                Response.BadParameters(res, 'Invalid format. Valid formats: ' + validFormats.join(', '));
+                return;
+            }
+
+            var excludedFields = (settings.export.public && settings.export.public.excludedFields) || {};
+            var sanitizedName = audit.name.replace(/[\\\/:*?"<>|]/g, '');
+
+            if (format === 'csv') {
+                var content = findingsExport.toCsv(audit, settings, excludedFields);
+                res.set({'Content-Type': 'text/csv; charset=utf-8'});
+                Response.SendFile(res, sanitizedName + '-findings.csv', content);
+            } else if (format === 'json-defectdojo') {
+                var content = findingsExport.toDefectDojoJson(audit, settings, excludedFields);
+                res.set({'Content-Type': 'application/json; charset=utf-8'});
+                Response.SendFile(res, sanitizedName + '-findings-defectdojo.json', content);
+            } else if (format === 'json-pwndoc') {
+                var content = findingsExport.toPwndocJson(audit, settings, excludedFields);
+                res.set({'Content-Type': 'application/json; charset=utf-8'});
+                Response.SendFile(res, sanitizedName + '-findings.json', content);
+            }
+        })
+        .catch(err => Response.Internal(res, err));
+    });
+
     // Update sort options of an audit
     app.put("/api/audits/:auditId/sortfindings", acl.hasPermission('audits:update'), async function(req, res) {
         var settings = await Settings.getAll();
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
         var update = {};
         // Optional parameters
         if (req.body.sortFindings) update.sortFindings = req.body.sortFindings;
-        if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) update.approvals = [];
+        if (settings?.reviews?.enabled && settings?.reviews?.private?.removeApprovalsUponUpdate) update.approvals = [];
         
         Audit.updateSortFindings(acl.isAllowed(req.decodedToken.roles, 'audits:update-all'), req.params.auditId, req.decodedToken.id, update)
         .then(msg => {
@@ -467,7 +584,7 @@ module.exports = function(app, io) {
     app.put("/api/audits/:auditId/movefinding", acl.hasPermission('audits:update'), async function(req, res) {
         var settings = await Settings.getAll();
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -481,7 +598,7 @@ module.exports = function(app, io) {
         move.oldIndex = req.body.oldIndex;
         move.newIndex = req.body.newIndex;
 
-        if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) {
+        if (settings?.reviews?.enabled && settings?.reviews?.private?.removeApprovalsUponUpdate) {
             Audit.updateGeneral(acl.isAllowed(req.decodedToken.roles, 'audits:update-all'), req.params.auditId, req.decodedToken.id, { approvals: [] });
         }
         
@@ -497,7 +614,7 @@ module.exports = function(app, io) {
     app.put("/api/audits/:auditId/toggleApproval", acl.hasPermission('audits:review'), async function(req, res) {
         const settings = await Settings.getAll();
 
-        if (!settings.reviews.enabled) {
+        if (!settings?.reviews?.enabled) {
             Response.Forbidden(res, "Audit reviews are not enabled.");
             return;
         }
@@ -550,7 +667,7 @@ module.exports = function(app, io) {
     app.put("/api/audits/:auditId/updateReadyForReview", acl.hasPermission('audits:update'), async function(req, res) {
         const settings = await Settings.getAll();
 
-        if (!settings.reviews.enabled) {
+        if (!settings?.reviews?.enabled) {
             Response.Forbidden(res, "Audit reviews are not enabled.");
             return;
         }
@@ -589,7 +706,7 @@ module.exports = function(app, io) {
     app.put("/api/audits/:auditId/updateParent", acl.hasPermission('audits:create'), async function(req, res) {
         var settings = await Settings.getAll();
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.body.parentId, req.decodedToken.id);
-        if (settings.reviews.enabled && audit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && audit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -610,7 +727,7 @@ module.exports = function(app, io) {
         var settings = await Settings.getAll();
         var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
         var parentAudit = await Audit.getAudit(acl.isAllowed(req.decodedToken.roles, 'audits:read-all'), audit.parentId, req.decodedToken.id);
-        if (settings.reviews.enabled && parentAudit.state !== "EDIT") {
+        if (settings?.reviews?.enabled && parentAudit.state !== "EDIT") {
             Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
             return;
         }
@@ -626,7 +743,7 @@ module.exports = function(app, io) {
     // ### COMMENTS ###
 
     // Add comment to audit
-    app.post("/api/audits/:auditId/comments", acl.hasPermission('audits:comments:create'), function(req, res) {
+    app.post("/api/audits/:auditId/comments", acl.hasPermission('audits:comments:create'), async function(req, res) {
         if ((!req.body.findingId && !req.body.sectionId) || (req.body.findingId && req.body.sectionId)) {
             Response.BadParameters(res, 'Only set one of "findingId" or "sectionId"');
             return;
@@ -647,6 +764,14 @@ module.exports = function(app, io) {
 
         // Optional parameters
         if (req.body.commentId) comment._id = req.body.commentId
+        if (typeof(req.body.needsWork) === 'boolean') {
+            var hasNeedsWorkPermission = acl.isAllowedToken(req.decodedToken, 'audits:comments:needs-work')
+            var isAuditReviewer = await isReviewer(req.params.auditId, req.decodedToken.id)
+
+            if (hasNeedsWorkPermission || isAuditReviewer) {
+                comment.needsWork = req.body.needsWork
+            }
+        }
 
         Audit.createComment(acl.isAllowed(req.decodedToken.roles, 'audits:comments:create-all'), req.params.auditId, req.decodedToken.id, comment)
         .then(msg => {
@@ -673,6 +798,14 @@ module.exports = function(app, io) {
         if (req.body.text) comment.text = req.body.text;
         if (req.body.replies) comment.replies = req.body.replies;
         if (typeof(req.body.resolved) === 'boolean') comment.resolved = req.body.resolved
+        if (typeof(req.body.needsWork) === 'boolean') {
+            var hasNeedsWorkPermission = acl.isAllowedToken(req.decodedToken, 'audits:comments:needs-work')
+            var isAuditReviewer = await isReviewer(req.params.auditId, req.decodedToken.id)
+
+            if (hasNeedsWorkPermission || isAuditReviewer) {
+                comment.needsWork = req.body.needsWork
+            }
+        }
 
         Audit.updateComment(acl.isAllowed(req.decodedToken.roles, 'audits:comments:update-all'), req.params.auditId, req.decodedToken.id, req.params.commentId, comment)
         .then(msg => {

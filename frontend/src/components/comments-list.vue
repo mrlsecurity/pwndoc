@@ -102,6 +102,12 @@
                                                 <span v-html="$t('hintInputComment')"></span>
                                             </template>
                                         </q-input>
+                                        <q-checkbox
+                                            v-if="canSetNeedsWork"
+                                            v-model="comment.needsWork"
+                                            label="Mark as needs work"
+                                            color="orange"
+                                        />
                                         <q-btn class="float-right" outline color="primary" icon="close" @click="cancelOrDeleteEditComment(comment)"></q-btn>
                                         <q-btn class="float-right" unelevated color="blue-10" icon="done" @click="updateComment(comment)"></q-btn>
                                     </div>
@@ -168,6 +174,12 @@
                                                 <span v-html="$t('hintInputComment')"></span>
                                             </template>
                                         </q-input>
+                                        <q-checkbox
+                                            v-if="comment.replyTemp && canSetNeedsWork"
+                                            v-model="comment.needsWork"
+                                            label="Mark as needs work"
+                                            color="orange"
+                                        />
                                         <template v-if="comment.replyTemp">
                                             <q-btn class="float-right" outline color="primary" icon="close" @click="comment.replyTemp = null" />
                                             <q-btn class="float-right" unelevated color="blue-10" icon="send" @click="updateComment(comment)"/>
@@ -241,6 +253,10 @@ export default {
         canDelete: {
             type: Boolean,
             default: true
+        },
+        reviewers: {
+            type: Array,
+            default: () => []
         }
     },
 
@@ -286,6 +302,12 @@ export default {
 
         canDeleteComment: function() {
             return this.editable && this.canDelete && userStore.isAllowed('audits:comments:delete')
+        },
+
+        canSetNeedsWork: function() {
+            var hasRolePermission = userStore.isAllowed('audits:comments:needs-work')
+            var isReviewer = this.reviewers.some(reviewer => reviewer._id === userStore.id)
+            return hasRolePermission || isReviewer
         },
 
         numberOfFilteredComments: function() {

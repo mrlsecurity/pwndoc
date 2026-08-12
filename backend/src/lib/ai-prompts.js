@@ -65,6 +65,15 @@ const BUILTIN_FINDING_FIELDS = [
         fieldLabel: 'Proofs',
         outputType: 'html',
         defaultPrompt: 'Write a concise proof-of-concept section for "{title}" with reproducible steps and expected/observed behavior.'
+    },
+    {
+        // Only rendered on retest audits, but the catalog is audit-type agnostic - the
+        // prompt row exists either way and the field simply isn't shown elsewhere.
+        entityType: 'finding',
+        fieldKey: 'retestDescription',
+        fieldLabel: 'Retest Description',
+        outputType: 'html',
+        defaultPrompt: 'Write the retest outcome for "{title}": what was re-tested, what was observed this time, and whether the original issue is resolved, partially resolved, or unchanged.'
     }
 ];
 

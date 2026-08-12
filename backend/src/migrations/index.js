@@ -1,5 +1,6 @@
 const migrations = [
-    require('./20260617-user-roles-array')
+    require('./20260617-user-roles-array'),
+    require('./20260812-ai-actions-to-global-prompts')
 ]
 
 exports.run = async function() {

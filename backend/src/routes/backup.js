@@ -418,8 +418,10 @@ module.exports = function(app) {
             }
         })
 
-        if (!fs.existsSync(backupTmpPath))
-            fs.mkdirSync(backupTmpPath)
+        // Wipe any leftovers from a previous (possibly failed) run. Stale files can carry
+        // restrictive permissions and make the new backup fail with EACCES.
+        fs.rmSync(backupTmpPath, {recursive: true, force: true})
+        fs.mkdirSync(backupTmpPath)
 
         setBackupState(STATE_DUMPING_DATABASE)
         console.log('Dumping database')

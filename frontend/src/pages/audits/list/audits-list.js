@@ -60,7 +60,7 @@ export default {
             // Errors messages
             errors: {name: '', language: '', auditType: ''},
             // Selected or New Audit
-            currentAudit: {name: '', language: '', auditType: '', type: 'default'}
+            currentAudit: {name: '', language: '', auditType: '', type: 'default', creatorCanReview: true}
         }
     },
 
@@ -265,6 +265,52 @@ export default {
             })
         },
 
+        exportFindings: function(auditId, format) {
+            var exportNotif = Notify.create({
+                spinner: QSpinnerGears,
+                message: $t('msg.exportingFindings'),
+                color: "blue",
+                timeout: 0,
+                group: false
+            })
+            AuditService.exportFindings(auditId, format)
+            .then(response => {
+                var blob = new Blob([response.data], {type: response.headers['content-type'] || "application/octet-stream"});
+                var link = document.createElement('a');
+                link.href = window.URL.createObjectURL(blob);
+                link.download = response.headers['content-disposition'].split('"')[1];
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+
+                exportNotif({
+                    icon: 'done',
+                    spinner: false,
+                    message: $t('msg.findingsExported'),
+                    color: 'green',
+                    timeout: 2500
+                })
+            })
+            .catch( async err => {
+                var message = $t('msg.exportError')
+                if (err.response && err.response.data) {
+                    var blob = new Blob([err.response.data], {type: "application/json"})
+                    var blobData = await this.BlobReader(blob)
+                    message = JSON.parse(blobData).datas
+                }
+                exportNotif()
+                Notify.create({
+                    message: message,
+                    type: 'negative',
+                    textColor:'white',
+                    position: 'top',
+                    closeBtn: true,
+                    timeout: 0,
+                    classes: "text-pre-wrap"
+                })
+            })
+        },
+
         generateReport: function(auditId) {
             var downloadNotif = Notify.create({
                 spinner: QSpinnerGears,
@@ -328,6 +374,7 @@ export default {
             } else {
                 this.currentAudit.language = '';
             }
+            this.currentAudit.creatorCanReview = true;
         },
 
         // Convert language locale of audit for table display

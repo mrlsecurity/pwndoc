@@ -8,9 +8,41 @@
         :path-name="(auditParent.type === 'retest') ? $t('originalAudit') : (auditParent.type === 'default') ? $t('multi') : ''"
     >
         <template v-slot:buttons>
+                <!-- In comment mode the button is already highlighted, so the count reads
+                     better as a label than as a badge stacked on top of it. -->
+                <span
+                v-if="commentMode && unresolvedCommentsCount > 0"
+                class="unresolved-label text-warning q-mr-sm"
+                >
+                {{ unresolvedCommentsCount }} {{ $t('unresolvedComments') }}
+                </span>
+                <template v-if="!commentMode && unresolvedCommentsCount > 0">
+                <q-badge
+                color="red"
+                floating
+                :label="unresolvedCommentsCount"
+                class="ios-notification-badge q-mr-sm"
+                >
                 <q-btn
-                color="primary" 
-                :flat="!commentMode" 
+                color="primary"
+                :flat="!commentMode"
+                :outline="commentMode"
+                :class="{'bg-grey-3': commentMode}"
+                icon="o_mode_comment"
+                :label="$t('btn.comments')"
+                no-caps
+                :ripple="false"
+                @click="toggleCommentView()">
+                    <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
+                        {{(commentMode) ? $t('tooltip.hideComments') : $t('tooltip.showComments')}}
+                    </q-tooltip>
+                </q-btn>
+                </q-badge>
+                </template>
+                <template v-else>
+                <q-btn
+                color="primary"
+                :flat="!commentMode"
                 :outline="commentMode"
                 :class="{'bg-grey-3': commentMode}"
                 icon="o_mode_comment"
@@ -21,8 +53,9 @@
                 class="q-mr-sm">
                     <q-tooltip anchor="bottom middle" self="center left" :delay="500" class="text-bold">
                         {{(commentMode) ? $t('tooltip.hideComments') : $t('tooltip.showComments')}}
-                    </q-tooltip> 
+                    </q-tooltip>
                 </q-btn>
+                </template>
                 <q-btn
                 v-if="aiQaEnabled"
                 color="primary"
@@ -510,6 +543,7 @@
                     :editable="canEditComments"
                     :can-update="canManageAuditComments('update')"
                     :can-delete="canManageAuditComments('delete')"
+                    :reviewers="auditParent.reviewers || []"
                     >
                     </comments-list>
                 </q-scroll-area>
@@ -596,6 +630,10 @@
                                         :commentMode="commentMode && canCreateComment"
                                         :focusedComment="focusedComment"
                                         :commentIdList="commentIdList"
+                                        :showAiButton="canGenerateAi('retestDescription') && isFieldEditable('retestDescription')"
+                                        :aiLoading="isAiFieldLoading('retestDescription')"
+                                        :aiSessionActive="isAiFieldSessionActive('retestDescription')"
+                                        @ai-click="generateFieldDraftAI('retestDescription')"
                                         />
                                     </template>
                                     <template v-slot:label>
@@ -773,6 +811,7 @@
                 :editable="canEditComments"
                 :can-update="canManageAuditComments('update')"
                 :can-delete="canManageAuditComments('delete')"
+                    :reviewers="auditParent.reviewers || []"
                 >
                 </comments-list>
             </q-scroll-area>
@@ -851,4 +890,17 @@
     margin-top: 50px;
 }
 
+
+.ios-notification-badge {
+    position: relative;
+    .q-badge__content {
+        border-radius: 50%;
+        min-width: 18px;
+        height: 18px;
+        font-size: 12px;
+    }
+}
+.unresolved-label {
+    font-size: 12px;
+}
 </style>

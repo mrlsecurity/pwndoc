@@ -93,4 +93,16 @@ export default {
         return api.delete(`users/totp`,{data: {totpToken: totpToken}});
     },
 
+    getApiKey: function() {
+        return api.get(`users/me/api-key`);
+    },
+
+    createApiKey: function(name) {
+        return api.post(`users/me/api-key`, { name: name });
+    },
+
+    revokeApiKey: function() {
+        return api.delete(`users/me/api-key`);
+    },
+
 }

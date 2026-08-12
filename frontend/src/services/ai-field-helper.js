@@ -6,7 +6,8 @@ const FINDING_FIELD_OUTPUT_TYPES = {
   observation: 'html',
   remediation: 'html',
   poc: 'html',
-  references: 'array'
+  references: 'array',
+  retestDescription: 'html'
 }
 
 // Must match CUSTOM_FIELD_OUTPUT_TYPES in backend/src/lib/ai-prompts.js, which independently
@@ -542,6 +543,11 @@ export default {
       references: finding.references || [],
       poc: finding.poc || '',
       scope: finding.scope || '',
+      // Needed as context for every field on a retest, and as currentFieldValue when the
+      // retest description itself is the target - withCurrentFieldContext() reads it from
+      // here by field name, and an absent key means "rewrite this" degrades to "write from
+      // scratch". Empty on non-retest audits, where compactLlmValue drops it anyway.
+      retestDescription: finding.retestDescription || '',
       customFieldLabel: customField?.customField?.label || '',
       customFieldValue: customField?.text || '',
       customFields: customFieldContext

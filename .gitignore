@@ -54,3 +54,12 @@ coverage
 .claude/plan.md
 .playwright-mcp
 .playwright-cli
+
+# Worktrees
+.worktrees
+
+# Backup files
+*.bak
+
+# Superpowers docs
+docs/superpowers/

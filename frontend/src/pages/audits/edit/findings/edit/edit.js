@@ -179,6 +179,21 @@ export default {
             return this.canManageAuditComments('update') || this.canManageAuditComments('delete')
         },
 
+        // Replies count towards the badge too: a thread is only "handled" once the whole
+        // thread is resolved, so an unresolved comment with three replies reads as four.
+        unresolvedCommentsCount: function() {
+            let count = 0;
+            this.auditParent.comments.forEach(comment => {
+                if (!comment.resolved) {
+                    count++;
+                    if (comment.replies && comment.replies.length > 0) {
+                        count += comment.replies.length;
+                    }
+                }
+            });
+            return count;
+        },
+
         aiEnabled: function() {
             return this.$settings?.ai?.public?.enabled !== false && userStore.isAllowed('audits:ai-assist')
         },
@@ -807,7 +822,7 @@ export default {
 
             if (event.detail.warning) {
                 Dialog.create({
-                    title: $t('Warning'),
+                    title: $t('warning'),
                     message: $t(event.detail.warning),
                     ok: {label: $t('btn.confirm'), color: 'warning'},
                     cancel: {label: $t('btn.cancel'), color: 'white'}
@@ -871,7 +886,8 @@ export default {
                     firstname: userStore.firstname,
                     lastname: userStore.lastname
                 },
-                text: "" 
+                text: "",
+                needsWork: false
             }
             if (commentId) comment.commentId = commentId
 

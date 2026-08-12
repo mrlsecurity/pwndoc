@@ -8,6 +8,8 @@ export default {
         data: 'Data',
     },
     btn: {
+        copy: 'Copy',
+        revoke: 'Revoke',
         cancel: 'Cancel',
         confirm: 'Confirm',
         create: 'Create',
@@ -49,6 +51,7 @@ export default {
         comments: 'Comments'
     },
     tooltip: {
+        exportFindings: 'Export',
         vulnerabilityUpdates: 'Review the update proposals for this vulnerability',
         usersConnected: 'Users on the Audit:',
         editAudit: 'Edit Audit',
@@ -89,6 +92,13 @@ export default {
         addToDict: 'Add to dictionary'
     },
     msg: {
+        apiKeyNameRequired: 'API key name is required',
+        apiKeyRevoked: 'API key revoked',
+        copiedToClipboard: 'Copied to clipboard',
+        downloadStatsFailed: 'Failed to download statistics',
+        exportError: 'Error exporting findings',
+        exportingFindings: 'Exporting findings...',
+        findingsExported: 'Findings exported successfully',
         auditReviewUpdateOk: 'Audit review status updated successfully',
         auditApprovalUpdateOk: 'Audit approval updated successfully',
         auditUpdateOk: 'Audit updated successfully',
@@ -1323,4 +1333,28 @@ export default {
             testFailed: 'Connection failed'
         }
     },
+    action: 'Action',
+    apiKeyCopyWarning: 'Copy this key now. It will not be shown again.',
+    apiKeyCreatedTitle: 'API key created',
+    apiKeyIntro: 'Create an API key to authenticate scripts and integrations as yourself. You can have at most one key at a time.',
+    apiKeyName: 'Key name',
+    apiKeyNoAccesses: 'No recorded accesses yet.',
+    apiKeyPrefix: 'Prefix',
+    apiKeyRecentAccesses: 'Recent accesses',
+    apiKeys: 'API Key',
+    created: 'Created',
+    dateFrom: 'Date From',
+    dateTo: 'Date To',
+    downloadStatistics: 'Download Statistics',
+    exportFormat: 'Format',
+    findingStatistics: 'Finding Statistics by Vulnerability Type',
+    findingStatisticsInfo: `Download statistics showing the distribution of findings across all audits, grouped by vulnerability type.<br />
+    This includes counts, percentages, and CVSS severity breakdowns.`,
+    ipAddress: 'IP',
+    lastUsed: 'Last used',
+    never: 'Never',
+    noStatsPermission: 'You do not have permission to view finding statistics.',
+    time: 'Time',
+    unresolvedComments: 'unresolved comments',
+    userAgent: 'User-Agent',
 }
