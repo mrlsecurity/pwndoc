@@ -96,7 +96,7 @@ defaultFilters.convertDateLocale = function(input, locale, style) {
 
 // Convert identifier prefix to a user defined prefix: {identifier | changeID: 'PRJ-'}
 defaultFilters.changeID = function (input, prefix) {
-    return input.replace("IDX-", prefix);
+    return prefix + input.replace(/^[^-]+-/, '');
 }
 
 // Default value: returns input if it is truthy, otherwise its parameter.
@@ -189,6 +189,24 @@ defaultFilters.linkTo = function(input, url) {
         + '</w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>';
 }
 
+defaultFilters.referenceToLink = function(input) {
+    if (!input) return '';
+    input = input.trim();
+    if (input === '') return '';
+    
+    var colonIndex = input.indexOf('||');
+    var text, url;
+    
+    if (colonIndex > -1) {
+        text = input.substring(0, colonIndex).trim();
+        url = input.substring(colonIndex + 2).trim();
+    } else {
+        text = input;
+        url = input;
+    }
+    
+    return defaultFilters.linkTo(text, url);
+}
 // Loop over the input object, providing acccess to its keys and values: {#findings | loopObject}{key}{value.title}{/findings | loopObject}
 // Source: https://stackoverflow.com/a/60887987
 defaultFilters.loopObject = function(input) {
@@ -286,13 +304,23 @@ defaultFilters.sort = function(input, key = null) {
 // Sort array by supplied field: {#findings | sortArrayByField: 'identifier':1}{/}
 // order: 1 = ascending, -1 = descending
 defaultFilters.sortArrayByField = function (input, field, order) {
-    //invalid order sort ascending
-    if(order != 1 && order != -1) order = 1;
+    if (order != 1 && order != -1) order = 1;
 
-    const sorted = input.sort((a,b) => {
-        //multiply by order so that if is descending (-1) will reverse the values
-        return _.get(a, field).localeCompare(_.get(b, field), undefined, {numeric: true}) * order
-    })
+    const sorted = input.sort((a, b) => {
+        const av = _.get(a, field);
+        const bv = _.get(b, field);
+
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1 * order;
+        if (bv == null) return -1 * order;
+
+        if (typeof av === "number" && typeof bv === "number") {
+            return (av - bv) * order;
+        }
+
+        return String(av).localeCompare(String(bv), undefined, { numeric: true }) * order;
+    });
+
     return sorted;
 }
 
@@ -347,18 +375,41 @@ defaultFilters.count = function(input, severity, scoreType) {
             scoreAttribute = "temporalSeverity";
             break;
         case "environmental":
-        default:  // Set default to environmental score
-            scoreAttribute = "environmentalSeverity";            
+            scoreAttribute = "environmentalSeverity";
+            break;
+        default:
+            scoreAttribute = "baseSeverity";
     }
     for(var i = 0; i < input.length; i++){
-
-        if(input[i].cvss[scoreAttribute] === severity){
-            count += 1;
-        }
-    }
+         const cvss = input[i].cvss4 || input[i].cvss; // Prioritize CVSS 4.0
+         if(cvss && cvss[scoreAttribute] === severity){
+             count += 1;
+         }
+     }
 
     return count;
 }
+
+defaultFilters.isWhitebox = function(root) {
+    return root['pen-type'] === 'Whitebox';
+};
+
+defaultFilters.isGraybox = function(root) {
+    return root['pen-type'] === 'Graybox';
+};
+
+defaultFilters.isBlackbox = function(root) {
+    return root['pen-type'] === 'Blackbox';
+};
+
+// Spell out single-digit counts, as report prose reads better with "three findings"
+// than "3 findings". Anything from 10 up stays numeric: {findings | length | toWord}
+defaultFilters.toWord = function(input) {
+    const num = parseInt(input, 10);
+    if (isNaN(num)) return input;
+    const words = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+    return num < 10 ? words[num] : num.toString();
+};
 
 // Translate using locale from 'translate' folder
 // Example: {input | translate: 'fr'}

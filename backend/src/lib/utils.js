@@ -122,3 +122,19 @@ function colorDistance(colorA, colorB) {
   )
 }
 exports.colorDistance = colorDistance
+
+// Round-trip a .docx through PizZip so the stored file is a plain zip with no leftover
+// container-level oddities from whatever produced it (Word macros container, extra
+// streams, mismatched local headers). Falls back to the original buffer if the file
+// isn't readable as a zip, so an unexpected upload fails later at template rendering
+// with a useful error instead of here with a generic one.
+function sanitizeDocxBuffer(buffer) {
+  try {
+    var PizZip = require("pizzip")
+    var zip = new PizZip(buffer)
+    return zip.generate({type: "nodebuffer"})
+  } catch (e) {
+    return buffer
+  }
+}
+exports.sanitizeDocxBuffer = sanitizeDocxBuffer

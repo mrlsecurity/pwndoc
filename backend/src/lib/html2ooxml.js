@@ -5,6 +5,10 @@ var domutils = require("domutils")
 const render = require('dom-serializer').default
 const hljs = require('highlight.js');
 
+var usedBulletNumIds = [];
+var usedNumberNumIds = [];
+var numIdCounter = 100;
+
 function html2ooxml(html, style = '') {
     if (html === '')
         return html
@@ -18,6 +22,13 @@ function html2ooxml(html, style = '') {
     var cParagraphProperties = {}
     var list_state = []
     var inCodeBlock = false
+    var inTable = false
+    var inTableCell = false
+    var tableHeader = false
+    var currentTableRows = []
+    var currentRowCells = []
+    var currentCellContent = []
+    var currentCellAttribs = {}
     var parser = new htmlparser.Parser(
     {
         onopentag(tag, attribs) {
@@ -40,13 +51,27 @@ function html2ooxml(html, style = '') {
                 cParagraph = new docx.Paragraph({heading: 'Heading6'})
             }
             else if (tag === "div" || tag === "p") {
-                if (style && typeof style === 'string')
+                if (style && typeof style === 'string' && !cParagraphProperties.numbering)
                     cParagraphProperties.style = style
                 cParagraph = new docx.Paragraph(cParagraphProperties)
             }
             else if (tag === "pre") {
                 inCodeBlock = true
                 cParagraph = new docx.Paragraph({style: "Code"})
+            }
+            else if (tag === "table") {
+                inTable = true
+                currentTableRows = []
+            }
+            else if (tag === "tr") {
+                currentRowCells = []
+            }
+            else if (tag === "td" || tag === "th") {
+                inTableCell = true
+                tableHeader = (tag === "th")
+                currentCellAttribs = attribs || {}
+                currentCellContent = []
+                cParagraph = null
             }
             else if (tag === "b" || tag === "strong") {
                 cRunProperties.bold = true
@@ -77,17 +102,29 @@ function html2ooxml(html, style = '') {
                     cParagraph.addChildElement(new docx.Run({break: 1}))
             }
             else if (tag === "ul") {
-                list_state.push('bullet')
+                var newNumId = numIdCounter++;
+                list_state.push('bullet:' + newNumId);
+                if (!usedBulletNumIds.includes(newNumId))
+                    usedBulletNumIds.push(newNumId);
             }
             else if (tag === "ol") {
-                list_state.push('number')
+                var newNumId = numIdCounter++;
+                list_state.push('number:' + newNumId);
+                if (!usedNumberNumIds.includes(newNumId))
+                    usedNumberNumIds.push(newNumId);
             }
             else if (tag === "li") {
                 var level = list_state.length - 1
-                if (level >= 0 && list_state[level] === 'bullet')
-                    cParagraphProperties.bullet = {level: level}
-                else if (level >= 0 && list_state[level] === 'number')
-                    cParagraphProperties.numbering = {reference: 2, level: level}
+                if (level >= 0 && list_state[level].startsWith('bullet:')) {
+                    var numRef = parseInt(list_state[level].split(':')[1]);
+                    cParagraphProperties.numbering = {reference: numRef, level: level}
+                    cParagraphProperties.style = 'ListBullet'
+                }
+                else if (level >= 0 && list_state[level].startsWith('number:')) {
+                    var numRef = parseInt(list_state[level].split(':')[1]);
+                    cParagraphProperties.numbering = {reference: numRef, level: level}
+                    cParagraphProperties.style = 'ListNumber'
+                }
                 else
                     cParagraphProperties.bullet = {level: 0}
             }
@@ -125,6 +162,8 @@ function html2ooxml(html, style = '') {
         },
 
         ontext(text) {
+            if (text && inTableCell && !cParagraph)
+                cParagraph = new docx.Paragraph({})
             if (text && cParagraph) {
                 cRunProperties.text = text
                 cParagraph.addChildElement(new docx.TextRun(cRunProperties))
@@ -133,11 +172,84 @@ function html2ooxml(html, style = '') {
 
         onclosetag(tag) {
             if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'p', 'pre', 'legend'].includes(tag)) {
-                paragraphs.push(cParagraph)
+                if (inTableCell)
+                    currentCellContent.push(cParagraph)
+                else
+                    paragraphs.push(cParagraph)
                 cParagraph = null
                 cParagraphProperties = {}
                 if (tag === 'pre')
                     inCodeBlock = false
+            }
+            else if (tag === "td" || tag === "th") {
+                if (cParagraph) {
+                    currentCellContent.push(cParagraph)
+                    cParagraph = null
+                }
+
+                if (currentCellContent.length === 0)
+                    currentCellContent.push(new docx.Paragraph(''))
+
+                // Width is a relative weight used to calculate proportional column widths
+                var width = 250
+                if (currentCellAttribs['data-colwidth']) {
+                    var firstWidth = currentCellAttribs['data-colwidth'].split(',')[0]
+                    width = parseInt(firstWidth, 10) || 250
+                }
+
+                currentRowCells.push({
+                    children: currentCellContent,
+                    width: width,
+                    header: tableHeader,
+                    colspan: parseInt(currentCellAttribs.colspan || '1', 10) || 1
+                })
+
+                currentCellContent = []
+                currentCellAttribs = {}
+                inTableCell = false
+                tableHeader = false
+            }
+            else if (tag === "tr") {
+                if (currentRowCells.length > 0)
+                    currentTableRows.push(currentRowCells)
+                currentRowCells = []
+            }
+            else if (tag === "table") {
+                var tableRows = currentTableRows.map(row => {
+                    var totalWidth = row.reduce((sum, cell) => sum + (cell.width || 250), 0) || 1
+                    return new docx.TableRow({
+                        children: row.map(cell => {
+                            var cellOptions = {
+                                children: cell.children,
+                                width: {
+                                    size: Math.max(1, Math.round((cell.width / totalWidth) * 100)),
+                                    type: "pct"
+                                }
+                            }
+
+                            if (cell.colspan > 1)
+                                cellOptions.columnSpan = cell.colspan
+
+                            return new docx.TableCell(cellOptions)
+                        }),
+                        tableHeader: row.every(cell => cell.header)
+                    })
+                })
+
+                var tableOptions = {
+                    rows: tableRows,
+                    width: {
+                        size: 100,
+                        type: "pct"
+                    }
+                }
+                if (style && typeof style === 'string')
+                    tableOptions.style = style
+
+                paragraphs.push(new docx.Table(tableOptions))
+
+                currentTableRows = []
+                inTable = false
             }
             else if (tag === "b" || tag === "strong") {
                 delete cRunProperties.bold
@@ -191,14 +303,26 @@ function html2ooxml(html, style = '') {
     parser.end()
 
     var prepXml = doc.documentWrapper.document.body.prepForXml({ stack: [] })
-    var filteredXml = prepXml["w:body"].filter(e => {return e && Object.keys(e)[0] === "w:p"})
+    var filteredXml = prepXml["w:body"].filter(e => {
+        return e && ["w:p", "w:tbl"].includes(Object.keys(e)[0])
+    })
     var dataXml = xml(filteredXml)
-    dataXml = dataXml.replace(/w:numId w:val="{2-0}"/g, 'w:numId w:val="2"') // Replace numbering to have correct value
+    dataXml = dataXml.replace(/w:numId w:val="\{(\d+)-0\}"/g, 'w:numId w:val="$1"') // Replace numbering to have correct value for all numIds
 
     return dataXml
         
 }
 module.exports = html2ooxml
+
+html2ooxml.getUsedNumIds = function() {
+    return { bullet: usedBulletNumIds, number: usedNumberNumIds };
+};
+
+html2ooxml.clearUsedNumIds = function() {
+    usedBulletNumIds = [];
+    usedNumberNumIds = [];
+    numIdCounter = 100;
+};
 
 function getHighlightColor(hexColor) {
 // <xsd:simpleType name="ST_HighlightColor">

@@ -18,6 +18,7 @@ var Image = require('mongoose').model('Image');
 var Settings = require('mongoose').model('Settings');
 const cvss = require('ae-cvss-calculator');
 var translate = require('../translate')
+var html2ooxml = require('./html2ooxml');
 var $t
 
 // Generate document with docxtemplater
@@ -31,6 +32,9 @@ async function generateDoc(audit) {
     $t = translate.translate
 
     var settings = await Settings.getAll();
+    
+    html2ooxml.clearUsedNumIds();
+    
     var preppedAudit = await prepAuditData(audit, settings)
 
     var opts = {};
@@ -109,6 +113,107 @@ async function generateDoc(audit) {
         else {
             throw error
         }
+    }
+    var usedNumIds = html2ooxml.getUsedNumIds();
+    if (usedNumIds.bullet.length > 0 || usedNumIds.number.length > 0) {
+        var numberingXml = zip.file("word/numbering.xml").asText();
+        var stylesXml = zip.file("word/styles.xml").asText();
+
+        // Helper: given a numId, find its abstractNumId in numbering.xml
+        function getAbstractNumId(numId) {
+            var re = new RegExp('<w:num w:numId="' + numId + '"[^>]*>[\\s\\S]*?<w:abstractNumId[^>]*w:val="(\\d+)"');
+            var m = numberingXml.match(re);
+            return m ? m[1] : null;
+        }
+
+        // Helper: find the numId referenced by a named style (e.g. "ListBullet", "ListNumber")
+        function getNumIdFromStyle(styleName) {
+            var re = new RegExp('<w:style[^>]*w:styleId="' + styleName + '"[^>]*>[\\s\\S]*?<w:numId w:val="(\\d+)"[\\s\\S]*?</w:style>');
+            var m = stylesXml.match(re);
+            return m ? m[1] : null;
+        }
+
+        // Helper: find abstractNumId whose level 0 uses the given numFmt (e.g. "bullet" or "decimal")
+        // If preferIndent is provided, prefer an abstractNum whose level 0 has matching w:left value
+        function findAbstractByFormat(format, preferIndent) {
+            var abstracts = numberingXml.match(/<w:abstractNum[\s\S]*?<\/w:abstractNum>/g) || [];
+            var firstMatch = null;
+            for (var i = 0; i < abstracts.length; i++) {
+                var lvl0 = abstracts[i].match(/<w:lvl w:ilvl="0"[\s\S]*?<\/w:lvl>/);
+                if (lvl0 && lvl0[0].indexOf('w:val="' + format + '"') !== -1) {
+                    var aid = abstracts[i].match(/w:abstractNumId="(\d+)"/);
+                    if (!aid) continue;
+                    if (!firstMatch) firstMatch = aid[1];
+                    // If we have a preferred indent, check for match
+                    if (preferIndent) {
+                        var indMatch = lvl0[0].match(/w:left="(\d+)"/);
+                        if (indMatch && indMatch[1] === preferIndent) return aid[1];
+                    } else {
+                        return aid[1];
+                    }
+                }
+            }
+            return firstMatch;
+        }
+
+        // Helper: check if an abstractNumId has the expected format at level 0
+        function abstractHasFormat(abstractId, format) {
+            var re = new RegExp('<w:abstractNum w:abstractNumId="' + abstractId + '"[\\s\\S]*?</w:abstractNum>');
+            var m = numberingXml.match(re);
+            if (!m) return false;
+            var lvl0 = m[0].match(/<w:lvl w:ilvl="0"[\s\S]*?<\/w:lvl>/);
+            return lvl0 && lvl0[0].indexOf('w:val="' + format + '"') !== -1;
+        }
+
+        // Find numbered abstractNumId first (needed to determine preferred indent for bullets)
+        var numberAbstractNumId = null;
+        var numberStyleNumId = getNumIdFromStyle('ListNumber');
+        if (numberStyleNumId) {
+            var candidate = getAbstractNumId(numberStyleNumId);
+            if (candidate && abstractHasFormat(candidate, 'decimal'))
+                numberAbstractNumId = candidate;
+        }
+        if (!numberAbstractNumId) numberAbstractNumId = findAbstractByFormat('decimal');
+
+        // Get the numbered list's level 0 indent so we can match bullet indent for consistency
+        var numberIndent = null;
+        if (numberAbstractNumId) {
+            var re = new RegExp('<w:abstractNum w:abstractNumId="' + numberAbstractNumId + '"[\\s\\S]*?</w:abstractNum>');
+            var m = numberingXml.match(re);
+            if (m) {
+                var lvl0 = m[0].match(/<w:lvl w:ilvl="0"[\s\S]*?<\/w:lvl>/);
+                if (lvl0) {
+                    var indMatch = lvl0[0].match(/w:left="(\d+)"/);
+                    if (indMatch) numberIndent = indMatch[1];
+                }
+            }
+        }
+
+        // Find bullet abstractNumId: try ListBullet style, verify format, else search by format
+        // Prefer a bullet definition whose indent matches the numbered list for visual consistency
+        var bulletAbstractNumId = null;
+        var bulletStyleNumId = getNumIdFromStyle('ListBullet');
+        if (bulletStyleNumId) {
+            var candidate = getAbstractNumId(bulletStyleNumId);
+            if (candidate && abstractHasFormat(candidate, 'bullet'))
+                bulletAbstractNumId = candidate;
+        }
+        if (!bulletAbstractNumId) bulletAbstractNumId = findAbstractByFormat('bullet', numberIndent);
+
+        // Fallback: use whichever was found for both
+        if (!bulletAbstractNumId) bulletAbstractNumId = numberAbstractNumId || "0";
+        if (!numberAbstractNumId) numberAbstractNumId = bulletAbstractNumId || "0";
+
+        var newEntries = '';
+        newEntries += usedNumIds.bullet.map(function(numId) {
+            return '<w:num w:numId="' + numId + '"><w:abstractNumId w:val="' + bulletAbstractNumId + '"/></w:num>';
+        }).join('');
+        newEntries += usedNumIds.number.map(function(numId) {
+            return '<w:num w:numId="' + numId + '"><w:abstractNumId w:val="' + numberAbstractNumId + '"/></w:num>';
+        }).join('');
+
+        numberingXml = numberingXml.replace('</w:numbering>', newEntries + '</w:numbering>');
+        zip.file("word/numbering.xml", numberingXml);
     }
     var buf = doc.getZip().generate({type:"nodebuffer"});
 
@@ -586,7 +691,7 @@ async function prepAuditData(data, settings) {
             role: (reviewer.roles || []).join(', ') || "undefined"
         })
     })
-    
+
     result.collaborators = []
     data.collaborators.forEach(collab => {
         result.collaborators.push({
@@ -602,8 +707,25 @@ async function prepAuditData(data, settings) {
     result.language = data.language || "undefined"
     result.scope = data.scope.toObject() || []
 
+    // Filter findings: only include completed findings (status === 0)
+    // that have no unresolved "needs work" comments
+    // Include findings where status is undefined/null for backward compatibility
+    var hasUnresolvedNeedsWork = (finding) => {
+        if (!data.comments) return false;
+        return data.comments.some(comment => 
+            comment.findingId && 
+            comment.findingId.toString() === finding._id.toString() && 
+            comment.needsWork && 
+            !comment.resolved
+        );
+    };
+    
+    var completedFindings = data.findings.filter(f => (f.status === 0 || f.status === undefined || f.status === null) && !hasUnresolvedNeedsWork(f));
+
     result.findings = []
-    for (var finding of data.findings) {
+    var findingCounter = 0
+    for (var finding of completedFindings) {
+        findingCounter++
         var tmpFinding = {
             title: finding.title || "",
             vulnType: $t(finding.vulnType) || "",
@@ -617,7 +739,7 @@ async function prepAuditData(data, settings) {
             affected: finding.scope || "",
             status: finding.status || "",
             category: $t(finding.category) || $t("No Category"),
-            identifier: "IDX-" + utils.lPad(finding.identifier),
+            identifier: "IDX-" + String(findingCounter).padStart(3, '0'),
             retestStatus: finding.retestStatus || "",
             retestDescription: await splitHTMLParagraphs(finding.retestDescription)
         }
@@ -670,7 +792,7 @@ async function prepAuditData(data, settings) {
                 tmpFinding.cvssObj = cvssStrToObject(tmpCVSS.vectorString)
             }
         }
-        
+
         if (settings.report.public.scoringMethods.CVSS4) {
             // Handle CVSS 4.0
             var tmpCVSS = getSafeCvss4Data(finding.cvssv4);
