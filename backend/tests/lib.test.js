@@ -39,6 +39,13 @@ module.exports = function () {
     })
 
     describe('html2ooxml tests', () => {
+      // Every list gets its own numId so numbering restarts per finding instead of running
+      // on across the report. The allocator is module state, so reset it between tests or
+      // the expected ids depend on execution order.
+      beforeEach(() => {
+        html2ooxml.clearUsedNumIds()
+      })
+
       it('Simple Paragraph', () => {
         var html = "<p>Paragraph Text</p>"
         var expected = `<w:p><w:r><w:t xml:space="preserve">Paragraph Text</w:t></w:r></w:p>`
@@ -297,10 +304,10 @@ module.exports = function () {
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListBullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="1"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -309,10 +316,10 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListBullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="1"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -378,10 +385,10 @@ module.exports = function () {
         var expected = 
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListBullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="1"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -390,10 +397,10 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListBullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="1"/>`+
-              `<w:numId w:val="1"/>`+
+              `<w:numId w:val="101"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -402,10 +409,10 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListBullet"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="1"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -429,10 +436,10 @@ module.exports = function () {
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListNumber"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -441,10 +448,10 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListNumber"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -473,10 +480,10 @@ module.exports = function () {
         var expected =
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListNumber"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -485,10 +492,10 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListNumber"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="1"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="101"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -497,10 +504,10 @@ module.exports = function () {
         `</w:p>`+
         `<w:p>`+
           `<w:pPr>`+
-            `<w:pStyle w:val="ListParagraph"/>`+
+            `<w:pStyle w:val="ListNumber"/>`+
             `<w:numPr>`+
               `<w:ilvl w:val="0"/>`+
-              `<w:numId w:val="2"/>`+
+              `<w:numId w:val="100"/>`+
             `</w:numPr>`+
           `</w:pPr>`+
           `<w:r>`+
@@ -938,7 +945,7 @@ module.exports = function () {
               references: ['ref-1'],
               poc: '<p>PoC</p>',
               scope: 'target-1',
-              status: 1,
+              status: 0,
               category: 'No Category',
               retestStatus: 'partial',
               retestDescription: '<p>Retest details</p>',

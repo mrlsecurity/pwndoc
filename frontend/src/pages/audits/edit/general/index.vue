@@ -288,7 +288,7 @@
                 :no-empty-line="true"
                 :rules="($settings.report.public.requiredFields.scope) ? [val => !!val || $t('fieldIsRequired')] : []"
                 :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
-                :lazy="true"/>
+                />
             </q-card-section>
             <q-expansion-item 
             :label="$t('customFields')"

@@ -15,7 +15,10 @@ vi.mock('@/services/user', () => ({
     refreshToken: vi.fn(),
     getTotpQrCode: vi.fn(),
     setupTotp: vi.fn(),
-    cancelTotp: vi.fn()
+    cancelTotp: vi.fn(),
+    getApiKey: vi.fn(),
+    createApiKey: vi.fn(),
+    revokeApiKey: vi.fn()
   }
 }))
 
@@ -107,6 +110,9 @@ describe('Profile Page', () => {
     UserService.getProfile.mockResolvedValue({
       data: { datas: { ...mockUser } }
     })
+    // The API key panel loads on mount; without a resolved value every test in this file
+    // fails on the unhandled rejection rather than on what it is actually asserting.
+    UserService.getApiKey.mockResolvedValue({ data: { datas: null } })
   })
 
   const createWrapper = (options = {}) => {

@@ -729,9 +729,12 @@ export default {
 
 		closeDrawer: function() {
 			this.drawerModel = false
+		},
+
+		// A finding is flagged in the sidebar while any comment on it asks for rework and
+		// has not been resolved.
 		findingNeedsWork: function(finding) {
-			// Check if finding has any comments with needsWork: true and !resolved
-			return this.audit.comments.some(comment => 
+			return this.audit.comments.some(comment =>
 				comment.findingId === finding._id && 
 				comment.needsWork && 
 				!comment.resolved

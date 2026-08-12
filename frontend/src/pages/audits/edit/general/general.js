@@ -262,7 +262,10 @@ export default {
 // Save Audit
         updateAuditGeneral: function() {
             Utils.syncEditors(this.$refs)
-            if (this.$refs.scopeField) {
+            // Flush the scope textarea before reading audit.scope: with objectFields the
+            // component parses "name || description" lines, and a value typed but not yet
+            // blurred would otherwise be dropped from the save.
+            if (typeof this.$refs.scopeField?.updateParent === 'function') {
                 this.$refs.scopeField.updateParent()
             }
             this.$nextTick(() => {

@@ -822,7 +822,7 @@ export default {
 
             if (event.detail.warning) {
                 Dialog.create({
-                    title: $t('warning'),
+                    title: $t('Warning'),
                     message: $t(event.detail.warning),
                     ok: {label: $t('btn.confirm'), color: 'warning'},
                     cancel: {label: $t('btn.cancel'), color: 'white'}

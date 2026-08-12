@@ -119,8 +119,9 @@ module.exports = function(request, app) {
         expect(response.body.datas.reviewers).toHaveLength(0);
         expect(response.body.datas.customFields).toHaveLength(0);
         expect(response.body.datas.scope).toHaveLength(2);
-        expect(response.body.datas.scope[0]).toBe('Scope Item 1');
-        expect(response.body.datas.scope[1]).toBe('Scope Item 2');
+        // Scope entries carry an optional description alongside the asset name
+        expect(response.body.datas.scope[0]).toEqual({name: 'Scope Item 1', description: ''});
+        expect(response.body.datas.scope[1]).toEqual({name: 'Scope Item 2', description: ''});
       })
 
       it('Generate report as standard user without forbidden response', async () => {

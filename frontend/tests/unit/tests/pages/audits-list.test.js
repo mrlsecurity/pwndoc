@@ -426,7 +426,8 @@ describe('Audits List Page', () => {
         name: 'New Audit',
         language: 'en',
         auditType: 'Web',
-        type: 'default'
+        type: 'default',
+        creatorCanReview: true
       })
     })
 
