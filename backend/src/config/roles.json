@@ -1,8 +1,101 @@
 {
-    "report": {
+    "pentester-senior": {
         "inherits": ["user"],
         "allows": [
-            "audits:read-all"
+            "audits:update-all",
+            "audits:comments:create-all",
+            "audits:users-connected"
+        ]
+    },
+    "reviewer": {
+        "inherits": ["user"],
+        "allows": [
+            "audits:review",
+            "audits:comments:needs-work"
+        ]
+    },
+    "reviewer-lead": {
+        "inherits": ["reviewer"],
+        "allows": [
+            "audits:review-all",
+            "audits:comments:update-all",
+            "data:access",
+            "data:stats"
+        ]
+    },
+    "vuln-librarian": {
+        "inherits": ["user"],
+        "allows": [
+            "vulnerabilities:create",
+            "vulnerabilities:update",
+            "vulnerabilities:delete"
+        ]
+    },
+    "data-manager": {
+        "inherits": ["user"],
+        "allows": [
+            "data:access",
+            "clients:create",
+            "clients:update",
+            "clients:delete",
+            "companies:create",
+            "companies:update",
+            "companies:delete",
+            "sections:create",
+            "sections:update",
+            "sections:delete",
+            "custom-fields:create",
+            "custom-fields:update",
+            "custom-fields:delete",
+            "languages:create",
+            "languages:update",
+            "languages:delete",
+            "audit-types:create",
+            "audit-types:update",
+            "audit-types:delete",
+            "vulnerability-types:create",
+            "vulnerability-types:update",
+            "vulnerability-types:delete",
+            "vulnerability-categories:create",
+            "vulnerability-categories:update",
+            "vulnerability-categories:delete"
+        ]
+    },
+    "template-manager": {
+        "inherits": ["user"],
+        "allows": [
+            "data:access",
+            "templates:create",
+            "templates:update",
+            "templates:delete",
+            "templates:download"
+        ]
+    },
+    "audit-manager": {
+        "inherits": ["user"],
+        "allows": [
+            "audits:update-all",
+            "audits:review-all",
+            "audits:delete-all",
+            "audits:comments:delete-all"
+        ]
+    },
+    "user-manager": {
+        "inherits": ["user"],
+        "allows": [
+            "data:access",
+            "users:create",
+            "users:update"
+        ]
+    },
+    "backup-operator": {
+        "inherits": ["user"],
+        "allows": [
+            "data:access",
+            "backups:read",
+            "backups:create",
+            "backups:update",
+            "backups:delete"
         ]
     }
 }

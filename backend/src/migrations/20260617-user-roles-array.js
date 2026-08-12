@@ -114,10 +114,33 @@ async function createMissingUserRoles(User, Role) {
     }))
 }
 
+// Fork-specific: upstream's stock `report` role was renamed to `reviewer-lead` in this
+// fork's roles.json. Remap assignments before the role documents are seeded, otherwise
+// createMissingUserRoles() recreates `report` with bare core permissions and the affected
+// users silently lose the extra grants the renamed role carries.
+const LEGACY_ROLE_ALIASES = {
+    report: 'reviewer-lead'
+}
+
+async function applyLegacyRoleAliases(User) {
+    for (const [oldName, newName] of Object.entries(LEGACY_ROLE_ALIASES)) {
+        await User.collection.updateMany(
+            {role: oldName},
+            {$set: {role: newName}}
+        )
+        await User.collection.updateMany(
+            {roles: oldName},
+            {$set: {'roles.$[element]': newName}},
+            {arrayFilters: [{element: {$eq: oldName}}]}
+        )
+    }
+}
+
 exports.up = async function() {
     const User = require('mongoose').model('User')
     const Role = require('mongoose').model('Role')
 
+    await applyLegacyRoleAliases(User)
     await importLegacyRolesConfig(Role)
     await createMissingUserRoles(User, Role)
 

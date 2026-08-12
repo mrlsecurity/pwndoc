@@ -7,7 +7,7 @@ const catalog = [
             {scope: 'audits:read', core: true},
             {scope: 'audits:update', core: true},
             {scope: 'audits:delete', core: true},
-            {scope: 'audits:read-all', core: false},
+            {scope: 'audits:read-all', core: true},
             {scope: 'audits:update-all', core: false},
             {scope: 'audits:delete-all', core: false},
             {scope: 'audits:review', core: false},
@@ -19,6 +19,7 @@ const catalog = [
             {scope: 'audits:comments:create-all', core: false},
             {scope: 'audits:comments:update-all', core: false},
             {scope: 'audits:comments:delete-all', core: false},
+            {scope: 'audits:comments:needs-work', core: false},
             {scope: 'audits:ai-assist', core: false},
             {scope: 'audits:qa-read', core: false},
             {scope: 'audits:qa', core: true},
@@ -38,20 +39,20 @@ const catalog = [
         key: 'clients',
         label: 'Clients',
         permissions: [
-            {scope: 'clients:create', core: true},
+            {scope: 'clients:create', core: false},
             {scope: 'clients:read', core: true},
-            {scope: 'clients:update', core: true},
-            {scope: 'clients:delete', core: true}
+            {scope: 'clients:update', core: false},
+            {scope: 'clients:delete', core: false}
         ]
     },
     {
         key: 'companies',
         label: 'Companies',
         permissions: [
-            {scope: 'companies:create', core: true},
+            {scope: 'companies:create', core: false},
             {scope: 'companies:read', core: true},
-            {scope: 'companies:update', core: true},
-            {scope: 'companies:delete', core: true}
+            {scope: 'companies:update', core: false},
+            {scope: 'companies:delete', core: false}
         ]
     },
     {
@@ -61,7 +62,8 @@ const catalog = [
             {scope: 'templates:create', core: false},
             {scope: 'templates:read', core: true},
             {scope: 'templates:update', core: false},
-            {scope: 'templates:delete', core: false}
+            {scope: 'templates:delete', core: false},
+            {scope: 'templates:download', core: false}
         ]
     },
     {
@@ -162,6 +164,14 @@ const catalog = [
             {scope: 'proofing-rules:read', core: false},
             {scope: 'proofing-rules:update', core: false},
             {scope: 'proofing-rules:delete', core: false}
+        ]
+    },
+    {
+        key: 'data',
+        label: 'Data',
+        permissions: [
+            {scope: 'data:access', core: false},
+            {scope: 'data:stats', core: false}
         ]
     },
     {
